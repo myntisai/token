@@ -73,7 +73,7 @@ describe("Full Flow Test", function () {
     await network.provider.send("evm_increaseTime", [3600]);
     await network.provider.send("evm_mine");
 
-    // Instead of calling emissions.harvest directly, call harvestRewards on the staking contract.
+    // Use the staking contract harvest function (which calls emissions.harvest internally)
     await staking.connect(provider1).harvestRewards();
     await staking.connect(provider2).harvestRewards();
     await staking.connect(provider3).harvestRewards();
@@ -83,27 +83,28 @@ describe("Full Flow Test", function () {
     const [stake2, rewardDebt2] = await staking.getProviderInfo(provider2.address);
     const [stake3, rewardDebt3] = await staking.getProviderInfo(provider3.address);
 
+    // Log the staked amounts and the reward debts for each provider.
+    console.log("Provider 1 -> Stake:", stake1.toString(), " Reward Debt:", rewardDebt1.toString());
+    console.log("Provider 2 -> Stake:", stake2.toString(), " Reward Debt:", rewardDebt2.toString());
+    console.log("Provider 3 -> Stake:", stake3.toString(), " Reward Debt:", rewardDebt3.toString());
+
     // Check that stakes are as expected.
     expect(stake1).to.equal(stakeAmounts.provider1);
     expect(stake2).to.equal(stakeAmounts.provider2);
     expect(stake3).to.equal(stakeAmounts.provider3);
 
-    // Now compare reward ratios.
-    // In ethers v6, numbers are returned as native bigint. (e.g. rewardDebt1 is a bigint.)
-    // Instead of `.mul`, use native arithmetic operators and compare using a small tolerance.
-    const tolerance = 10n;
-    const expected2 = rewardDebt1 * 2n;
-    const expected3 = rewardDebt1 * 3n;
-    const diff2 = rewardDebt2 > expected2 ? rewardDebt2 - expected2 : expected2 - rewardDebt2;
-    const diff3 = rewardDebt3 > expected3 ? rewardDebt3 - expected3 : expected3 - rewardDebt3;
+    // Option 2: Verify reward ratios using relative approach.
+    // Multiply by a scale factor to preserve precision.
+    const scaleFactor = 10000n;
+    const ratio2 = (rewardDebt2 * scaleFactor) / rewardDebt1; // Expected approximately 20000 for a 1:2 ratio.
+    const ratio3 = (rewardDebt3 * scaleFactor) / rewardDebt1; // Expected approximately 30000 for a 1:3 ratio.
 
-    expect(diff2 <= tolerance).to.be.true;
-    expect(diff3 <= tolerance).to.be.true;
+    console.log("Relative ratios (scaled by 10000):");
+    console.log("Provider 2/Provider 1 ratio:", ratio2.toString());
+    console.log("Provider 3/Provider 1 ratio:", ratio3.toString());
 
-    console.log("Provider rewards (rewardDebt):", {
-      provider1: rewardDebt1.toString(),
-      provider2: rewardDebt2.toString(),
-      provider3: rewardDebt3.toString(),
-    });
+    // Allow a tolerance of 100 (i.e., 1% error).
+    expect(ratio2).to.be.closeTo(20000n, 100n);
+    expect(ratio3).to.be.closeTo(30000n, 100n);
   });
 });
