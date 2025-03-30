@@ -8,8 +8,8 @@ async function main() {
   // --------------------------
   // Deploy MyntisToken
   // --------------------------
-  const MyntisTokenFactory = await ethers.getContractFactory("MyntisToken", deployer);
-  const myntisToken = await MyntisTokenFactory.deploy(deployer.address);
+  const MyntisTokenFactory = await ethers.getContractFactory("MyntisToken");
+  const myntisToken = (await MyntisTokenFactory.deploy(deployer.address)) as any;
   await myntisToken.waitForDeployment();
   const myntisTokenAddress = await myntisToken.getAddress();
   console.log("MyntisToken deployed at:", myntisTokenAddress);
@@ -17,8 +17,8 @@ async function main() {
   // --------------------------
   // Deploy StakingContract
   // --------------------------
-  const StakingFactory = await ethers.getContractFactory("StakingContract", deployer);
-  const staking = await StakingFactory.deploy(myntisTokenAddress, deployer.address);
+  const StakingFactory = await ethers.getContractFactory("StakingContract");
+  const staking = (await StakingFactory.deploy(myntisTokenAddress, deployer.address)) as any;
   await staking.waitForDeployment();
   const stakingAddress = await staking.getAddress();
   console.log("StakingContract deployed at:", stakingAddress);
@@ -26,8 +26,8 @@ async function main() {
   // --------------------------
   // Deploy EmissionContract
   // --------------------------
-  const EmissionFactory = await ethers.getContractFactory("EmissionContract", deployer);
-  const emissions = await EmissionFactory.deploy(myntisTokenAddress, stakingAddress, deployer.address);
+  const EmissionFactory = await ethers.getContractFactory("EmissionContract");
+  const emissions = (await EmissionFactory.deploy(myntisTokenAddress, stakingAddress, deployer.address)) as any;
   await emissions.waitForDeployment();
   const emissionsAddress = await emissions.getAddress();
   console.log("EmissionContract deployed at:", emissionsAddress);
@@ -35,8 +35,8 @@ async function main() {
   // --------------------------
   // Deploy MerkleDistributor
   // --------------------------
-  const MerkleDistributorFactory = await ethers.getContractFactory("MerkleDistributor", deployer);
-  const merkleDistributor = await MerkleDistributorFactory.deploy(myntisTokenAddress, deployer.address);
+  const MerkleDistributorFactory = await ethers.getContractFactory("MerkleDistributor");
+  const merkleDistributor = (await MerkleDistributorFactory.deploy(myntisTokenAddress, deployer.address)) as any;
   await merkleDistributor.waitForDeployment();
   const merkleDistributorAddress = await merkleDistributor.getAddress();
   console.log("MerkleDistributor deployed at:", merkleDistributorAddress);

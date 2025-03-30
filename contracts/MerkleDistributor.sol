@@ -19,6 +19,7 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
 
     MyntisToken public immutable myntisToken;
     address public stakingContract;
+    address public bridgeContract;
 
     // Track each provider's available balance (rewards allocated to them but not yet distributed)
     mapping(address => uint256) public providerBalance;
@@ -37,6 +38,7 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
 
     // EVENTS
     event StakingContractUpdated(address newStakingContract);
+    event BridgeContractUpdated(address newBridgeContract);
     event MerkleRootSubmitted(address indexed provider, uint256 indexed rootIndex, bytes32 merkleRoot, uint256 expiry);
     event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 totalAmount);
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
@@ -56,6 +58,12 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         emit StakingContractUpdated(_stakingContract);
     }
 
+    function setBridgeContract(address _bridgeContract) external onlyRole(ADMIN_ROLE) {
+        require(_bridgeContract != address(0), "Invalid address");
+        bridgeContract = _bridgeContract;
+        emit BridgeContractUpdated(_bridgeContract);
+    }
+
     // ----------------------------
     //     REWARD NOTIFICATION
     // ----------------------------
@@ -68,6 +76,26 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         require(amount > 0, "Invalid reward amount");
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+    }
+
+    /**
+     * @notice Called by the Bridge after MYNT is minted on this chain.
+     */
+    function notifyRewardFromBridge(address provider, uint256 amount) external nonReentrant {
+        require(msg.sender == bridgeContract, "Only Bridge can notify rewards");
+        require(amount > 0, "Invalid reward amount");
+        providerBalance[provider] += amount;
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+    }
+
+    /**
+     * @notice Allows providers to manually notify rewards by transferring MYNT to this contract.
+     */
+    function selfNotifyReward(uint256 amount) external nonReentrant {
+        require(amount > 0, "Invalid amount");
+        IERC20(address(myntisToken)).safeTransferFrom(msg.sender, address(this), amount);
+        providerBalance[msg.sender] += amount;
+        emit ProviderBalanceUpdated(msg.sender, providerBalance[msg.sender]);
     }
 
     // ----------------------------
@@ -110,16 +138,14 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     ) external nonReentrant {
         require(provider != address(0), "Invalid provider");
         require(rootIndex < providerMerkleRoots[provider].length, "Invalid root index");
-        
+
         EpochMerkleRoot memory epoch = providerMerkleRoots[provider][rootIndex];
         require(block.timestamp <= epoch.expiry, "Merkle root expired");
         require(providerBalance[provider] >= totalClaimAmount, "Provider insufficient balance");
 
-        // Ensure the user hasn't already claimed under this provider's epoch.
         require(!claimed[provider][rootIndex][msg.sender], "Reward already claimed");
         claimed[provider][rootIndex][msg.sender] = true;
 
-        // Recreate the leaf from the user's address and totalClaimAmount.
         bytes32 leaf = keccak256(abi.encodePacked(msg.sender, totalClaimAmount));
         require(verifyMerkleProof(merkleProof, epoch.root, leaf), "Invalid Merkle proof");
 
