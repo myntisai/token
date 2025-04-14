@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import { OApp, Origin, MessagingFee } from "@layerzerolabs/oapp-evm/contracts/oapp/OApp.sol";
+// import { LzLib } from "@layerzerolabs/oapp-evm/contracts/oapp/libs/LzLib.sol"; // Keep commented unless needed
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 
 interface IMyntisToken {
@@ -18,14 +19,18 @@ contract MyntisBridge is OApp {
     IMyntisToken public immutable myntisToken;
     IMerkleDistributor public immutable merkleDistributor;
 
-    mapping(uint16 => bytes32) public remoteBridgeAddresses;
+    // Using uint32 to represent the full LayerZero endpoint id (EID) instead of truncating to uint16
+    mapping(uint32 => bytes32) public remoteBridgeAddresses;
 
     enum MessageType { Regular, ProviderReward }
 
     event LogStep(uint8 indexed step, string message);
-    event MYNTBridged(address indexed user, uint256 amount, uint16 dstChainId, MessageType messageType);
-    event MYNTReceived(bytes32 guid, address indexed recipient, uint256 amount, uint16 srcChainId, MessageType messageType);
-    event RemoteBridgeUpdated(uint16 chainId, bytes32 bridgeAddress);
+    // Emitting uint32 for destination EID now
+    event MYNTBridged(address indexed user, uint256 amount, uint32 dstEid, MessageType messageType);
+    // Emitting uint32 for source EID directly
+    event MYNTReceived(bytes32 guid, address indexed recipient, uint256 amount, uint32 srcEid, MessageType messageType);
+    event RemoteBridgeUpdated(uint32 eid, bytes32 bridgeAddress);
+    // Inherits PeerUpdated event from OApp (which uses EID)
 
     constructor(
         address _lzEndpoint,
@@ -37,25 +42,25 @@ contract MyntisBridge is OApp {
         merkleDistributor = IMerkleDistributor(_merkleDistributor);
     }
 
-    modifier onlyLzOwner() {
-        require(msg.sender == owner(), "Not Lz owner");
-        _;
-    }
-
-    function updateRemoteBridge(uint16 chainId, bytes32 bridgeAddress) external onlyLzOwner {
-        remoteBridgeAddresses[chainId] = bridgeAddress;
-        emit RemoteBridgeUpdated(chainId, bridgeAddress);
+    // Update the remote bridge mapping for a given destination EID
+    function updateRemoteBridge(uint32 remoteEid, bytes32 bridgeAddress) external onlyOwner {
+        remoteBridgeAddresses[remoteEid] = bridgeAddress;
+        emit RemoteBridgeUpdated(remoteEid, bridgeAddress);
     }
     error BridgeError(string reason);
 
-    // Bridge function using try/catch for all external calls
-    function bridgeMYNT(uint16 dstChainId, uint256 amount, address recipient, bool isProviderReward) external payable {
+    // Bridge function takes uint32 dstEid (LayerZero endpoint id) directly
+    function bridgeMYNT(uint32 dstEid, uint256 amount, address recipient, bool isProviderReward) external payable {
         emit LogStep(1, "Starting bridgeMYNT execution");
-        require(amount > 0, "Invalid amount");
-        require(remoteBridgeAddresses[dstChainId] != bytes32(0), "Destination not set");
-        emit LogStep(2, "Pre-checks passed");
+        require(amount > 0, "Amount must be greater than zero");
 
-        // Attempt token transfer
+        // Check that the remote bridge is set for the given destination EID
+        require(remoteBridgeAddresses[dstEid] != bytes32(0), "Destination remote bridge not set for EID");
+
+        // (Optional) Peer check can be added here if needed. For now, it's omitted.
+        emit LogStep(2, "Pre-checks passed (remote bridge configured for EID)");
+
+        // --- Token Transfer and Burn ---
         try myntisToken.transferFrom(msg.sender, address(this), amount) returns (bool success) {
             require(success, "Token transfer failed");
             emit LogStep(3, "Token transfer succeeded");
@@ -64,8 +69,6 @@ contract MyntisBridge is OApp {
         } catch {
             revert("Token transfer failed: Unknown error");
         }
-
-        // Attempt token burn
         try myntisToken.burn(address(this), amount) {
             emit LogStep(4, "Token burn succeeded");
         } catch Error(string memory reason) {
@@ -74,42 +77,49 @@ contract MyntisBridge is OApp {
             revert("Token burn failed: Unknown error");
         }
 
-        // Prepare payload
+        // --- Prepare Payload ---
         MessageType messageType = isProviderReward ? MessageType.ProviderReward : MessageType.Regular;
         bytes memory payload = abi.encode(messageType, recipient, amount);
         emit LogStep(5, "Payload encoded");
 
-        // Prepare adapter parameters (using abi.encode for proper formatting)
-        uint256 gasForDestination = 500000;
+        // --- Prepare Adapter Parameters ---
+        uint256 gasForDestination = 600000;
+        // Using abi.encode to match adapter requirements
         bytes memory adapterParams = abi.encode(uint16(1), gasForDestination);
         emit LogStep(6, "Adapter parameters set");
 
-        // Attempt to send LayerZero message
+        // --- Dispatch the LayerZero Message ---
+        // Convert the full dstEid (uint32) to a uint16 if needed by _lzSend. Depending on OApp,
+        // you may need to adjust this. Here we assume _lzSend expects a uint16.
+        uint16 dstChainId = uint16(dstEid);
         try this._sendLayerZero(
-            dstChainId,
+            dstChainId,       // Pass converted value
             payload,
             adapterParams,
-            msg.value,
-            msg.sender
+            msg.value,        // Native fee provided
+            msg.sender        // Refund address
         ) {
-            emit LogStep(7, "LayerZero message sent");
+            emit LogStep(7, "LayerZero message dispatch initiated via _sendLayerZero wrapper");
         } catch Error(string memory reason) {
             revert(reason);
         } catch {
-            revert("LayerZero message failed: Unknown error");
+            revert("LayerZero message failed: Unknown error during _sendLayerZero call");
         }
 
-        emit MYNTBridged(msg.sender, amount, dstChainId, messageType);
+        emit MYNTBridged(msg.sender, amount, dstEid, messageType);
         emit LogStep(8, "bridgeMYNT execution completed");
     }
-    // A public wrapper function to allow try/catch handling
+
+    // Public wrapper function to allow try/catch handling
     function _sendLayerZero(
-        uint16 dstChainId,
+        uint16 dstChainId,      // Now represents the converted endpoint id (uint16) from dstEid
         bytes memory payload,
-        bytes memory adapterParams,
-        uint256 fee,
+        bytes memory adapterParams, // Adapter options
+        uint256 fee,            // Native fee
         address refundAddress
     ) public {
+        // Calls the inherited _lzSend function from OApp.
+        // Make sure these parameters match the expected input for your version of OApp.sol
         _lzSend(
             dstChainId,
             payload,
@@ -118,16 +128,25 @@ contract MyntisBridge is OApp {
             payable(refundAddress)
         );
     }
+
+    // _lzReceive: Handles incoming LayerZero messages
     function _lzReceive(
-        Origin calldata _origin,
+        Origin calldata _origin, // Contains srcEid (uint32) and sender (bytes32)
         bytes32 _guid,
         bytes calldata _payload,
-        address, // executor
-        bytes calldata // extraData
+        address, // executor (not used)
+        bytes calldata // extraData (not used)
     ) internal override {
+        // Use the full srcEid as a uint32
+        uint32 srcEid = _origin.srcEid;
         require(
-            remoteBridgeAddresses[uint16(_origin.srcEid)] == _origin.sender,
-            "Invalid source"
+            remoteBridgeAddresses[srcEid] == _origin.sender,
+            "LZ_RECEIVE_INVALID_REMOTE_SENDER"
+        );
+        // Peer check using full 32-bit EID
+        require(
+            peers[srcEid] == _origin.sender,
+            "LZ_RECEIVE_INVALID_PEER_SENDER"
         );
 
         (MessageType messageType, address recipient, uint256 amount) = abi.decode(_payload, (MessageType, address, uint256));
@@ -139,11 +158,15 @@ contract MyntisBridge is OApp {
             merkleDistributor.notifyRewardFromBridge(recipient, amount);
         }
 
-        emit MYNTReceived(_guid, recipient, amount, uint16(_origin.srcEid), messageType);
+        emit MYNTReceived(_guid, recipient, amount, srcEid, messageType);
     }
 
-
-    // Allow the contract to accept ETH directly.
+    // Allow contract to accept ETH directly.
     receive() external payable {}
     fallback() external payable {}
+
+    // Helper: View remote bridge address by EID (uint32)
+    function getRemoteBridge(uint32 eid) external view returns (bytes32) {
+        return remoteBridgeAddresses[eid];
+    }
 }
