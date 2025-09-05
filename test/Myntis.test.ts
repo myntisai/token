@@ -27,24 +27,25 @@ describe("Full Flow Test", function () {
     myntisToken = (await MyntisTokenFactory.deploy(admin.address)) as MyntisToken;
     await myntisToken.waitForDeployment();
 
-    // Deploy StakingContract with token address and admin
-    const StakingFactory = await ethers.getContractFactory("StakingContract", admin);
-    staking = (await StakingFactory.deploy(await myntisToken.getAddress(), admin.address)) as StakingContract;
-    await staking.waitForDeployment();
-
-    // Deploy EmissionContract with token, staking, and admin
-    const EmissionsFactory = await ethers.getContractFactory("EmissionContract", admin);
-    emissions = (await EmissionsFactory.deploy(await myntisToken.getAddress(), await staking.getAddress(), admin.address)) as EmissionContract;
-    await emissions.waitForDeployment();
-
-    // Deploy MerkleDistributor and assign admin
+    // Deploy MerkleDistributor
     const MerkleDistributorFactory = await ethers.getContractFactory("MerkleDistributor", admin);
     merkleDistributor = (await MerkleDistributorFactory.deploy(await myntisToken.getAddress(), admin.address)) as MerkleDistributor;
     await merkleDistributor.waitForDeployment();
 
-    // Set emission and distributor contracts in staking contract
+    // Deploy StakingContract with token, emission (will set later), merkle distributor, and admin
+    const StakingFactory = await ethers.getContractFactory("StakingContract", admin);
+    staking = (await StakingFactory.deploy(await myntisToken.getAddress(), ethers.ZeroAddress, await merkleDistributor.getAddress(), admin.address)) as StakingContract;
+    await staking.waitForDeployment();
+
+    // Deploy EmissionsContract with token, staking, and admin
+    const EmissionsFactory = await ethers.getContractFactory("EmissionsContract", admin);
+    emissions = (await EmissionsFactory.deploy(await myntisToken.getAddress(), await staking.getAddress(), admin.address)) as EmissionContract;
+    await emissions.waitForDeployment();
+
+    // Configure the system
+    await myntisToken.grantRole(await myntisToken.MINTER_ROLE(), await emissions.getAddress());
     await staking.setEmissionContract(await emissions.getAddress());
-    await staking.setMerkleDistributor(await merkleDistributor.getAddress());
+    await merkleDistributor.setStakingContract(await staking.getAddress());
 
     // Mint initial MYNT to all providers
     await myntisToken.mint(provider1.address, mintAmount);

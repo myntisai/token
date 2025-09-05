@@ -8,21 +8,21 @@ interface IMyntisToken {
     function mint(address to, uint256 amount) external;
 }
 
-interface IStakingContract {
+interface IStakingPool {
     function getTotalStaked() external view returns (uint256);
     function getProviderInfo(address provider) external view returns (uint256 stake, uint256 rewardDebt);
     function notifyReward(address provider, uint256 amount) external;
 }
 
 /**
- * @title EmissionContract
+ * @title EmissionsContract
  * @notice Manages the emission schedule with halving logic and distributes rewards to providers.
  */
-contract EmissionContract is AccessControl, ReentrancyGuard {
+contract EmissionsContract is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
 
-    IMyntisToken public immutable myntisToken;
-    IStakingContract public stakingContract;
+    IMyntisToken public immutable token;
+    IStakingPool public stakingContract;
 
     // Emission parameters
     uint256 public constant HALVING_PERIOD = 4 * 365 days; // 4 years per halving
@@ -42,13 +42,12 @@ contract EmissionContract is AccessControl, ReentrancyGuard {
     event ProviderRewardsHarvested(address indexed provider, uint256 amount);
 
     constructor(
-        address _myntisToken,
+        address _token,
         address _stakingContract,
         address _admin
     ) {
-        myntisToken = IMyntisToken(_myntisToken);
-        stakingContract = IStakingContract(_stakingContract);
-
+        token = IMyntisToken(_token);
+        stakingContract = IStakingPool(_stakingContract);
         _grantRole(ADMIN_ROLE, _admin);
 
         startTime = block.timestamp;
@@ -56,9 +55,13 @@ contract EmissionContract is AccessControl, ReentrancyGuard {
         mintedEmissions = 0;
     }
 
+    // ----------------------------
+    //         ADMIN
+    // ----------------------------
+
     function setStakingContract(address _stakingContract) external onlyRole(ADMIN_ROLE) {
         require(_stakingContract != address(0), "Invalid contract");
-        stakingContract = IStakingContract(_stakingContract);
+        stakingContract = IStakingPool(_stakingContract);
         emit EmissionContractUpdated(_stakingContract);
     }
 
@@ -67,17 +70,10 @@ contract EmissionContract is AccessControl, ReentrancyGuard {
     // ----------------------------
 
     function getCurrentEmissionRate() public view returns (uint256) {
-        if (block.timestamp <= startTime) {
-            return 0;
-        }
+        if (block.timestamp <= startTime) return 0;
         uint256 elapsed = block.timestamp - startTime;
         uint256 periods = elapsed / HALVING_PERIOD;
-
-        // If too many halvings, emission ends
-        if (periods >= 25) {
-            return 0;
-        }
-        // Simple shift for halving
+        if (periods >= 25) return 0; // safety cap
         return INITIAL_EMISSION_RATE >> periods;
     }
 
@@ -131,7 +127,7 @@ contract EmissionContract is AccessControl, ReentrancyGuard {
 
         if (pending > 0) {
             // Mint tokens to the staking contract
-            myntisToken.mint(address(stakingContract), pending);
+            token.mint(address(stakingContract), pending);
             // Let stakingContract update provider's reward debt
             stakingContract.notifyReward(provider, pending);
 

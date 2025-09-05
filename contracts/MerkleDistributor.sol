@@ -5,174 +5,100 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./MyntisToken.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 /**
  * @title MerkleDistributor
- * @notice Enables providers to submit Merkle roots for newly rewarded messages.
- *         Users can now claim rewards using a single merkle leaf built from (user, totalClaimAmount).
+ * @notice Merkle tree-based distributor for provider rewards.
  */
 contract MerkleDistributor is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
-    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    bytes32 public constant ADMIN_ROLE  = DEFAULT_ADMIN_ROLE;
+    bytes32 public constant BRIDGE_ROLE = keccak256("BRIDGE_ROLE");
 
-    MyntisToken public immutable myntisToken;
-    address public stakingContract;
-    address public bridgeContract;
+    IERC20 public immutable token;
+    address public stakingContract; // bots staking
 
-    // Track each provider's available balance (rewards allocated to them but not yet distributed)
     mapping(address => uint256) public providerBalance;
 
-    // Each provider can submit multiple merkle roots (each with an expiry)
-    struct EpochMerkleRoot {
-        bytes32 root;   // Merkle root for this epoch
-        uint256 expiry; // Expiry timestamp
-    }
-
-    // provider => array of merkle roots submitted
+    struct EpochMerkleRoot { bytes32 root; uint256 expiry; }
     mapping(address => EpochMerkleRoot[]) public providerMerkleRoots;
-
-    // Tracks if a user has claimed for a given provider and root index
     mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
 
-    // EVENTS
-    event StakingContractUpdated(address newStakingContract);
-    event BridgeContractUpdated(address newBridgeContract);
-    event MerkleRootSubmitted(address indexed provider, uint256 indexed rootIndex, bytes32 merkleRoot, uint256 expiry);
-    event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 totalAmount);
+    event StakingContractUpdated(address staking);
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
+    event MerkleRootSubmitted(address indexed provider, uint256 indexed rootIndex, bytes32 root, uint256 expiry);
+    event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount);
 
-    constructor(address _myntisToken, address admin) {
-        myntisToken = MyntisToken(_myntisToken);
+    constructor(address _token, address admin) {
+        token = IERC20(_token);
         _grantRole(ADMIN_ROLE, admin);
     }
 
-    // ----------------------------
-    //    ADMIN-CONFIG FUNCTIONS
-    // ----------------------------
-
-    function setStakingContract(address _stakingContract) external onlyRole(ADMIN_ROLE) {
-        require(_stakingContract != address(0), "Invalid address");
-        stakingContract = _stakingContract;
-        emit StakingContractUpdated(_stakingContract);
+    // ---- admin ----
+    function setStakingContract(address _staking) external onlyRole(ADMIN_ROLE) {
+        require(_staking != address(0), "zero");
+        stakingContract = _staking;
+        emit StakingContractUpdated(_staking);
     }
 
-    function setBridgeContract(address _bridgeContract) external onlyRole(ADMIN_ROLE) {
-        require(_bridgeContract != address(0), "Invalid address");
-        bridgeContract = _bridgeContract;
-        emit BridgeContractUpdated(_bridgeContract);
-    }
-
-    // ----------------------------
-    //     REWARD NOTIFICATION
-    // ----------------------------
-
-    /**
-     * @notice Called by the StakingContract after a provider harvests new tokens.
-     */
+    // ---- funding ----
     function notifyReward(address provider, uint256 amount) external nonReentrant {
-        require(msg.sender == stakingContract, "Only StakingContract can notify rewards");
-        require(amount > 0, "Invalid reward amount");
+        require(msg.sender == stakingContract, "only staking");
+        require(amount > 0, "zero");
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
 
-    /**
-     * @notice Called by the Bridge after MYNT is minted on this chain.
-     */
-    function notifyRewardFromBridge(address provider, uint256 amount) external nonReentrant {
-        require(msg.sender == bridgeContract, "Only Bridge can notify rewards");
-        require(amount > 0, "Invalid reward amount");
+    function notifyRewardFromBridge(address provider, uint256 amount) external nonReentrant onlyRole(BRIDGE_ROLE) {
+        require(amount > 0, "zero");
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
 
-    /**
-     * @notice Allows providers to manually notify rewards by transferring MYNT to this contract.
-     */
     function selfNotifyReward(uint256 amount) external nonReentrant {
-        require(amount > 0, "Invalid amount");
-        IERC20(address(myntisToken)).safeTransferFrom(msg.sender, address(this), amount);
+        require(amount > 0, "zero");
+        token.safeTransferFrom(msg.sender, address(this), amount);
         providerBalance[msg.sender] += amount;
         emit ProviderBalanceUpdated(msg.sender, providerBalance[msg.sender]);
     }
 
-    // ----------------------------
-    //   MERKLE ROOT SUBMISSION
-    // ----------------------------
-
-    /**
-     * @notice Providers create an epoch by submitting a merkle root for newly rewarded tokens.
-     * @dev They must have a positive provider balance and the expiry must be in the future.
-     */
-    function submitMerkleRoot(bytes32 merkleRoot, uint256 expiry) external nonReentrant {
-        require(providerBalance[msg.sender] > 0, "No provider balance");
-        require(expiry > block.timestamp, "Expiry must be in future");
-
-        providerMerkleRoots[msg.sender].push(EpochMerkleRoot({
-            root: merkleRoot,
-            expiry: expiry
-        }));
-
-        uint256 rootIndex = providerMerkleRoots[msg.sender].length - 1;
-        emit MerkleRootSubmitted(msg.sender, rootIndex, merkleRoot, expiry);
+    // ---- epochs ----
+    function submitMerkleRoot(bytes32 root, uint256 expiry) external nonReentrant {
+        require(providerBalance[msg.sender] > 0, "no balance");
+        require(expiry > block.timestamp, "expired");
+        providerMerkleRoots[msg.sender].push(EpochMerkleRoot({root: root, expiry: expiry}));
+        emit MerkleRootSubmitted(msg.sender, providerMerkleRoots[msg.sender].length - 1, root, expiry);
     }
 
-    // ----------------------------
-    //       CLAIM REWARDS
-    // ----------------------------
-
-    /**
-     * @notice Allows a user to claim rewards with a single merkle proof.
-     * @param provider The provider who submitted the merkle root.
-     * @param rootIndex The index of the merkle root in the provider's list.
-     * @param totalClaimAmount The total reward amount the user is entitled to claim.
-     * @param merkleProof The merkle proof for the leaf computed as keccak256(abi.encodePacked(msg.sender, totalClaimAmount)).
-     */
-    function claimRewards(
+    // ---- claims ----
+    function claim(
         address provider,
         uint256 rootIndex,
-        uint256 totalClaimAmount,
+        uint256 amount,
         bytes32[] calldata merkleProof
     ) external nonReentrant {
-        require(provider != address(0), "Invalid provider");
-        require(rootIndex < providerMerkleRoots[provider].length, "Invalid root index");
+        require(provider != address(0), "bad provider");
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        require(!claimed[provider][rootIndex][msg.sender], "already");
+        EpochMerkleRoot memory e = providerMerkleRoots[provider][rootIndex];
+        require(block.timestamp <= e.expiry, "expired");
 
-        EpochMerkleRoot memory epoch = providerMerkleRoots[provider][rootIndex];
-        require(block.timestamp <= epoch.expiry, "Merkle root expired");
-        require(providerBalance[provider] >= totalClaimAmount, "Provider insufficient balance");
+        bytes32 leaf = keccak256(abi.encode(msg.sender, amount));
+        require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
 
-        require(!claimed[provider][rootIndex][msg.sender], "Reward already claimed");
+        require(providerBalance[provider] >= amount, "insufficient");
+        providerBalance[provider] -= amount;
         claimed[provider][rootIndex][msg.sender] = true;
 
-        bytes32 leaf = keccak256(abi.encodePacked(msg.sender, totalClaimAmount));
-        require(verifyMerkleProof(merkleProof, epoch.root, leaf), "Invalid Merkle proof");
-
-        providerBalance[provider] -= totalClaimAmount;
-        IERC20(address(myntisToken)).safeTransfer(msg.sender, totalClaimAmount);
-
-        emit RewardsClaimed(msg.sender, provider, rootIndex, totalClaimAmount);
+        token.safeTransfer(msg.sender, amount);
+        emit RewardsClaimed(msg.sender, provider, rootIndex, amount);
     }
 
-    // ----------------------------
-    //    INTERNAL PROOF UTILS
-    // ----------------------------
-
-    function verifyMerkleProof(
-        bytes32[] calldata proof,
-        bytes32 root,
-        bytes32 leaf
-    ) public pure returns (bool) {
-        bytes32 computedHash = leaf;
-        for (uint256 i = 0; i < proof.length; i++) {
-            bytes32 proofElement = proof[i];
-            if (computedHash < proofElement) {
-                computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
-            } else {
-                computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
-            }
-        }
-        return computedHash == root;
+    // ---- safety ----
+    function rescueERC20(address tkn, address to, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(to != address(0), "zero to");
+        IERC20(tkn).safeTransfer(to, amount);
     }
 }
