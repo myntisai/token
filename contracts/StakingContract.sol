@@ -107,11 +107,6 @@ contract StakingContract is AccessControl, ReentrancyGuard {
         uint256 harvested = afterBal - beforeBal;
         require(harvested > 0, "no rewards");
 
-        // Update reward debt after harvest
-        Info storage i = providers[msg.sender];
-        uint256 acc = emissionContract.accRewardPerShare();
-        i.rewardDebt = (i.stake * acc) / 1e12;
-
         // push to distributor and notify
         token.safeTransfer(address(merkleDistributor), harvested);
         merkleDistributor.notifyReward(msg.sender, harvested);

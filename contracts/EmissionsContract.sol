@@ -96,14 +96,14 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         }
 
         if (tokensToAccount > 0) {
-            mintedEmissions += tokensToAccount;
             uint256 totalStake = stakingContract.getTotalStaked();
 
             if (totalStake > 0) {
+                mintedEmissions += tokensToAccount;
                 accRewardPerShare += (tokensToAccount * 1e12) / totalStake;
+                emit EmissionsUpdated(timeElapsed, tokensToAccount, accRewardPerShare);
             }
-
-            emit EmissionsUpdated(timeElapsed, tokensToAccount, accRewardPerShare);
+            // Skip emissions when no providers are staked to keep emission schedule aligned
         }
 
         lastRewardTime = block.timestamp;

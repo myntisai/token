@@ -22,7 +22,11 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
 
     mapping(address => uint256) public providerBalance;
 
-    struct EpochMerkleRoot { bytes32 root; uint256 expiry; }
+    struct EpochMerkleRoot { 
+        bytes32 root; 
+        uint256 expiry; 
+        bool closed; 
+    }
     mapping(address => EpochMerkleRoot[]) public providerMerkleRoots;
     mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
 
@@ -30,6 +34,8 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
     event MerkleRootSubmitted(address indexed provider, uint256 indexed rootIndex, bytes32 root, uint256 expiry);
     event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount);
+    event EpochClosed(address indexed provider, uint256 indexed rootIndex);
+    event ProviderSlashed(address indexed provider, uint256 amount);
 
     constructor(address _token, address admin) {
         token = IERC20(_token);
@@ -68,8 +74,26 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     function submitMerkleRoot(bytes32 root, uint256 expiry) external nonReentrant {
         require(providerBalance[msg.sender] > 0, "no balance");
         require(expiry > block.timestamp, "expired");
-        providerMerkleRoots[msg.sender].push(EpochMerkleRoot({root: root, expiry: expiry}));
+        providerMerkleRoots[msg.sender].push(EpochMerkleRoot({root: root, expiry: expiry, closed: false}));
         emit MerkleRootSubmitted(msg.sender, providerMerkleRoots[msg.sender].length - 1, root, expiry);
+    }
+
+    function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        require(!providerMerkleRoots[provider][rootIndex].closed, "already closed");
+        require(block.timestamp > providerMerkleRoots[provider][rootIndex].expiry, "not expired");
+        
+        providerMerkleRoots[provider][rootIndex].closed = true;
+        emit EpochClosed(provider, rootIndex);
+    }
+
+    function slashProvider(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(amount > 0, "zero amount");
+        require(amount <= providerBalance[provider], "insufficient balance");
+        
+        providerBalance[provider] -= amount;
+        token.safeTransfer(msg.sender, amount);
+        emit ProviderSlashed(provider, amount);
     }
 
     // ---- claims ----
@@ -84,6 +108,7 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         require(!claimed[provider][rootIndex][msg.sender], "already");
         EpochMerkleRoot memory e = providerMerkleRoots[provider][rootIndex];
         require(block.timestamp <= e.expiry, "expired");
+        require(!e.closed, "epoch closed");
 
         bytes32 leaf = keccak256(abi.encode(msg.sender, amount));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");

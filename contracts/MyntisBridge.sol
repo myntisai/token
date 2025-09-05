@@ -60,17 +60,9 @@ contract MyntisBridge is OApp {
         // (Optional) Peer check can be added here if needed. For now, it's omitted.
         emit LogStep(2, "Pre-checks passed (remote bridge configured for EID)");
 
-        // --- Token Transfer and Burn ---
-        try myntisToken.transferFrom(msg.sender, address(this), amount) returns (bool success) {
-            require(success, "Token transfer failed");
-            emit LogStep(3, "Token transfer succeeded");
-        } catch Error(string memory reason) {
-            revert(reason);
-        } catch {
-            revert("Token transfer failed: Unknown error");
-        }
-        try myntisToken.burn(address(this), amount) {
-            emit LogStep(4, "Token burn succeeded");
+        // --- Direct Token Burn (Gas Optimized) ---
+        try myntisToken.burn(msg.sender, amount) {
+            emit LogStep(3, "Token burn succeeded");
         } catch Error(string memory reason) {
             revert(reason);
         } catch {
@@ -80,13 +72,13 @@ contract MyntisBridge is OApp {
         // --- Prepare Payload ---
         MessageType messageType = isProviderReward ? MessageType.ProviderReward : MessageType.Regular;
         bytes memory payload = abi.encode(messageType, recipient, amount);
-        emit LogStep(5, "Payload encoded");
+        emit LogStep(4, "Payload encoded");
 
         // --- Prepare Adapter Parameters ---
         uint256 gasForDestination = 600000;
         // Using abi.encode to match adapter requirements
         bytes memory adapterParams = abi.encode(uint16(1), gasForDestination);
-        emit LogStep(6, "Adapter parameters set");
+        emit LogStep(5, "Adapter parameters set");
 
         // --- Dispatch the LayerZero Message ---
         // Convert the full dstEid (uint32) to a uint16 if needed by _lzSend. Depending on OApp,
@@ -99,7 +91,7 @@ contract MyntisBridge is OApp {
             msg.value,        // Native fee provided
             msg.sender        // Refund address
         ) {
-            emit LogStep(7, "LayerZero message dispatch initiated via _sendLayerZero wrapper");
+            emit LogStep(6, "LayerZero message dispatch initiated via _sendLayerZero wrapper");
         } catch Error(string memory reason) {
             revert(reason);
         } catch {
@@ -107,7 +99,7 @@ contract MyntisBridge is OApp {
         }
 
         emit MYNTBridged(msg.sender, amount, dstEid, messageType);
-        emit LogStep(8, "bridgeMYNT execution completed");
+        emit LogStep(7, "bridgeMYNT execution completed");
     }
 
     // Public wrapper function to allow try/catch handling
