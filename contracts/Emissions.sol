@@ -30,8 +30,8 @@ contract Emissions is AccessControl, ReentrancyGuard {
     uint256 public constant AI_AI_EMISSIONS = 100_000_000 * 1e18;    // 100M AI-AI rewards
     uint256 public constant TOTAL_EMISSIONS = 800_000_000 * 1e18;    // 800M total emissions
     
-    // Initial emission rate (800M over 4 years)
-    uint256 public constant INITIAL_EMISSION_RATE = TOTAL_EMISSIONS / HALVING_PERIOD;
+    // Initial emission rate (400M over 4 years, then halving)
+    uint256 public constant INITIAL_EMISSION_RATE = (TOTAL_EMISSIONS / 2) / HALVING_PERIOD;
 
     uint256 public immutable startTime;
     uint256 public lastRewardTime;
