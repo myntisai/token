@@ -1,178 +1,224 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.22;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./MyntisToken.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 /**
  * @title MerkleDistributor
- * @notice Enables providers to submit Merkle roots for newly rewarded messages.
- *         Users can now claim rewards using a single merkle leaf built from (user, totalClaimAmount).
+ * @notice Production Merkle distributor for Myntis rewards
+ * @dev Fixed balance exhaustion and CEI pattern issues
  */
 contract MerkleDistributor is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    bytes32 public constant PROVIDER_ROLE = keccak256("PROVIDER_ROLE");
 
-    MyntisToken public immutable myntisToken;
-    address public stakingContract;
-    address public bridgeContract;
-
-    // Track each provider's available balance (rewards allocated to them but not yet distributed)
+    IERC20 public immutable token;
+    
+    // Provider balances and locked amounts
     mapping(address => uint256) public providerBalance;
-
-    // Each provider can submit multiple merkle roots (each with an expiry)
+    mapping(address => uint256) public lockedBalance;
+    
+    // Epoch management
     struct EpochMerkleRoot {
-        bytes32 root;   // Merkle root for this epoch
-        uint256 expiry; // Expiry timestamp
+        bytes32 root;
+        uint256 expiry;
+        bool closed;
+        uint256 totalClaimable;
+        uint256 claimedAmount;
     }
-
-    // provider => array of merkle roots submitted
+    
     mapping(address => EpochMerkleRoot[]) public providerMerkleRoots;
-
-    // Tracks if a user has claimed for a given provider and root index
     mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
-
-    // EVENTS
-    event StakingContractUpdated(address newStakingContract);
-    event BridgeContractUpdated(address newBridgeContract);
-    event MerkleRootSubmitted(address indexed provider, uint256 indexed rootIndex, bytes32 merkleRoot, uint256 expiry);
-    event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 totalAmount);
+    
+    // Constants
+    uint256 public constant MIN_EXPIRY_DURATION = 1 days;
+    uint256 public constant EPOCH_GRACE_PERIOD = 2 days; // 48 hours grace period
+    
+    // Events
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
+    event MerkleRootSubmitted(address indexed provider, uint256 rootIndex, bytes32 root, uint256 expiry, uint256 totalClaimable);
+    event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount);
+    event EpochClosed(address indexed provider, uint256 rootIndex);
+    event ProviderSlashed(address indexed provider, uint256 amount);
 
-    constructor(address _myntisToken, address admin) {
-        myntisToken = MyntisToken(_myntisToken);
-        _grantRole(ADMIN_ROLE, admin);
+    constructor(address _token, address _admin) {
+        token = IERC20(_token);
+        _grantRole(ADMIN_ROLE, _admin);
     }
-
-    // ----------------------------
-    //    ADMIN-CONFIG FUNCTIONS
-    // ----------------------------
-
-    function setStakingContract(address _stakingContract) external onlyRole(ADMIN_ROLE) {
-        require(_stakingContract != address(0), "Invalid address");
-        stakingContract = _stakingContract;
-        emit StakingContractUpdated(_stakingContract);
-    }
-
-    function setBridgeContract(address _bridgeContract) external onlyRole(ADMIN_ROLE) {
-        require(_bridgeContract != address(0), "Invalid address");
-        bridgeContract = _bridgeContract;
-        emit BridgeContractUpdated(_bridgeContract);
-    }
-
-    // ----------------------------
-    //     REWARD NOTIFICATION
-    // ----------------------------
 
     /**
-     * @notice Called by the StakingContract after a provider harvests new tokens.
+     * @notice Add balance for a provider
      */
-    function notifyReward(address provider, uint256 amount) external nonReentrant {
-        require(msg.sender == stakingContract, "Only StakingContract can notify rewards");
-        require(amount > 0, "Invalid reward amount");
+    function addProviderBalance(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
 
     /**
-     * @notice Called by the Bridge after MYNT is minted on this chain.
+     * @notice Submit Merkle root for an epoch
+     * @dev Fixed: Prevents balance exhaustion by locking funds
      */
-    function notifyRewardFromBridge(address provider, uint256 amount) external nonReentrant {
-        require(msg.sender == bridgeContract, "Only Bridge can notify rewards");
-        require(amount > 0, "Invalid reward amount");
-        providerBalance[provider] += amount;
-        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
-    }
+    function submitMerkleRoot(
+        bytes32 root,
+        uint256 expiry,
+        uint256 totalClaimableAmount
+    ) external nonReentrant {
+        require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
+        require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
+        require(totalClaimableAmount > 0, "zero claimable");
 
-    /**
-     * @notice Allows providers to manually notify rewards by transferring MYNT to this contract.
-     */
-    function selfNotifyReward(uint256 amount) external nonReentrant {
-        require(amount > 0, "Invalid amount");
-        IERC20(address(myntisToken)).safeTransferFrom(msg.sender, address(this), amount);
-        providerBalance[msg.sender] += amount;
-        emit ProviderBalanceUpdated(msg.sender, providerBalance[msg.sender]);
-    }
-
-    // ----------------------------
-    //   MERKLE ROOT SUBMISSION
-    // ----------------------------
-
-    /**
-     * @notice Providers create an epoch by submitting a merkle root for newly rewarded tokens.
-     * @dev They must have a positive provider balance and the expiry must be in the future.
-     */
-    function submitMerkleRoot(bytes32 merkleRoot, uint256 expiry) external nonReentrant {
-        require(providerBalance[msg.sender] > 0, "No provider balance");
-        require(expiry > block.timestamp, "Expiry must be in future");
+        // Lock the balance for this epoch
+        providerBalance[msg.sender] -= totalClaimableAmount;
+        lockedBalance[msg.sender] += totalClaimableAmount;
 
         providerMerkleRoots[msg.sender].push(EpochMerkleRoot({
-            root: merkleRoot,
-            expiry: expiry
+            root: root,
+            expiry: expiry,
+            closed: false,
+            totalClaimable: totalClaimableAmount,
+            claimedAmount: 0
         }));
-
-        uint256 rootIndex = providerMerkleRoots[msg.sender].length - 1;
-        emit MerkleRootSubmitted(msg.sender, rootIndex, merkleRoot, expiry);
+        
+        emit MerkleRootSubmitted(msg.sender, providerMerkleRoots[msg.sender].length - 1, root, expiry, totalClaimableAmount);
     }
-
-    // ----------------------------
-    //       CLAIM REWARDS
-    // ----------------------------
 
     /**
-     * @notice Allows a user to claim rewards with a single merkle proof.
-     * @param provider The provider who submitted the merkle root.
-     * @param rootIndex The index of the merkle root in the provider's list.
-     * @param totalClaimAmount The total reward amount the user is entitled to claim.
-     * @param merkleProof The merkle proof for the leaf computed as keccak256(abi.encodePacked(msg.sender, totalClaimAmount)).
+     * @notice Claim rewards using Merkle proof
+     * @dev Fixed: CEI pattern and balance exhaustion protection
      */
-    function claimRewards(
+    function claim(
         address provider,
         uint256 rootIndex,
-        uint256 totalClaimAmount,
+        uint256 amount,
         bytes32[] calldata merkleProof
     ) external nonReentrant {
-        require(provider != address(0), "Invalid provider");
-        require(rootIndex < providerMerkleRoots[provider].length, "Invalid root index");
+        require(provider != address(0), "invalid provider");
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        require(amount > 0, "zero amount");
+        require(!claimed[provider][rootIndex][msg.sender], "already claimed");
 
-        EpochMerkleRoot memory epoch = providerMerkleRoots[provider][rootIndex];
-        require(block.timestamp <= epoch.expiry, "Merkle root expired");
-        require(providerBalance[provider] >= totalClaimAmount, "Provider insufficient balance");
+        EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
+        require(!e.closed, "epoch closed");
 
-        require(!claimed[provider][rootIndex][msg.sender], "Reward already claimed");
+        bytes32 leaf = keccak256(abi.encode(msg.sender, amount));
+        require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
+
+        // Ensure enough locked balance for this specific epoch
+        require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
+
+        // Update state AFTER checks and BEFORE transfer (CEI pattern)
         claimed[provider][rootIndex][msg.sender] = true;
+        e.claimedAmount += amount; // Track claimed amount for this epoch
 
-        bytes32 leaf = keccak256(abi.encodePacked(msg.sender, totalClaimAmount));
-        require(verifyMerkleProof(merkleProof, epoch.root, leaf), "Invalid Merkle proof");
-
-        providerBalance[provider] -= totalClaimAmount;
-        IERC20(address(myntisToken)).safeTransfer(msg.sender, totalClaimAmount);
-
-        emit RewardsClaimed(msg.sender, provider, rootIndex, totalClaimAmount);
+        token.safeTransfer(msg.sender, amount); // Actual token transfer
+        emit RewardsClaimed(msg.sender, provider, rootIndex, amount);
     }
 
-    // ----------------------------
-    //    INTERNAL PROOF UTILS
-    // ----------------------------
+    /**
+     * @notice Batch claim rewards
+     */
+    function batchClaim(
+        address[] calldata providers,
+        uint256[] calldata rootIndices,
+        uint256[] calldata amounts,
+        bytes32[][] calldata proofs
+    ) external nonReentrant {
+        require(
+            providers.length == rootIndices.length &&
+            rootIndices.length == amounts.length &&
+            amounts.length == proofs.length,
+            "Arrays length mismatch"
+        );
 
-    function verifyMerkleProof(
-        bytes32[] calldata proof,
-        bytes32 root,
-        bytes32 leaf
-    ) public pure returns (bool) {
-        bytes32 computedHash = leaf;
-        for (uint256 i = 0; i < proof.length; i++) {
-            bytes32 proofElement = proof[i];
-            if (computedHash < proofElement) {
-                computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
-            } else {
-                computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
-            }
+        for (uint256 i = 0; i < providers.length; i++) {
+            this.claim(providers[i], rootIndices[i], amounts[i], proofs[i]);
         }
-        return computedHash == root;
+    }
+
+    /**
+     * @notice Close an epoch and return unclaimed funds
+     * @dev Fixed: Only close after grace period
+     */
+    function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        require(!e.closed, "already closed");
+        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD, "grace period not over");
+        
+        e.closed = true;
+
+        // Return any unclaimed balance to the provider
+        if (e.totalClaimable > e.claimedAmount) {
+            uint256 unclaimed = e.totalClaimable - e.claimedAmount;
+            lockedBalance[provider] -= unclaimed;
+            providerBalance[provider] += unclaimed; // Return to general balance
+            emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+        }
+        
+        emit EpochClosed(provider, rootIndex);
+    }
+
+    /**
+     * @notice Slash a provider's balance
+     */
+    function slashProvider(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(amount <= providerBalance[provider], "insufficient balance");
+        providerBalance[provider] -= amount;
+        emit ProviderSlashed(provider, amount);
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+    }
+
+    /**
+     * @notice Get provider's available balance
+     */
+    function getProviderBalance(address provider) external view returns (uint256) {
+        return providerBalance[provider];
+    }
+
+    /**
+     * @notice Get provider's locked balance
+     */
+    function getLockedBalance(address provider) external view returns (uint256) {
+        return lockedBalance[provider];
+    }
+
+    /**
+     * @notice Get epoch info
+     */
+    function getEpochInfo(address provider, uint256 rootIndex) external view returns (
+        bytes32 root,
+        uint256 expiry,
+        bool closed,
+        uint256 totalClaimable,
+        uint256 claimedAmount
+    ) {
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        return (e.root, e.expiry, e.closed, e.totalClaimable, e.claimedAmount);
+    }
+
+    /**
+     * @notice Check if user has claimed from specific epoch
+     */
+    function hasClaimed(address provider, uint256 rootIndex, address user) external view returns (bool) {
+        return claimed[provider][rootIndex][user];
+    }
+
+    /**
+     * @notice Notify reward (called by StakingContract)
+     */
+    function notifyReward(address provider, uint256 amount) external {
+        // This function is called by StakingContract when rewards are harvested
+        // The rewards are already transferred to this contract
+        // We just need to add them to the provider's balance
+        providerBalance[provider] += amount;
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
 }
