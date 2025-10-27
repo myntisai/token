@@ -2,6 +2,8 @@
 pragma solidity ^0.8.22;
 
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -27,7 +29,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         address _asset,
         address _dualPoolStaking,
         address admin
-    ) ERC4626(_asset) ERC20("Liquid Staked Myntis", "lsMYNT") {
+    ) ERC4626(IERC20(_asset)) ERC20("Liquid Staked Myntis", "lsMYNT") {
         dualPoolStaking = _dualPoolStaking;
         _grantRole(ADMIN_ROLE, admin);
         _grantRole(STAKING_ROLE, _dualPoolStaking);

@@ -23,6 +23,7 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     // Provider balances and locked amounts
     mapping(address => uint256) public providerBalance;
     mapping(address => uint256) public lockedBalance;
+    address public stakingContract;
     
     // Epoch management
     struct EpochMerkleRoot {
@@ -46,10 +47,20 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount);
     event EpochClosed(address indexed provider, uint256 rootIndex);
     event ProviderSlashed(address indexed provider, uint256 amount);
+    event StakingContractUpdated(address indexed stakingContract);
 
     constructor(address _token, address _admin) {
         token = IERC20(_token);
         _grantRole(ADMIN_ROLE, _admin);
+    }
+
+    /**
+     * @notice Define the staking contract that can notify rewards.
+     */
+    function setStakingContract(address staking) external onlyRole(ADMIN_ROLE) {
+        require(staking != address(0), "invalid staking");
+        stakingContract = staking;
+        emit StakingContractUpdated(staking);
     }
 
     /**
@@ -98,27 +109,37 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         uint256 amount,
         bytes32[] calldata merkleProof
     ) external nonReentrant {
+        _claim(msg.sender, provider, rootIndex, amount, merkleProof);
+    }
+
+    function _claim(
+        address claimant,
+        address provider,
+        uint256 rootIndex,
+        uint256 amount,
+        bytes32[] calldata merkleProof
+    ) internal {
         require(provider != address(0), "invalid provider");
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         require(amount > 0, "zero amount");
-        require(!claimed[provider][rootIndex][msg.sender], "already claimed");
+        require(!claimed[provider][rootIndex][claimant], "already claimed");
 
         EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
         require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
         require(!e.closed, "epoch closed");
 
-        bytes32 leaf = keccak256(abi.encode(msg.sender, amount));
+        bytes32 leaf = keccak256(abi.encode(claimant, amount));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
 
         // Ensure enough locked balance for this specific epoch
         require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
 
         // Update state AFTER checks and BEFORE transfer (CEI pattern)
-        claimed[provider][rootIndex][msg.sender] = true;
+        claimed[provider][rootIndex][claimant] = true;
         e.claimedAmount += amount; // Track claimed amount for this epoch
 
-        token.safeTransfer(msg.sender, amount); // Actual token transfer
-        emit RewardsClaimed(msg.sender, provider, rootIndex, amount);
+        token.safeTransfer(claimant, amount); // Actual token transfer
+        emit RewardsClaimed(claimant, provider, rootIndex, amount);
     }
 
     /**
@@ -138,7 +159,7 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         );
 
         for (uint256 i = 0; i < providers.length; i++) {
-            this.claim(providers[i], rootIndices[i], amounts[i], proofs[i]);
+            _claim(msg.sender, providers[i], rootIndices[i], amounts[i], proofs[i]);
         }
     }
 
@@ -215,9 +236,8 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
      * @notice Notify reward (called by StakingContract)
      */
     function notifyReward(address provider, uint256 amount) external {
-        // This function is called by StakingContract when rewards are harvested
-        // The rewards are already transferred to this contract
-        // We just need to add them to the provider's balance
+        require(msg.sender == stakingContract, "unauthorised notifier");
+        require(amount > 0, "zero amount");
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }

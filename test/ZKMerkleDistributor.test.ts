@@ -6,19 +6,17 @@ describe("ZKMerkleDistributor", function () {
   async function deployZKMerkleDistributorFixture() {
     const [admin, provider1, provider2, user1, user2] = await ethers.getSigners();
 
-    // Deploy mock token
-    const MockToken = await ethers.getContractFactory("MyntisSimple");
-    const token = await MockToken.deploy(
-      admin.address,
-      ethers.parseEther("1000000000"), // 1B cap
-      ethers.parseEther("1000000000")  // 1B max supply
-    );
+    const TokenFactory = await ethers.getContractFactory("MyntisToken");
+    const token = await TokenFactory.connect(admin).deploy(admin.address);
     await token.waitForDeployment();
 
     // Deploy ZK verifier
     const RewardClaimVerifier = await ethers.getContractFactory("RewardClaimVerifier");
-    const verifier = await RewardClaimVerifier.deploy();
+    const verifier = await RewardClaimVerifier.connect(admin).deploy();
     await verifier.waitForDeployment();
+    const MockGroth16Verifier = await ethers.getContractFactory("MockGroth16Verifier");
+    const grothVerifier = await MockGroth16Verifier.connect(admin).deploy();
+    await verifier.connect(admin).setVerifierContract(await grothVerifier.getAddress());
 
     // Deploy ZK Merkle Distributor
     const ZKMerkleDistributor = await ethers.getContractFactory("ZKMerkleDistributor");
@@ -34,11 +32,11 @@ describe("ZKMerkleDistributor", function () {
     await distributor.grantRole(await distributor.PROVIDER_ROLE(), provider2.address);
 
     // Mint tokens to distributor
-    await token.mint(await distributor.getAddress(), ethers.parseEther("1000000"));
+    await token.connect(admin).mint(await distributor.getAddress(), ethers.parseEther("1000000"));
 
     // Add provider balances
-    await distributor.addProviderBalance(provider1.address, ethers.parseEther("10000"));
-    await distributor.addProviderBalance(provider2.address, ethers.parseEther("10000"));
+    await distributor.connect(admin).addProviderBalance(provider1.address, ethers.parseEther("10000"));
+    await distributor.connect(admin).addProviderBalance(provider2.address, ethers.parseEther("10000"));
 
     return {
       distributor,
@@ -52,9 +50,15 @@ describe("ZKMerkleDistributor", function () {
     };
   }
 
+  async function futureExpiry(offsetSeconds = 172_800): Promise<number> {
+    const block = await ethers.provider.getBlock("latest");
+    const baseline = block ? Number(block.timestamp) : Math.floor(Date.now() / 1000);
+    return baseline + offsetSeconds;
+  }
+
   describe("Deployment", function () {
     it("Should initialize with correct parameters", async function () {
-      const { distributor, token, verifier, admin } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, token, verifier, admin } = await loadFixture(deployZKMerkleDistributorFixture);
 
       expect(await distributor.token()).to.equal(await token.getAddress());
       expect(await distributor.verifier()).to.equal(await verifier.getAddress());
@@ -64,7 +68,7 @@ describe("ZKMerkleDistributor", function () {
 
   describe("Provider Balance Management", function () {
     it("Should allow admin to add provider balance", async function () {
-      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const amount = ethers.parseEther("1000");
       await distributor.connect(admin).addProviderBalance(provider1.address, amount);
@@ -73,7 +77,7 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should reject non-admin balance addition", async function () {
-      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const amount = ethers.parseEther("1000");
       await expect(
@@ -84,10 +88,10 @@ describe("ZKMerkleDistributor", function () {
 
   describe("Merkle Root Submission", function () {
     it("Should allow provider to submit Merkle root with ZK enabled", async function () {
-      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const root = ethers.keccak256(ethers.toUtf8Bytes("test root"));
-      const expiry = Math.floor(Date.now() / 1000) + 86400; // 1 day from now
+      const expiry = await futureExpiry(); // 1 day from now
       const totalClaimable = ethers.parseEther("1000");
       const zkEnabled = true;
 
@@ -98,10 +102,10 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should allow provider to submit Merkle root without ZK", async function () {
-      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const root = ethers.keccak256(ethers.toUtf8Bytes("test root"));
-      const expiry = Math.floor(Date.now() / 1000) + 86400;
+      const expiry = await futureExpiry();
       const totalClaimable = ethers.parseEther("1000");
       const zkEnabled = false;
 
@@ -112,10 +116,10 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should reject submission with insufficient balance", async function () {
-      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const root = ethers.keccak256(ethers.toUtf8Bytes("test root"));
-      const expiry = Math.floor(Date.now() / 1000) + 86400;
+      const expiry = await futureExpiry();
       const totalClaimable = ethers.parseEther("20000"); // More than available balance
       const zkEnabled = true;
 
@@ -125,10 +129,10 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should reject submission with expiry too soon", async function () {
-      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const root = ethers.keccak256(ethers.toUtf8Bytes("test root"));
-      const expiry = Math.floor(Date.now() / 1000) + 3600; // 1 hour from now (too soon)
+      const expiry = await futureExpiry(3600); // 1 hour from now (too soon)
       const totalClaimable = ethers.parseEther("1000");
       const zkEnabled = true;
 
@@ -140,11 +144,11 @@ describe("ZKMerkleDistributor", function () {
 
   describe("ZK Claim Verification", function () {
     it("Should reject ZK claim when ZK is not enabled", async function () {
-      const { distributor, provider1, user1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1, user1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       // Submit root without ZK
       const root = ethers.keccak256(ethers.toUtf8Bytes("test root"));
-      const expiry = Math.floor(Date.now() / 1000) + 86400;
+      const expiry = await futureExpiry();
       const totalClaimable = ethers.parseEther("1000");
       await distributor.connect(provider1).submitMerkleRoot(root, expiry, totalClaimable, false);
 
@@ -164,11 +168,11 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should reject claim without ZK when ZK is enabled", async function () {
-      const { distributor, provider1, user1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1, user1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       // Submit root with ZK
       const root = ethers.keccak256(ethers.toUtf8Bytes("test root"));
-      const expiry = Math.floor(Date.now() / 1000) + 86400;
+      const expiry = await futureExpiry();
       const totalClaimable = ethers.parseEther("1000");
       await distributor.connect(provider1).submitMerkleRoot(root, expiry, totalClaimable, true);
 
@@ -184,16 +188,16 @@ describe("ZKMerkleDistributor", function () {
 
   describe("Epoch Management", function () {
     it("Should allow admin to close epoch after grace period", async function () {
-      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       // Submit root
       const root = ethers.keccak256(ethers.toUtf8Bytes("test root"));
-      const expiry = Math.floor(Date.now() / 1000) + 86400;
+      const expiry = await futureExpiry();
       const totalClaimable = ethers.parseEther("1000");
       await distributor.connect(provider1).submitMerkleRoot(root, expiry, totalClaimable, false);
 
       // Fast forward past grace period
-      await ethers.provider.send("evm_increaseTime", [86400 * 3]); // 3 days
+      await ethers.provider.send("evm_increaseTime", [86400 * 7]); // 3 days
       await ethers.provider.send("evm_mine", []);
 
       await expect(
@@ -203,11 +207,11 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should reject closing epoch before grace period", async function () {
-      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       // Submit root
       const root = ethers.keccak256(ethers.toUtf8Bytes("test root"));
-      const expiry = Math.floor(Date.now() / 1000) + 86400;
+      const expiry = await futureExpiry();
       const totalClaimable = ethers.parseEther("1000");
       await distributor.connect(provider1).submitMerkleRoot(root, expiry, totalClaimable, false);
 
@@ -220,7 +224,7 @@ describe("ZKMerkleDistributor", function () {
 
   describe("Provider Slashing", function () {
     it("Should allow admin to slash provider balance", async function () {
-      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const slashAmount = ethers.parseEther("1000");
       const initialBalance = await distributor.getProviderBalance(provider1.address);
@@ -234,7 +238,7 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should reject slashing more than available balance", async function () {
-      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, admin, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const slashAmount = ethers.parseEther("20000"); // More than available
       await expect(
@@ -245,7 +249,7 @@ describe("ZKMerkleDistributor", function () {
 
   describe("Access Control", function () {
     it("Should reject non-admin epoch closing", async function () {
-      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       await expect(
         distributor.connect(provider1).closeEpoch(provider1.address, 0)
@@ -253,7 +257,7 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should reject non-admin provider slashing", async function () {
-      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       await expect(
         distributor.connect(provider1).slashProvider(provider1.address, ethers.parseEther("1000"))
@@ -263,16 +267,16 @@ describe("ZKMerkleDistributor", function () {
 
   describe("Integration", function () {
     it("Should handle multiple providers with different ZK settings", async function () {
-      const { distributor, provider1, provider2 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, provider1, provider2 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       // Provider1 submits with ZK enabled
       const root1 = ethers.keccak256(ethers.toUtf8Bytes("test root 1"));
-      const expiry1 = Math.floor(Date.now() / 1000) + 86400;
+      const expiry1 = await futureExpiry();
       await distributor.connect(provider1).submitMerkleRoot(root1, expiry1, ethers.parseEther("1000"), true);
 
       // Provider2 submits without ZK
       const root2 = ethers.keccak256(ethers.toUtf8Bytes("test root 2"));
-      const expiry2 = Math.floor(Date.now() / 1000) + 86400;
+      const expiry2 = await futureExpiry();
       await distributor.connect(provider2).submitMerkleRoot(root2, expiry2, ethers.parseEther("1000"), false);
 
       // Check epoch info
@@ -284,7 +288,7 @@ describe("ZKMerkleDistributor", function () {
     });
 
     it("Should track ZK claim counts per user", async function () {
-      const { distributor, user1 } = await loadFixture(deployZKMerkleDistributorFixture());
+      const { distributor, user1 } = await loadFixture(deployZKMerkleDistributorFixture);
 
       const initialCount = await distributor.getZKClaimCount(user1.address);
       expect(initialCount).to.equal(0);

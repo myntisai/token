@@ -1,67 +1,48 @@
 import { ethers } from "hardhat";
 
-async function main() {
-  console.log("💰 Checking testnet token balances...\n");
+async function checkBalance() {
+  console.log("💰 Checking Account Balance\n");
 
-  const [deployer] = await ethers.getSigners();
-  const networkName = process.env.HARDHAT_NETWORK || "hardhat";
-  
-  console.log(`Network: ${networkName}`);
-  console.log(`Address: ${deployer.address}`);
-  
+  const signers = await ethers.getSigners();
+  if (signers.length === 0) {
+    throw new Error("No signers available");
+  }
+  const deployer = signers[0];
+  console.log(`Account: ${deployer.address}\n`);
+
   try {
     const balance = await ethers.provider.getBalance(deployer.address);
-    const balanceEth = ethers.formatEther(balance);
+    console.log(`Current Balance: ${ethers.formatEther(balance)} ETH`);
     
-    console.log(`Balance: ${balanceEth} ETH`);
-    
-    const minBalance = ethers.parseEther("0.01");
-    if (balance < minBalance) {
-      console.log(`⚠️  Insufficient balance! Need at least 0.01 ETH for deployment`);
-      console.log(`\n🚰 Get testnet tokens from:`);
-      
-      const faucets = {
-        "ethereum-sepolia": [
-          "https://sepoliafaucet.com/",
-          "https://faucet.quicknode.com/ethereum/sepolia",
-          "https://www.alchemy.com/faucets/ethereum-sepolia"
-        ],
-        "arbitrum-sepolia": [
-          "https://faucet.quicknode.com/arbitrum/sepolia",
-          "https://faucet.arbitrum.io/"
-        ],
-        "polygon-mumbai": [
-          "https://faucet.polygon.technology/",
-          "https://faucet.quicknode.com/polygon/mumbai"
-        ],
-        "optimism-sepolia": [
-          "https://faucet.quicknode.com/optimism/sepolia",
-          "https://faucet.optimism.io/"
-        ],
-        "base-sepolia": [
-          "https://bridge.base.org/deposit",
-          "https://faucet.quicknode.com/base/sepolia"
-        ]
-      };
-      
-      const networkFaucets = faucets[networkName] || [];
-      networkFaucets.forEach((url, index) => {
-        console.log(`   ${index + 1}. ${url}`);
-      });
+    if (balance === 0n) {
+      console.log("\n⚠️ No ETH found. Please get testnet ETH from:");
+      console.log("• https://sepoliafaucet.com/");
+      console.log("• https://faucet.quicknode.com/ethereum/sepolia");
+      console.log("• https://www.alchemy.com/faucets/ethereum-sepolia");
     } else {
-      console.log(`✅ Sufficient balance for deployment!`);
-      console.log(`\n🚀 Ready to deploy spoke contracts:`);
-      console.log(`   npx hardhat run scripts/deploy-multi-spoke.ts --network ${networkName}`);
+      console.log("\n✅ Sufficient balance for deployment!");
     }
   } catch (error) {
-    console.error("❌ Error checking balance:", error);
-    console.log("\n💡 Make sure you're connected to the right network");
+    console.log(`❌ Error checking balance: ${error.message}`);
+  }
+
+  // Check network info
+  try {
+    const network = await ethers.provider.getNetwork();
+    console.log(`\nNetwork: ${network.name} (Chain ID: ${network.chainId})`);
+  } catch (error) {
+    console.log(`❌ Error getting network info: ${error.message}`);
   }
 }
 
-main()
-  .then(() => process.exit(0))
-  .catch((error) => {
-    console.error("❌ Error:", error);
-    process.exit(1);
-  });
+// Main execution
+if (require.main === module) {
+  checkBalance()
+    .then(() => process.exit(0))
+    .catch((error) => {
+      console.error("❌ Error:", error);
+      process.exit(1);
+    });
+}
+
+export { checkBalance };

@@ -5,6 +5,16 @@ pragma solidity ^0.8.22;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+interface IHubToken {
+    function burn(address from, uint256 amount) external;
+    function mint(address to, uint256 amount) external;
+}
+
+interface ISpokeToken {
+    function burn(address from, uint256 amount, string calldata reason) external;
+    function mint(address to, uint256 amount, string calldata reason) external;
+}
+
 /**
  * @title HubSpokeBridge
  * @notice Unified LayerZero bridge for hub and spoke chains
@@ -63,7 +73,7 @@ contract HubSpokeBridge is AccessControl, ReentrancyGuard {
     event BridgeRoleUpdated(address indexed bridge, bool enabled);
 
     constructor(
-        address _lzEndpoint,
+        address /* _lzEndpoint */,
         address _owner,
         address _token,
         address _merkleDistributor,
@@ -99,23 +109,13 @@ contract HubSpokeBridge is AccessControl, ReentrancyGuard {
         // require(peers[dstChainId] != bytes32(0), "Peer not set");
 
         // Burn tokens from sender
-        (bool burnSuccess, ) = token.call(
-            abi.encodeWithSignature("burn(address,uint256,string)", msg.sender, amount, reason)
-        );
-        require(burnSuccess, "Token burn failed");
-
-        // Prepare message
-        TokenTransferMessage memory message = TokenTransferMessage({
-            msgType: MessageType.TokenTransfer,
-            recipient: recipient,
-            amount: amount,
-            isProviderReward: isProviderReward,
-            reason: reason
-        });
+        if (isHub) {
+            IHubToken(token).burn(msg.sender, amount);
+        } else {
+            ISpokeToken(token).burn(msg.sender, amount, reason);
+        }
 
         // TODO: Send LayerZero message (simplified for testing)
-        emit TokensBridged(msg.sender, dstChainId, amount, isProviderReward);
-        
         emit TokensBridged(msg.sender, dstChainId, amount, isProviderReward);
     }
 
@@ -126,10 +126,10 @@ contract HubSpokeBridge is AccessControl, ReentrancyGuard {
     function distributeRewards(
         uint32[] calldata dstChainIds,
         address provider,
-        uint256 rootIndex,
+        uint256 /* rootIndex */,
         uint256 totalAmount,
-        bytes32 merkleRoot,
-        uint256 expiry
+        bytes32 /* merkleRoot */,
+        uint256 /* expiry */
     ) external payable onlyRole(BRIDGE_ROLE) {
         require(isHub, "Only callable on hub");
         require(dstChainIds.length > 0, "No destination chains");
@@ -137,18 +137,7 @@ contract HubSpokeBridge is AccessControl, ReentrancyGuard {
         for (uint256 i = 0; i < dstChainIds.length; i++) {
             // TODO: Check peer configuration (simplified for testing)
             // require(peers[dstChainIds[i]] != bytes32(0), "Peer not set");
-            
-            RewardDistributionMessage memory message = RewardDistributionMessage({
-                msgType: MessageType.RewardDistribution,
-                provider: provider,
-                rootIndex: rootIndex,
-                totalAmount: totalAmount,
-                merkleRoot: merkleRoot,
-                expiry: expiry
-            });
-
             // TODO: Send LayerZero message (simplified for testing)
-            emit RewardDistributed(provider, dstChainIds[i], totalAmount);
             emit RewardDistributed(provider, dstChainIds[i], totalAmount);
         }
     }
@@ -163,15 +152,7 @@ contract HubSpokeBridge is AccessControl, ReentrancyGuard {
     ) external onlyRole(BRIDGE_ROLE) {
         require(!isHub, "Only callable on spoke");
         
-        NullifierBurnMessage memory message = NullifierBurnMessage({
-            msgType: MessageType.NullifierBurn,
-            nullifier: nullifier,
-            sourceChainId: uint32(block.chainid),
-            user: user
-        });
-
         // TODO: Send LayerZero message (simplified for testing)
-        emit NullifierBurned(nullifier, uint32(block.chainid), user);
         emit NullifierBurned(nullifier, uint32(block.chainid), user);
     }
 
@@ -197,15 +178,12 @@ contract HubSpokeBridge is AccessControl, ReentrancyGuard {
      */
     function _handleTokenTransfer(bytes calldata message) internal {
         TokenTransferMessage memory transferMsg = abi.decode(message, (TokenTransferMessage));
-        
         // Mint tokens to recipient
-        (bool mintSuccess, ) = token.call(
-            abi.encodeWithSignature("mint(address,uint256,string)", 
-                transferMsg.recipient, 
-                transferMsg.amount, 
-                transferMsg.reason)
-        );
-        require(mintSuccess, "Token mint failed");
+        if (isHub) {
+            IHubToken(token).mint(transferMsg.recipient, transferMsg.amount);
+        } else {
+            ISpokeToken(token).mint(transferMsg.recipient, transferMsg.amount, transferMsg.reason);
+        }
         
         emit TokensReceived(transferMsg.recipient, uint32(block.chainid), transferMsg.amount, transferMsg.reason);
     }

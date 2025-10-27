@@ -1,4 +1,4 @@
-import { ethers } from "hardhat";
+import { ethers, upgrades } from "hardhat";
 
 async function main() {
   // Grab the deployer account
@@ -15,25 +15,7 @@ async function main() {
   console.log("MyntisToken deployed at:", myntisTokenAddress);
 
   // --------------------------
-  // Deploy StakingContract
-  // --------------------------
-  const StakingFactory = await ethers.getContractFactory("StakingContract");
-  const staking = (await StakingFactory.deploy(myntisTokenAddress, deployer.address)) as any;
-  await staking.waitForDeployment();
-  const stakingAddress = await staking.getAddress();
-  console.log("StakingContract deployed at:", stakingAddress);
-
-  // --------------------------
-  // Deploy EmissionContract
-  // --------------------------
-  const EmissionFactory = await ethers.getContractFactory("EmissionContract");
-  const emissions = (await EmissionFactory.deploy(myntisTokenAddress, stakingAddress, deployer.address)) as any;
-  await emissions.waitForDeployment();
-  const emissionsAddress = await emissions.getAddress();
-  console.log("EmissionContract deployed at:", emissionsAddress);
-
-  // --------------------------
-  // Deploy MerkleDistributor
+  // Deploy MerkleDistributor (non-upgradeable)
   // --------------------------
   const MerkleDistributorFactory = await ethers.getContractFactory("MerkleDistributor");
   const merkleDistributor = (await MerkleDistributorFactory.deploy(myntisTokenAddress, deployer.address)) as any;
@@ -42,10 +24,34 @@ async function main() {
   console.log("MerkleDistributor deployed at:", merkleDistributorAddress);
 
   // --------------------------
+  // Deploy StakingContract proxy (initializer)
+  // --------------------------
+  const StakingFactory = await ethers.getContractFactory("StakingContract");
+  const staking = await upgrades.deployProxy(
+    StakingFactory,
+    [myntisTokenAddress, ethers.ZeroAddress, ethers.ZeroAddress, deployer.address],
+    { initializer: "initialize" }
+  );
+  await staking.waitForDeployment();
+  const stakingAddress = await staking.getAddress();
+  console.log("StakingContract proxy deployed at:", stakingAddress);
+
+  // --------------------------
+  // Deploy EmissionsUpgradeable (UUPS proxy)
+  // --------------------------
+  const EmissionsFactory = await ethers.getContractFactory("EmissionsUpgradeable");
+  const emissions = await upgrades.deployProxy(
+    EmissionsFactory,
+    [myntisTokenAddress, stakingAddress, deployer.address],
+    { initializer: "initialize", kind: "uups" }
+  );
+  await emissions.waitForDeployment();
+  const emissionsAddress = await emissions.getAddress();
+  console.log("EmissionsUpgradeable proxy deployed at:", emissionsAddress);
+
+  // --------------------------
   // Configure contracts
   // --------------------------
-
-  // Set the Emission and MerkleDistributor addresses in the Staking contract.
   console.log("Setting EmissionContract in StakingContract...");
   const tx1 = await staking.setEmissionContract(emissionsAddress);
   await tx1.wait();
@@ -62,8 +68,12 @@ async function main() {
 
   // Set the staking contract address in the MerkleDistributor.
   console.log("Setting StakingContract in MerkleDistributor...");
-  const tx4 = await merkleDistributor.setStakingContract(stakingAddress);
-  await tx4.wait();
+  if (merkleDistributor.setStakingContract) {
+    const tx4 = await merkleDistributor.setStakingContract(stakingAddress);
+    await tx4.wait();
+  } else {
+    console.log("MerkleDistributor does not expose setStakingContract (skipping)");
+  }
 
   console.log("Deployment and configuration complete.");
 }

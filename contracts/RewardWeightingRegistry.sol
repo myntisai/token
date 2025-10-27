@@ -93,7 +93,8 @@ contract RewardWeightingRegistry is
         require(bytes(strategyName).length > 0, "Invalid strategy name");
         require(bytes(version).length > 0, "Invalid version");
         
-        bool isUpdate = bytes(providerStrategies[msg.sender].strategyName).length > 0;
+        StrategyInfo memory previous = providerStrategies[msg.sender];
+        bool isUpdate = bytes(previous.strategyName).length > 0;
         
         providerStrategies[msg.sender] = StrategyInfo({
             strategyName: strategyName,
@@ -106,10 +107,8 @@ contract RewardWeightingRegistry is
         
         // Update usage count
         if (isUpdate) {
-            // Decrease old strategy usage count
-            string memory oldStrategy = providerStrategies[msg.sender].strategyName;
-            if (strategyUsageCount[oldStrategy] > 0) {
-                strategyUsageCount[oldStrategy]--;
+            if (strategyUsageCount[previous.strategyName] > 0 && keccak256(bytes(previous.strategyName)) != keccak256(bytes(strategyName))) {
+                strategyUsageCount[previous.strategyName]--;
             }
         }
         strategyUsageCount[strategyName]++;

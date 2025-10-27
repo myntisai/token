@@ -58,6 +58,10 @@ contract DualPoolStaking is
     
     // Configurable minimum provider stake
     uint256 public minProviderStake;
+
+    // Reward accounting
+    uint256 public providerPendingRewards;
+    uint256 public userPendingRewards;
     
     // Events
     event Staked(address indexed user, uint256 amount, PoolType poolType);
@@ -65,6 +69,7 @@ contract DualPoolStaking is
     event RewardsHarvested(address indexed user, uint256 amount, PoolType poolType);
     event PoolUpdated(PoolType poolType, uint256 totalStaked, uint256 accRewardPerShare);
     event MinProviderStakeUpdated(uint256 oldStake, uint256 newStake);
+    event RewardsQueued(uint256 providerAmount, uint256 userAmount);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -257,6 +262,29 @@ contract DualPoolStaking is
     function updatePools() external {
         _updatePools();
     }
+
+    /**
+     * @notice Sync newly minted emissions into reward accounting.
+     * @dev Expects the emissions contract to mint/transfer rewards to this contract before calling.
+     */
+    function syncEmissions() external onlyRole(EMISSIONS_ROLE) returns (uint256 totalRewards_) {
+        uint256 balance = token.balanceOf(address(this));
+        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards;
+        require(balance > accounted, "DualPoolStaking: no new rewards");
+
+        uint256 rewards = balance - accounted;
+        uint256 providerShare = (rewards * providerPool.emissionShare) / 1000;
+        uint256 userShare = rewards - providerShare;
+
+        providerPendingRewards += providerShare;
+        userPendingRewards += userShare;
+
+        emit RewardsQueued(providerShare, userShare);
+
+        _updatePools();
+        return rewards;
+    }
     
     /**
      * @notice Get total staked amount across both pools
@@ -307,9 +335,21 @@ contract DualPoolStaking is
     // Internal functions
     
     function _updatePools() internal {
-        // This would be called by emissions contract
-        // For now, we'll implement basic pool updates
-        // In production, this would integrate with the emissions contract
+        if (providerPendingRewards > 0 && providerPool.totalStaked > 0) {
+            uint256 rewards = providerPendingRewards;
+            providerPendingRewards = 0;
+            providerPool.accRewardPerShare += (rewards * 1e12) / providerPool.totalStaked;
+            providerPool.totalRewards += rewards;
+            emit PoolUpdated(PoolType.Provider, providerPool.totalStaked, providerPool.accRewardPerShare);
+        }
+
+        if (userPendingRewards > 0 && userPool.totalStaked > 0) {
+            uint256 rewards = userPendingRewards;
+            userPendingRewards = 0;
+            userPool.accRewardPerShare += (rewards * 1e12) / userPool.totalStaked;
+            userPool.totalRewards += rewards;
+            emit PoolUpdated(PoolType.User, userPool.totalStaked, userPool.accRewardPerShare);
+        }
     }
     
     function _harvestRewards(address user) internal {
@@ -364,4 +404,6 @@ contract DualPoolStaking is
         override 
         onlyRole(UPGRADER_ROLE) 
     {}
+
+    uint256[45] private __gap;
 }

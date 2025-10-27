@@ -18,8 +18,8 @@ Unlike hardcoded AI logic, this system allows:
 ### Core Components
 
 1. **DualPoolStaking** - UUPS upgradeable staking contract with two pools:
-   - Provider Pool: 87.5% emissions, non-transferrable, min 100 MYNT
-   - User Pool: 12.5% emissions, transferrable via ERC-4626
+   - Provider Pool: 700M tokens, non-transferrable, min 100 MYNT
+   - User Pool: 100M tokens, transferrable via ERC-4626
 
 2. **LiquidStakingVault** - ERC-4626 vault for user pool:
    - Mints lsMYNT shares for user pool

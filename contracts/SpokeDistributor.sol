@@ -91,10 +91,21 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         bytes32[] calldata merkleProof,
         bytes32 nullifier
     ) external nonReentrant {
+        _claim(msg.sender, provider, rootIndex, amount, merkleProof, nullifier);
+    }
+
+    function _claim(
+        address claimant,
+        address provider,
+        uint256 rootIndex,
+        uint256 amount,
+        bytes32[] calldata merkleProof,
+        bytes32 nullifier
+    ) internal {
         require(provider != address(0), "invalid provider");
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         require(amount > 0, "zero amount");
-        require(!claimed[provider][rootIndex][msg.sender], "already claimed");
+        require(!claimed[provider][rootIndex][claimant], "already claimed");
         require(!nullifiers[nullifier], "nullifier already used");
 
         SpokeMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
@@ -102,25 +113,25 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         require(!e.closed, "epoch closed");
 
         // Verify Merkle proof
-        bytes32 leaf = keccak256(abi.encode(msg.sender, amount));
+        bytes32 leaf = keccak256(abi.encode(claimant, amount));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
 
         // Ensure enough balance for this epoch
         require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
 
         // Mark as claimed and burn nullifier
-        claimed[provider][rootIndex][msg.sender] = true;
+        claimed[provider][rootIndex][claimant] = true;
         nullifiers[nullifier] = true;
         e.claimedAmount += amount;
 
         // Mint tokens to user
         (bool success, ) = spokeToken.call(
-            abi.encodeWithSignature("mint(address,uint256,string)", msg.sender, amount, "spoke-claim")
+            abi.encodeWithSignature("mint(address,uint256,string)", claimant, amount, "spoke-claim")
         );
         require(success, "mint failed");
 
-        emit RewardsClaimed(msg.sender, provider, rootIndex, amount, nullifier);
-        emit NullifierBurned(nullifier, hubChainId, msg.sender);
+        emit RewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
+        emit NullifierBurned(nullifier, hubChainId, claimant);
     }
 
     /**
@@ -142,7 +153,7 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         );
 
         for (uint256 i = 0; i < providers.length; i++) {
-            this.claim(providers[i], rootIndices[i], amounts[i], proofs[i], nullifierList[i]);
+            _claim(msg.sender, providers[i], rootIndices[i], amounts[i], proofs[i], nullifierList[i]);
         }
     }
 

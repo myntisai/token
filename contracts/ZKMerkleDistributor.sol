@@ -150,10 +150,22 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         RewardClaimVerifier.Proof memory zkProof,
         uint256[3] memory publicInputs
     ) external nonReentrant {
+        _claimWithZK(msg.sender, provider, rootIndex, amount, merkleProof, zkProof, publicInputs);
+    }
+
+    function _claimWithZK(
+        address claimant,
+        address provider,
+        uint256 rootIndex,
+        uint256 amount,
+        bytes32[] calldata merkleProof,
+        RewardClaimVerifier.Proof memory zkProof,
+        uint256[3] memory publicInputs
+    ) internal {
         require(provider != address(0), "invalid provider");
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         require(amount > 0, "zero amount");
-        require(!claimed[provider][rootIndex][msg.sender], "already claimed");
+        require(!claimed[provider][rootIndex][claimant], "already claimed");
         
         EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
         require(e.zkEnabled, "ZK not enabled for this epoch");
@@ -161,7 +173,7 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         require(!e.closed, "epoch closed");
         
         // Verify Merkle proof
-        bytes32 leaf = keccak256(abi.encode(msg.sender, amount));
+        bytes32 leaf = keccak256(abi.encode(claimant, amount));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
         
         // Verify ZK proof
@@ -175,15 +187,15 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
         
         // Update state
-        claimed[provider][rootIndex][msg.sender] = true;
+        claimed[provider][rootIndex][claimant] = true;
         e.claimedAmount += amount;
         zkClaimed[nullifier] = true;
-        zkClaimCount[msg.sender]++;
+        zkClaimCount[claimant]++;
         
         // Transfer tokens
-        token.safeTransfer(msg.sender, amount);
+        token.safeTransfer(claimant, amount);
         
-        emit ZKRewardsClaimed(msg.sender, provider, rootIndex, amount, nullifier);
+        emit ZKRewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
     }
     
     /**
@@ -199,10 +211,20 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         uint256 amount,
         bytes32[] calldata merkleProof
     ) external nonReentrant {
+        _claimWithoutZK(msg.sender, provider, rootIndex, amount, merkleProof);
+    }
+
+    function _claimWithoutZK(
+        address claimant,
+        address provider,
+        uint256 rootIndex,
+        uint256 amount,
+        bytes32[] calldata merkleProof
+    ) internal {
         require(provider != address(0), "invalid provider");
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         require(amount > 0, "zero amount");
-        require(!claimed[provider][rootIndex][msg.sender], "already claimed");
+        require(!claimed[provider][rootIndex][claimant], "already claimed");
         
         EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
         require(!e.zkEnabled, "ZK required for this epoch");
@@ -210,20 +232,20 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         require(!e.closed, "epoch closed");
         
         // Verify Merkle proof
-        bytes32 leaf = keccak256(abi.encode(msg.sender, amount));
+        bytes32 leaf = keccak256(abi.encode(claimant, amount));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
         
         // Ensure enough locked balance for this specific epoch
         require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
         
         // Update state
-        claimed[provider][rootIndex][msg.sender] = true;
+        claimed[provider][rootIndex][claimant] = true;
         e.claimedAmount += amount;
         
         // Transfer tokens
-        token.safeTransfer(msg.sender, amount);
+        token.safeTransfer(claimant, amount);
         
-        emit RewardsClaimed(msg.sender, provider, rootIndex, amount);
+        emit RewardsClaimed(claimant, provider, rootIndex, amount);
     }
     
     /**
@@ -253,7 +275,8 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         );
         
         for (uint256 i = 0; i < providers.length; i++) {
-            this.claimWithZK(
+            _claimWithZK(
+                msg.sender,
                 providers[i], 
                 rootIndices[i], 
                 amounts[i], 
@@ -322,7 +345,12 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
      * @notice Get epoch info
      * @param provider Provider address
      * @param rootIndex Merkle root index
-     * @return Epoch information
+     * @return root Merkle root
+     * @return expiry Expiry timestamp
+     * @return closed Whether epoch is closed
+     * @return totalClaimable Total claimable amount
+     * @return claimedAmount Amount already claimed
+     * @return zkEnabled Whether ZK is enabled
      */
     function getEpochInfo(address provider, uint256 rootIndex) external view returns (
         bytes32 root,

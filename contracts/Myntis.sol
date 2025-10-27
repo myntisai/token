@@ -118,12 +118,12 @@ contract Myntis is
         
         uint256 fee = (amount * _burnFee) / 10000;
         uint256 netAmount = amount - fee;
+
+        if (fee > 0) {
+            _transfer(from, _feeRecipient, fee);
+        }
         
         _burn(from, netAmount);
-        
-        if (fee > 0) {
-            _burn(_feeRecipient, fee);
-        }
         
         emit TokensBurned(from, amount, fee);
     }

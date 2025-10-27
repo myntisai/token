@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.22;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 interface IEmissionContract {
-    function harvest(address provider) external;
+    function harvest(address provider) external returns (uint256);
     function accRewardPerShare() external view returns (uint256);
 }
 
@@ -15,16 +16,16 @@ interface IMerkleDistributorLike {
     function notifyReward(address provider, uint256 amount) external;
 }
 
-contract StakingContract is AccessControl, ReentrancyGuard {
+contract StakingContract is Initializable, AccessControlUpgradeable, ReentrancyGuardUpgradeable {
     using SafeERC20 for IERC20;
 
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
 
-    IERC20 public immutable token;
+    IERC20 public token;
     IEmissionContract public emissionContract;
     IMerkleDistributorLike public merkleDistributor;
 
-    uint256 public minimumStake = 1_000 * 1e18;
+    uint256 public minimumStake;
     uint256 public totalStake;
 
     struct Info { uint256 stake; uint256 rewardDebt; }
@@ -41,10 +42,33 @@ contract StakingContract is AccessControl, ReentrancyGuard {
     event Harvested(address indexed provider, uint256 amount);
     event EmergencyWithdrawal(address indexed provider, uint256 amount);
 
-    constructor(address _token, address _emissionContract, address _merkleDistributor, address _admin) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(
+        address _token,
+        address _emissionContract,
+        address _merkleDistributor,
+        address _admin
+    ) public initializer {
+        __AccessControl_init();
+        __ReentrancyGuard_init();
+
+        require(_token != address(0), "token zero");
+        require(_admin != address(0), "admin zero");
+
         token = IERC20(_token);
-        emissionContract = IEmissionContract(_emissionContract);
-        merkleDistributor = IMerkleDistributorLike(_merkleDistributor);
+        if (_emissionContract != address(0)) {
+            emissionContract = IEmissionContract(_emissionContract);
+        }
+        if (_merkleDistributor != address(0)) {
+            merkleDistributor = IMerkleDistributorLike(_merkleDistributor);
+        }
+
+        minimumStake = 1_000 * 1e18;
+
         _grantRole(ADMIN_ROLE, _admin);
     }
 
@@ -101,10 +125,15 @@ contract StakingContract is AccessControl, ReentrancyGuard {
     // ---- rewards ----
     function harvestRewards() external nonReentrant {
         require(registered[msg.sender], "not reg");
+        require(address(emissionContract) != address(0), "emission unset");
+        require(address(merkleDistributor) != address(0), "distributor unset");
         uint256 beforeBal = token.balanceOf(address(this));
-        emissionContract.harvest(msg.sender);
+        uint256 mintedAmount = emissionContract.harvest(msg.sender);
         uint256 afterBal = token.balanceOf(address(this));
         uint256 harvested = afterBal - beforeBal;
+        if (mintedAmount > harvested) {
+            harvested = mintedAmount;
+        }
         require(harvested > 0, "no rewards");
 
         // push to distributor and notify
@@ -116,6 +145,7 @@ contract StakingContract is AccessControl, ReentrancyGuard {
     // called by Emission to update rewardDebt after harvest
     function notifyReward(address provider, uint256) external {
         require(msg.sender == address(emissionContract), "only emission");
+        require(address(merkleDistributor) != address(0), "distributor unset");
         Info storage i = providers[provider];
         uint256 acc = emissionContract.accRewardPerShare();
         i.rewardDebt = (i.stake * acc) / 1e12;
@@ -136,4 +166,6 @@ contract StakingContract is AccessControl, ReentrancyGuard {
         token.safeTransfer(provider, amt);
         emit EmergencyWithdrawal(provider, amt);
     }
+
+    uint256[45] private __gap;
 }

@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 interface IMyntisToken {
     function mint(address to, uint256 amount) external;
@@ -11,17 +13,25 @@ interface IMyntisToken {
 interface IStakingPool {
     function getTotalStaked() external view returns (uint256);
     function getProviderInfo(address provider) external view returns (uint256 stake, uint256 rewardDebt);
+    function notifyReward(address provider, uint256 amount) external;
 }
 
 /**
- * @title Emissions
- * @notice Production emissions contract with 800M total emissions over 4 years
- * @dev 1B total supply = 800M emissions + 200M immediate allocation
+ * @title EmissionsUpgradeable
+ * @notice UUPS upgradeable version of Emissions contract with state migration support
+ * @dev Production emissions contract with 800M total emissions over 4 years
+ * @dev Includes fix for "Emission overrun" bug
  */
-contract Emissions is AccessControl, ReentrancyGuard {
+contract EmissionsUpgradeable is 
+    Initializable,
+    AccessControlUpgradeable, 
+    ReentrancyGuardUpgradeable,
+    UUPSUpgradeable 
+{
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
-    IMyntisToken public immutable token;
+    IMyntisToken public token;
     IStakingPool public stakingContract;
 
     // Production: Proper emission parameters for 1B total supply
@@ -33,7 +43,7 @@ contract Emissions is AccessControl, ReentrancyGuard {
     // Initial emission rate (400M over 4 years, then halving)
     uint256 public constant INITIAL_EMISSION_RATE = (TOTAL_EMISSIONS / 2) / HALVING_PERIOD;
 
-    uint256 public immutable startTime;
+    uint256 public startTime;
     uint256 public lastRewardTime;
 
     // Accumulated reward per share, scaled by 1e12
@@ -48,15 +58,94 @@ contract Emissions is AccessControl, ReentrancyGuard {
     event StakingContractUpdated(address newStakingContract);
     event EmissionsUpdated(uint256 timeElapsed, uint256 emitted, uint256 carry, uint256 newAcc);
     event ProviderRewardsMinted(address indexed provider, uint256 amount);
+    event StateMigrated(
+        uint256 startTime,
+        uint256 lastRewardTime,
+        uint256 accRewardPerShare,
+        uint256 totalEmitted,
+        uint256 unaccounted,
+        uint256 mintedEmissions
+    );
 
-    constructor(address _token, address _stakingContract, address _admin) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    /**
+     * @notice Initialize with fresh state (for new deployments)
+     * @param _token The token contract address
+     * @param _stakingContract The staking contract address
+     * @param admin The admin address
+     */
+    function initialize(
+        address _token,
+        address _stakingContract,
+        address admin
+    ) public initializer {
+        __AccessControl_init();
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
+        
         token = IMyntisToken(_token);
         stakingContract = IStakingPool(_stakingContract);
         
         startTime = block.timestamp;
         lastRewardTime = block.timestamp;
         
-        _grantRole(ADMIN_ROLE, _admin);
+        _grantRole(ADMIN_ROLE, admin);
+        _grantRole(UPGRADER_ROLE, admin);
+    }
+
+    /**
+     * @notice Initialize with migrated state from old contract
+     * @param _token The token contract address
+     * @param _stakingContract The staking contract address
+     * @param admin The admin address
+     * @param _startTime Original start time from old contract
+     * @param _lastRewardTime Last reward time from old contract
+     * @param _accRewardPerShare Accumulated reward per share from old contract
+     * @param _totalEmitted Total emitted from old contract
+     * @param _unaccounted Unaccounted emissions from old contract
+     * @param _mintedEmissions Minted emissions from old contract
+     */
+    function initializeWithMigration(
+        address _token,
+        address _stakingContract,
+        address admin,
+        uint256 _startTime,
+        uint256 _lastRewardTime,
+        uint256 _accRewardPerShare,
+        uint256 _totalEmitted,
+        uint256 _unaccounted,
+        uint256 _mintedEmissions
+    ) public initializer {
+        __AccessControl_init();
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
+        
+        token = IMyntisToken(_token);
+        stakingContract = IStakingPool(_stakingContract);
+        
+        // Migrate state from old contract
+        startTime = _startTime;
+        lastRewardTime = _lastRewardTime;
+        accRewardPerShare = _accRewardPerShare;
+        totalEmitted = _totalEmitted;
+        unaccounted = _unaccounted;
+        mintedEmissions = _mintedEmissions;
+        
+        _grantRole(ADMIN_ROLE, admin);
+        _grantRole(UPGRADER_ROLE, admin);
+
+        emit StateMigrated(
+            _startTime,
+            _lastRewardTime,
+            _accRewardPerShare,
+            _totalEmitted,
+            _unaccounted,
+            _mintedEmissions
+        );
     }
 
     /**
@@ -145,7 +234,7 @@ contract Emissions is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Harvest rewards for a provider
-     * @dev Production: Better overflow protection and 800M supply validation
+     * @dev Production: Fixed "Emission overrun" bug by capping pending to remainingEmissions
      */
     function harvest(address provider) external nonReentrant returns (uint256 pending) {
         require(msg.sender == address(stakingContract), "Only StakingContract");
@@ -167,14 +256,25 @@ contract Emissions is AccessControl, ReentrancyGuard {
         pending = accumulated > rewardDebt ? accumulated - rewardDebt : 0;
 
         if (pending > 0) {
+            // CRITICAL FIX: Cap pending to remaining emissions
+            // Use totalEmitted instead of mintedEmissions for accurate cap enforcement
+            // because totalEmitted tracks scheduled emissions, which is the true limit
+            uint256 remainingEmissions = totalEmitted > mintedEmissions ? totalEmitted - mintedEmissions : 0;
+            
+            if (pending > remainingEmissions) {
+                // Cap pending to remaining emissions
+                pending = remainingEmissions;
+            }
+            
             // Production: Validate against TOTAL_EMISSIONS (800M)
             require(mintedEmissions + pending <= TOTAL_EMISSIONS, "Emission overrun");
             require(pending <= TOTAL_EMISSIONS, "Exceeds emission supply");
             
             mintedEmissions += pending;
 
-            // Mint tokens to the staking contract
+            // Mint tokens to the staking contract and update provider debt
             token.mint(address(stakingContract), pending);
+            stakingContract.notifyReward(provider, pending);
             emit ProviderRewardsMinted(provider, pending);
         }
         
@@ -238,4 +338,15 @@ contract Emissions is AccessControl, ReentrancyGuard {
             TOTAL_EMISSIONS
         );
     }
+
+    /**
+     * @notice Authorize upgrade (UUPS pattern)
+     */
+    function _authorizeUpgrade(address newImplementation) 
+        internal 
+        override 
+        onlyRole(UPGRADER_ROLE) 
+    {}
 }
+
+
