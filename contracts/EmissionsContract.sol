@@ -26,7 +26,9 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
 
     // Emission parameters
     uint256 public constant HALVING_PERIOD = 4 * 365 days; // 4 years per halving
-    uint256 public constant INITIAL_EMISSION_RATE = 350_000_000 * 1e18 / HALVING_PERIOD; 
+    uint256 public constant TOTAL_EMISSIONS = 800_000_000 * 1e18; // 800M total emissions
+    // Initial emission rate (400M over 4 years, then halving)
+    uint256 public constant INITIAL_EMISSION_RATE = (TOTAL_EMISSIONS / 2) / HALVING_PERIOD; // 400M first period
     uint256 public constant EMISSION_SUPPLY = 700_000_000 * 1e18;
 
     uint256 public immutable startTime;
@@ -90,9 +92,11 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         uint256 timeElapsed = block.timestamp - lastRewardTime;
         uint256 tokensToAccount = emissionRate * timeElapsed;
 
-        // Cap at EMISSION_SUPPLY
-        if (mintedEmissions + tokensToAccount > EMISSION_SUPPLY) {
-            tokensToAccount = EMISSION_SUPPLY - mintedEmissions;
+        // Cap at TOTAL_EMISSIONS (800M) but track against EMISSION_SUPPLY (700M) for compatibility
+        // Halving schedule: Years 0-4: 400M, Years 4-8: 200M, Years 8-12: 100M, etc.
+        uint256 maxEmissions = TOTAL_EMISSIONS;
+        if (mintedEmissions + tokensToAccount > maxEmissions) {
+            tokensToAccount = maxEmissions - mintedEmissions;
         }
 
         if (tokensToAccount > 0) {
