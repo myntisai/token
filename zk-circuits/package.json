@@ -7,14 +7,15 @@
     "setup": "snarkjs groth16 setup reward_claim.r1cs pot12_final.ptau reward_claim_0000.zkey",
     "contribute": "snarkjs zkey contribute reward_claim_0000.zkey reward_claim_final.zkey",
     "export-vkey": "snarkjs zkey export verificationkey reward_claim_final.zkey verification_key.json",
-    "generate-verifier": "snarkjs zkey export solidityverifier reward_claim_final.zkey ../contracts/RewardClaimVerifier.sol",
-    "test": "node test_circuit.js"
+    "generate-verifier": "snarkjs zkey export solidityverifier reward_claim_final.zkey ../contracts/RewardClaimVerifier_generated.sol",
+    "test": "node test_circuit.js",
+    "test:full": "npm run compile && npm run setup && npm run contribute && npm run export-vkey && npm test"
   },
   "dependencies": {
     "circomlib": "^2.0.5",
     "snarkjs": "^0.7.0"
   },
   "devDependencies": {
-    "circom": "^2.1.0"
+    "circomlib": "^2.0.5"
   }
 }
