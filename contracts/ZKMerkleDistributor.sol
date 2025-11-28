@@ -87,8 +87,15 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
      * @notice Add balance for a provider
      * @param provider Provider address
      * @param amount Amount to add
+     * @dev Requires actual token transfer to prevent claims without funds
      */
     function addProviderBalance(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(amount > 0, "zero amount");
+        require(provider != address(0), "invalid provider");
+        
+        // Require actual token transfer to ensure funds are available
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
@@ -175,6 +182,12 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         // Verify Merkle proof
         bytes32 leaf = keccak256(abi.encode(claimant, amount));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
+        
+        // Verify ZK proof public inputs match the claim
+        // publicInputs[0] must equal the epoch's Merkle root
+        require(uint256(publicInputs[0]) == uint256(e.root), "ZK root mismatch");
+        // publicInputs[2] must equal the claimed amount
+        require(publicInputs[2] == amount, "ZK amount mismatch");
         
         // Verify ZK proof
         require(verifier.verifyAndUseProof(zkProof, publicInputs), "invalid ZK proof");

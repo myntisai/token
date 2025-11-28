@@ -65,8 +65,15 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Add balance for a provider
+     * @dev Requires actual token transfer to prevent claims without funds
      */
     function addProviderBalance(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(amount > 0, "zero amount");
+        require(provider != address(0), "invalid provider");
+        
+        // Require actual token transfer to ensure funds are available
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }

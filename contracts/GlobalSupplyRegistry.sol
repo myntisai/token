@@ -20,6 +20,7 @@ import {
 contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
     bytes32 public constant SPOKE_ROLE = keccak256("SPOKE_ROLE");
+    bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE"); // For hub/spoke token contracts
     
     ILayerZeroEndpointV2 public immutable endpoint;
     mapping(uint32 eid => bytes32 peer) public peers;
@@ -61,6 +62,14 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
         peers[eid] = peer;
         _grantRole(SPOKE_ROLE, address(uint160(uint256(peer))));
         emit PeerUpdated(eid, peer);
+    }
+
+    /**
+     * @notice Register a token contract (hub or spoke) to allow direct supply reporting
+     */
+    function registerToken(address token) external onlyRole(ADMIN_ROLE) {
+        require(token != address(0), "GlobalSupplyRegistry: zero token");
+        _grantRole(TOKEN_ROLE, token);
     }
     
     /**
@@ -108,12 +117,70 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
     }
     
     /**
+     * @notice Record a mint on the hub chain (direct call, not via LayerZero)
+     * @param amount Amount minted
+     */
+    function recordMint(uint256 amount) external onlyRole(TOKEN_ROLE) nonReentrant {
+        require(amount > 0, "GlobalSupplyRegistry: zero amount");
+        uint32 chainId = uint32(block.chainid);
+        uint256 oldChainSupply = chainSupply[chainId];
+        uint256 newChainSupply = oldChainSupply + amount;
+        
+        // Check cap before updating
+        uint256 newTotal = totalCrossChainSupply - oldChainSupply + newChainSupply;
+        if (newTotal > globalCap) {
+            revert CapExceeded(newTotal, globalCap);
+        }
+        
+        chainSupply[chainId] = newChainSupply;
+        totalCrossChainSupply = newTotal;
+        
+        emit SupplyUpdated(chainId, amount, newChainSupply, totalCrossChainSupply);
+    }
+    
+    /**
+     * @notice Record a burn on the hub chain (direct call, not via LayerZero)
+     * @param amount Amount burned (net amount after fees)
+     * @dev Emits amount as delta; newTotalSupply will be lower, indicating a burn
+     */
+    function recordBurn(uint256 amount) external onlyRole(TOKEN_ROLE) nonReentrant {
+        require(amount > 0, "GlobalSupplyRegistry: zero amount");
+        uint32 chainId = uint32(block.chainid);
+        uint256 oldChainSupply = chainSupply[chainId];
+        require(oldChainSupply >= amount, "GlobalSupplyRegistry: burn exceeds supply");
+        
+        uint256 newChainSupply = oldChainSupply - amount;
+        chainSupply[chainId] = newChainSupply;
+        totalCrossChainSupply = totalCrossChainSupply - amount;
+        
+        // Emit amount as delta; the reduction is clear from newTotalSupply < oldChainSupply
+        emit SupplyUpdated(chainId, amount, newChainSupply, totalCrossChainSupply);
+    }
+    
+    /**
      * @notice Check if minting would exceed global cap
      */
     function canMint(uint256 amount) external view returns (bool) {
         return totalCrossChainSupply + amount <= globalCap;
     }
     
+    /**
+     * @notice Seed initial supply for a chain (for existing deployments)
+     * @param chainId Chain ID to seed
+     * @param initialSupply Initial supply on that chain
+     */
+    function seedChainSupply(uint32 chainId, uint256 initialSupply) external onlyRole(ADMIN_ROLE) {
+        require(chainSupply[chainId] == 0, "GlobalSupplyRegistry: chain already seeded");
+        require(initialSupply <= globalCap, "GlobalSupplyRegistry: initial supply exceeds cap");
+        
+        chainSupply[chainId] = initialSupply;
+        totalCrossChainSupply += initialSupply;
+        
+        require(totalCrossChainSupply <= globalCap, "GlobalSupplyRegistry: total exceeds cap");
+        
+        emit SupplyUpdated(chainId, initialSupply, initialSupply, totalCrossChainSupply);
+    }
+
     /**
      * @notice Update global cap (admin only)
      */

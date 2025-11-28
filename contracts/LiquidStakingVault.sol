@@ -58,8 +58,8 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     {
         shares = super.deposit(assets, receiver);
         
-        // Stake in dual pool staking user pool
-        _stakeInUserPool(assets);
+        // Stake in dual pool staking user pool on behalf of receiver (share owner)
+        _stakeInUserPool(assets, receiver);
         
         return shares;
     }
@@ -78,8 +78,8 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     {
         assets = super.mint(shares, receiver);
         
-        // Stake in dual pool staking user pool
-        _stakeInUserPool(assets);
+        // Stake in dual pool staking user pool on behalf of receiver (share owner)
+        _stakeInUserPool(assets, receiver);
         
         return assets;
     }
@@ -141,15 +141,24 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     /**
      * @notice Get the total assets managed by this vault
      * @return Total assets (including staked amount + pending rewards)
+     * @dev Includes idle balance and staked amount in dual pool staking
      */
     function totalAssets() public view override returns (uint256) {
-        // In production, this would return:
-        // - Staked amount in dual pool staking
-        // - Pending rewards
-        // - Any uninvested assets
+        // Get idle balance in vault
+        uint256 idle = IERC20(asset()).balanceOf(address(this));
         
-        // For now, return the balance of the underlying asset
-        return IERC20(asset()).balanceOf(address(this));
+        // Get total staked in user pool (all vault deposits are in user pool)
+        // Note: This assumes all user pool stakes come from this vault
+        // In a multi-vault scenario, this would need per-vault tracking
+        (bool success, bytes memory data) = dualPoolStaking.staticcall(
+            abi.encodeWithSignature("getUserPoolTotalStaked()")
+        );
+        uint256 staked = 0;
+        if (success && data.length > 0) {
+            staked = abi.decode(data, (uint256));
+        }
+        
+        return idle + staked;
     }
     
     /**
@@ -208,13 +217,18 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     
     // Internal functions
     
-    function _stakeInUserPool(uint256 amount) internal {
+    /**
+     * @notice Stake assets in user pool on behalf of a user
+     * @param amount Amount to stake
+     * @param user Address to stake on behalf of (share owner)
+     */
+    function _stakeInUserPool(uint256 amount, address user) internal {
         // Approve dual pool staking to spend assets
         IERC20(asset()).approve(dualPoolStaking, amount);
         
-        // Call stakeToUserPool on dual pool staking
+        // Call stakeToUserPool on dual pool staking on behalf of user (share owner)
         (bool success, ) = dualPoolStaking.call(
-            abi.encodeWithSignature("stakeToUserPool(uint256,address)", amount, msg.sender)
+            abi.encodeWithSignature("stakeToUserPool(uint256,address)", amount, user)
         );
         require(success, "Staking failed");
     }

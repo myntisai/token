@@ -115,9 +115,11 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Called by StakingContract. Mints tokens based on pending rewards.
+     * @param provider Provider address to harvest rewards for
+     * @return mintedAmount The amount of tokens minted (0 if no rewards)
      * @dev Removed nonReentrant modifier to avoid nested reentrancy issues.
      */
-    function harvest(address provider) external {
+    function harvest(address provider) external returns (uint256) {
         require(msg.sender == address(stakingContract), "Only StakingContract can harvest");
         require(provider != address(0), "Invalid provider");
 
@@ -136,6 +138,9 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
             stakingContract.notifyReward(provider, pending);
 
             emit ProviderRewardsHarvested(provider, pending);
+            return pending;
         }
+        
+        return 0;
     }
 }

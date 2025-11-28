@@ -136,6 +136,9 @@ contract DualPoolStaking is
         
         UserInfo storage user = userInfo[msg.sender];
         
+        // Prevent users already in user pool from staking in provider pool
+        require(user.poolType != PoolType.User, "User pool participant cannot stake in provider pool");
+        
         // If user is already staked, harvest rewards first
         if (user.amount > 0) {
             _harvestRewards(msg.sender);
@@ -169,6 +172,10 @@ contract DualPoolStaking is
         _updatePools();
         
         UserInfo storage userInfo_ = userInfo[user];
+        
+        // Prevent providers from staking in user pool to avoid accounting corruption
+        require(!userInfo_.isProvider || userInfo_.poolType != PoolType.Provider, 
+            "Provider cannot stake in user pool");
         
         // If user is already staked, harvest rewards first
         if (userInfo_.amount > 0) {
@@ -287,10 +294,35 @@ contract DualPoolStaking is
     }
     
     /**
+     * @notice Notify reward for a provider (called by EmissionsContract)
+     * @dev Updates provider's reward debt after minting rewards
+     * @param provider Provider address
+     * @param amount Reward amount that was minted
+     */
+    function notifyReward(address provider, uint256 amount) external {
+        require(msg.sender == emissionsContract, "Only emissions contract");
+        require(provider != address(0), "Invalid provider");
+        
+        UserInfo storage user = userInfo[provider];
+        require(user.poolType == PoolType.Provider, "Not a provider");
+        
+        // Update reward debt to account for the newly minted rewards
+        // This ensures the provider's accumulated rewards are properly tracked
+        user.rewardDebt = (user.amount * providerPool.accRewardPerShare) / 1e12;
+    }
+    
+    /**
      * @notice Get total staked amount across both pools
      */
     function getTotalStaked() external view returns (uint256) {
         return providerPool.totalStaked + userPool.totalStaked;
+    }
+    
+    /**
+     * @notice Get total staked amount in user pool (for vault's totalAssets calculation)
+     */
+    function getUserPoolTotalStaked() external view returns (uint256) {
+        return userPool.totalStaked;
     }
     
     /**
