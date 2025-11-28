@@ -1,0 +1,11 @@
+{
+  "network": "ethereum-sepolia",
+  "chainId": 11155111,
+  "layerZeroEid": 40161,
+  "hubChainEid": 40245,
+  "contracts": {
+    "myntisOFTSpoke": "0x6d059168ae5250c8637b7EFc3343F5509BB0118B"
+  },
+  "deployer": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+  "timestamp": "2025-11-28T03:32:02.405Z"
+}

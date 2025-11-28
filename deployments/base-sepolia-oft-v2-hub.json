@@ -1,0 +1,11 @@
+{
+  "network": "base-sepolia",
+  "chainId": 84532,
+  "layerZeroEid": 40245,
+  "contracts": {
+    "myntisOFT": "0xE1eFd4598Cb371035F78dD3eb4151A7498F9dEa4"
+  },
+  "deployer": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+  "timestamp": "2024-11-28T02:30:00.000Z",
+  "features": ["isHub", "endpoint-validation", "proper-OFT-V2"]
+}
