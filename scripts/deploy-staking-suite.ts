@@ -49,7 +49,7 @@ async function main() {
   await (await staking.setEmissionContract(emissionsAddress)).wait();
   await (await staking.setMerkleDistributor(merkleAddress)).wait();
 
-  const token = await ethers.getContractAt("MyntisOFT", tokenAddress);
+  const token = await ethers.getContractAt("Myntis", tokenAddress);
   const MINTER_ROLE = await token.MINTER_ROLE();
   await (await token.grantRole(MINTER_ROLE, emissionsAddress)).wait();
 

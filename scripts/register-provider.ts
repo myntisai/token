@@ -17,7 +17,7 @@ async function main() {
 
   const amount = ethers.parseEther(amountRaw);
   const [signer] = await ethers.getSigners();
-  const token = await ethers.getContractAt("MyntisOFT", tokenAddress, signer);
+  const token = await ethers.getContractAt("Myntis", tokenAddress, signer);
   const staking = await ethers.getContractAt("StakingContract", stakingAddress, signer);
 
   const allowance = await token.allowance(signer.address, stakingAddress);

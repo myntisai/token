@@ -1,3 +1,5 @@
+// TODO: Update this script to use Myntis.sol (upgradeable) instead of deleted MyntisOFT.sol
+// Myntis uses UUPS proxy pattern - see deploy-oft-hub.ts for reference
 import { ethers, upgrades } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";

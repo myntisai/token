@@ -1,3 +1,5 @@
+// Cross-chain peer configuration for Myntis OFT tokens
+// Uses Myntis.sol (hub) and MyntisSpokeOFT.sol (spokes)
 import { ethers } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
@@ -6,13 +8,19 @@ import * as dotenv from "dotenv";
 // Load environment variables
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
-// LayerZero V2 Endpoint IDs (EIDs) - Load from environment variables
+// LayerZero V2 Endpoint IDs (EIDs) - Updated November 2024
+// Reference: https://docs.layerzero.network/v2/developers/evm/technical-reference/endpoints
 const LAYERZERO_EIDS: { [key: string]: number } = {
   "base-sepolia": process.env.LZ_EID_BASE_SEPOLIA ? parseInt(process.env.LZ_EID_BASE_SEPOLIA) : 40245,
   "ethereum-sepolia": process.env.LZ_EID_ETHEREUM_SEPOLIA ? parseInt(process.env.LZ_EID_ETHEREUM_SEPOLIA) : 40161,
-  "arbitrum-sepolia": process.env.LZ_EID_ARBITRUM_SEPOLIA ? parseInt(process.env.LZ_EID_ARBITRUM_SEPOLIA) : 40120,
+  "arbitrum-sepolia": process.env.LZ_EID_ARBITRUM_SEPOLIA ? parseInt(process.env.LZ_EID_ARBITRUM_SEPOLIA) : 40231,
   "optimism-sepolia": process.env.LZ_EID_OPTIMISM_SEPOLIA ? parseInt(process.env.LZ_EID_OPTIMISM_SEPOLIA) : 40232,
-  "polygon-mumbai": process.env.LZ_EID_POLYGON_MUMBAI ? parseInt(process.env.LZ_EID_POLYGON_MUMBAI) : 40109,
+  "polygon-amoy": process.env.LZ_EID_POLYGON_AMOY ? parseInt(process.env.LZ_EID_POLYGON_AMOY) : 40267,
+  "bsc-testnet": process.env.LZ_EID_BSC_TESTNET ? parseInt(process.env.LZ_EID_BSC_TESTNET) : 40102,
+  "linea-sepolia": process.env.LZ_EID_LINEA_SEPOLIA ? parseInt(process.env.LZ_EID_LINEA_SEPOLIA) : 40287,
+  "scroll-sepolia": process.env.LZ_EID_SCROLL_SEPOLIA ? parseInt(process.env.LZ_EID_SCROLL_SEPOLIA) : 40214,
+  // Legacy - deprecated but kept for reference
+  "polygon-mumbai": 40109, // DEPRECATED - Use polygon-amoy instead
 };
 
 interface DeploymentInfo {
@@ -57,10 +65,11 @@ async function loadDeployment(networkName: string): Promise<DeploymentInfo | nul
 }
 
 async function configurePeers() {
-  console.log("🔗 Configuring cross-chain peers for MyntisOFT...\n");
+  console.log("🔗 Configuring cross-chain peers for Myntis OFT tokens...\n");
 
   const hubNetwork = "base-sepolia";
-  const spokeNetworks = ["ethereum-sepolia", "arbitrum-sepolia"];
+  // Add more spoke networks as you deploy them
+  const spokeNetworks = ["ethereum-sepolia", "arbitrum-sepolia", "optimism-sepolia"];
 
   // Load hub deployment
   const hubDeployment = await loadDeployment(hubNetwork);
@@ -90,8 +99,9 @@ async function configurePeers() {
 
   // Configure hub to know about spokes
   console.log("Configuring hub peers...");
+  // Use Myntis.sol for hub (not deprecated MyntisOFT.sol)
   const hubContract = await ethers.getContractAt(
-    "contracts/MyntisOFT.sol:MyntisOFT",
+    "Myntis",
     hubDeployment.contracts.myntisOFT
   );
 

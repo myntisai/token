@@ -22,6 +22,22 @@ async function deployOFTSpoke(): Promise<OFTSpokeDeploymentResult> {
   const chainId = await ethers.provider.getNetwork().then(n => Number(n.chainId));
   console.log(`Deploying on chain ID: ${chainId}`);
 
+  // Get LayerZero endpoint from environment or use mock for testing
+  const endpointAddress = process.env.LZ_ENDPOINT;
+  let endpointToUse: string;
+  
+  if (!endpointAddress || !ethers.isAddress(endpointAddress)) {
+    console.log("⚠️  No LZ_ENDPOINT provided, deploying mock endpoint for testing...");
+    const LayerZeroEndpointMock = await ethers.getContractFactory("LayerZeroEndpointMock");
+    const mockEndpoint = await LayerZeroEndpointMock.deploy(chainId);
+    await mockEndpoint.waitForDeployment();
+    endpointToUse = await mockEndpoint.getAddress();
+    console.log(`✅ Mock LayerZero endpoint deployed at: ${endpointToUse}`);
+  } else {
+    endpointToUse = ethers.getAddress(endpointAddress);
+    console.log(`✅ Using LayerZero endpoint: ${endpointToUse}`);
+  }
+
   // 1. Deploy MyntisSpokeOFT with UUPS proxy
   console.log("📝 Deploying MyntisSpokeOFT with UUPS proxy...");
   
@@ -48,12 +64,14 @@ async function deployOFTSpoke(): Promise<OFTSpokeDeploymentResult> {
 
   // Connect to proxy and initialize
   const myntisSpokeOFT = MyntisSpokeOFT.attach(await myntisSpokeOFTProxy.getAddress());
+  
   await myntisSpokeOFT.initialize(
     "Myntis",
     "MYNT",
     deployer.address,
     84532, // Base Sepolia chain ID (hub)
-    "0x0000000000000000000000000000000000000000" // Hub token address (placeholder)
+    "0x0000000000000000000000000000000000000000", // Hub token address (placeholder)
+    endpointToUse
   );
   console.log("✅ MyntisSpokeOFT initialized as spoke");
 

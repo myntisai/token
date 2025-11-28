@@ -2,7 +2,7 @@ import { ethers } from "hardhat";
 import { Contract } from "ethers";
 
 interface OFTHubDeploymentResult {
-  myntisOFT: Contract;
+  myntis: Contract;
   dualPoolStaking: Contract;
   liquidStakingVault: Contract;
   rewardWeightingRegistry: Contract;
@@ -22,14 +22,20 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
   console.log(`Deploying contracts with account: ${deployer.address}`);
   console.log(`Account balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH\n`);
 
-  // 1. Deploy MyntisOFT (Hub Token) with UUPS proxy
-  console.log("📝 Deploying MyntisOFT (Hub Token) with UUPS proxy...");
+  // 1. Deploy Myntis (Hub Token) with UUPS proxy
+  console.log("📝 Deploying Myntis (Hub Token) with UUPS proxy...");
+  
+  // Get LayerZero endpoint address (should be in env or passed as param)
+  const lzEndpoint = process.env.LZ_ENDPOINT || "0x0000000000000000000000000000000000000000";
+  if (lzEndpoint === "0x0000000000000000000000000000000000000000") {
+    console.warn("⚠️  LZ_ENDPOINT not set, using zero address (update after deployment)");
+  }
   
   // Deploy implementation
-  const MyntisOFT = await ethers.getContractFactory("MyntisOFT");
-  const myntisOFTImpl = await MyntisOFT.deploy();
-  await myntisOFTImpl.waitForDeployment();
-  console.log(`✅ MyntisOFT implementation deployed to: ${await myntisOFTImpl.getAddress()}`);
+  const Myntis = await ethers.getContractFactory("Myntis");
+  const myntisImpl = await Myntis.deploy();
+  await myntisImpl.waitForDeployment();
+  console.log(`✅ Myntis implementation deployed to: ${await myntisImpl.getAddress()}`);
 
   // Deploy UUPS proxy
   const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
@@ -37,25 +43,28 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
   await proxyAdmin.waitForDeployment();
   console.log(`✅ ProxyAdmin deployed to: ${await proxyAdmin.getAddress()}`);
 
-  const TransparentUpgradeableProxy = await ethers.getContractFactory("TransparentUpgradeableProxy");
-  const myntisOFTProxy = await TransparentUpgradeableProxy.deploy(
-    await myntisOFTImpl.getAddress(),
-    await proxyAdmin.getAddress(),
-    "0x" // Empty initialization data, will call initialize separately
-  );
-  await myntisOFTProxy.waitForDeployment();
-  console.log(`✅ MyntisOFT proxy deployed to: ${await myntisOFTProxy.getAddress()}`);
+  // Encode initialize call
+  const cap = ethers.parseEther("1000000000"); // 1B tokens
+  const maxSupply = cap;
+  const initData = Myntis.interface.encodeFunctionData("initialize", [
+    deployer.address, // admin
+    cap,              // cap
+    maxSupply,        // maxSupply
+    lzEndpoint        // endpoint
+  ]);
 
-  // Connect to proxy and initialize
-  const myntisOFT = MyntisOFT.attach(await myntisOFTProxy.getAddress());
-  await myntisOFT.initialize(
-    "Myntis",
-    "MYNT",
-    deployer.address,
-    true, // isHub
-    84532 // Base Sepolia chain ID
+  const TransparentUpgradeableProxy = await ethers.getContractFactory("TransparentUpgradeableProxy");
+  const myntisProxy = await TransparentUpgradeableProxy.deploy(
+    await myntisImpl.getAddress(),
+    await proxyAdmin.getAddress(),
+    initData
   );
-  console.log("✅ MyntisOFT initialized as hub");
+  await myntisProxy.waitForDeployment();
+  console.log(`✅ Myntis proxy deployed to: ${await myntisProxy.getAddress()}`);
+
+  // Connect to proxy
+  const myntis = Myntis.attach(await myntisProxy.getAddress());
+  console.log("✅ Myntis initialized as hub");
 
   // 2. Deploy DualPoolStaking with UUPS proxy
   console.log("\n📝 Deploying DualPoolStaking with UUPS proxy...");
@@ -75,7 +84,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
 
   const dualPoolStaking = DualPoolStaking.attach(await dualPoolStakingProxy.getAddress());
   await dualPoolStaking.initialize(
-    await myntisOFT.getAddress(),
+    await myntis.getAddress(),
     deployer.address
   );
   console.log("✅ DualPoolStaking initialized");
@@ -98,7 +107,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
 
   const liquidStakingVault = LiquidStakingVault.attach(await liquidStakingVaultProxy.getAddress());
   await liquidStakingVault.initialize(
-    await myntisOFT.getAddress(),
+    await myntis.getAddress(),
     await dualPoolStaking.getAddress(),
     deployer.address
   );
@@ -142,7 +151,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
 
   const emissions = Emissions.attach(await emissionsProxy.getAddress());
   await emissions.initialize(
-    await myntisOFT.getAddress(),
+    await myntis.getAddress(),
     await dualPoolStaking.getAddress(),
     deployer.address
   );
@@ -173,7 +182,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
 
   const zkMerkleDistributor = ZKMerkleDistributor.attach(await zkMerkleDistributorProxy.getAddress());
   await zkMerkleDistributor.initialize(
-    await myntisOFT.getAddress(),
+    await myntis.getAddress(),
     await rewardClaimVerifier.getAddress(),
     deployer.address
   );
@@ -194,7 +203,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
   console.log("\n🔑 Setting up roles...");
 
   // Grant MINTER_ROLE to Emissions
-  await myntisOFT.grantRole(await myntisOFT.MINTER_ROLE(), await emissions.getAddress());
+  await myntis.grantRole(await myntis.MINTER_ROLE(), await emissions.getAddress());
   console.log("✅ MINTER_ROLE granted to Emissions");
 
   // Grant EMISSIONS_ROLE to Emissions in DualPoolStaking
@@ -220,19 +229,19 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
   console.log("\n🌐 Setting up cross-chain peers...");
   
   // Set peers for different chains (using dummy addresses for now)
-  await myntisOFT.setPeer(11155111, ethers.zeroPadValue("0x1234567890123456789012345678901234567890", 32)); // Ethereum Sepolia
-  await myntisOFT.setPeer(421614, ethers.zeroPadValue("0x1234567890123456789012345678901234567890", 32)); // Arbitrum Sepolia
-  await myntisOFT.setPeer(80001, ethers.zeroPadValue("0x1234567890123456789012345678901234567890", 32)); // Polygon Mumbai
-  await myntisOFT.setPeer(11155420, ethers.zeroPadValue("0x1234567890123456789012345678901234567890", 32)); // Optimism Sepolia
+  await myntis.setPeer(11155111, ethers.zeroPadValue("0x1234567890123456789012345678901234567890", 32)); // Ethereum Sepolia
+  await myntis.setPeer(421614, ethers.zeroPadValue("0x1234567890123456789012345678901234567890", 32)); // Arbitrum Sepolia
+  await myntis.setPeer(80001, ethers.zeroPadValue("0x1234567890123456789012345678901234567890", 32)); // Polygon Mumbai
+  await myntis.setPeer(11155420, ethers.zeroPadValue("0x1234567890123456789012345678901234567890", 32)); // Optimism Sepolia
   console.log("✅ Cross-chain peers configured");
 
   // Mint initial tokens for testing
   console.log("\n💰 Minting test tokens...");
   const mintAmount = ethers.parseEther("1000000"); // 1M tokens
-  await myntisOFT.mint(deployer.address, mintAmount);
+  await myntis.mint(deployer.address, mintAmount);
   if (signers.length >= 3) {
-    await myntisOFT.mint(signers[1].address, mintAmount);
-    await myntisOFT.mint(signers[2].address, mintAmount);
+    await myntis.mint(signers[1].address, mintAmount);
+    await myntis.mint(signers[2].address, mintAmount);
   }
   console.log("✅ Test tokens minted");
 
@@ -250,7 +259,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
     try {
       // Test provider staking
       const stakeAmount = ethers.parseEther("1000");
-      await myntisOFT.connect(signers[1]).approve(await dualPoolStaking.getAddress(), stakeAmount);
+      await myntis.connect(signers[1]).approve(await dualPoolStaking.getAddress(), stakeAmount);
       await dualPoolStaking.connect(signers[1]).stakeToProviderPool(stakeAmount);
       console.log("✅ Provider staking test passed");
     } catch (error) {
@@ -260,7 +269,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
     try {
       // Test user staking via vault
       const userStakeAmount = ethers.parseEther("500");
-      await myntisOFT.connect(signers[2]).approve(await liquidStakingVault.getAddress(), userStakeAmount);
+      await myntis.connect(signers[2]).approve(await liquidStakingVault.getAddress(), userStakeAmount);
       await liquidStakingVault.connect(signers[2]).deposit(userStakeAmount, signers[2].address);
       console.log("✅ User staking test passed");
     } catch (error) {
@@ -284,7 +293,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
   // Display deployment summary
   console.log("\n📊 OFT Hub Deployment Summary:");
   console.log("==============================");
-  console.log(`MyntisOFT (Hub): ${await myntisOFT.getAddress()}`);
+  console.log(`Myntis (Hub): ${await myntis.getAddress()}`);
   console.log(`DualPoolStaking: ${await dualPoolStaking.getAddress()}`);
   console.log(`LiquidStakingVault: ${await liquidStakingVault.getAddress()}`);
   console.log(`RewardWeightingRegistry: ${await rewardWeightingRegistry.getAddress()}`);
@@ -298,18 +307,13 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
   console.log("======================");
   
   try {
-    const tokenInfo = await myntisOFT.getContractInfo();
+    const tokenInfo = await myntis.getContractInfo();
     console.log(`Token Name: ${tokenInfo[0]}`);
     console.log(`Token Symbol: ${tokenInfo[1]}`);
     console.log(`Total Supply: ${ethers.formatEther(tokenInfo[2])} MYNT`);
     console.log(`Cap: ${ethers.formatEther(tokenInfo[3])} MYNT`);
     console.log(`Max Supply: ${ethers.formatEther(tokenInfo[4])} MYNT`);
     console.log(`Paused: ${tokenInfo[5]}`);
-
-    const crossChainInfo = await myntisOFT.getCrossChainInfo();
-    console.log(`Is Hub: ${crossChainInfo[0]}`);
-    console.log(`Hub Chain ID: ${crossChainInfo[1]}`);
-    console.log(`Current Chain ID: ${crossChainInfo[2]}`);
   } catch (error) {
     console.log("⚠️ Contract info retrieval error:", error.message);
   }
@@ -322,7 +326,7 @@ async function deployOFTHub(): Promise<OFTHubDeploymentResult> {
   console.log("4. Deploy on testnet with proper private keys");
 
   return {
-    myntisOFT,
+    myntis,
     dualPoolStaking,
     liquidStakingVault,
     rewardWeightingRegistry,

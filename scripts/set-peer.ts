@@ -19,7 +19,7 @@ async function main() {
     throw new Error("Missing or invalid PEER_ADDRESS");
   }
 
-  const token = await ethers.getContractAt("MyntisOFT", oftAddress);
+  const token = await ethers.getContractAt("Myntis", oftAddress);
   const tx = await token.setPeer(eid, ethers.zeroPadValue(peerAddress, 32));
   console.log(`Submitted setPeer tx: ${tx.hash}`);
   await tx.wait();
