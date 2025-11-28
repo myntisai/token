@@ -1,21 +1,36 @@
 # ZK Circuit Testing Guide
 
+**Last Updated**: November 9, 2025
+
 ## Prerequisites
 
 1. **Install Circom**
 ```bash
 npm install -g circom
+# Or use npx: npx circom2 --version
 ```
 
 2. **Install snarkjs**
 ```bash
 npm install -g snarkjs
+# Or use npx: npx snarkjs --version
 ```
 
 3. **Install dependencies**
 ```bash
 cd token/zk-circuits
 npm install
+```
+
+4. **Verify Installation**
+```bash
+# Check if tools are installed
+which circom && which snarkjs && node --version
+
+# Or check versions
+circom --version
+snarkjs --version
+node --version
 ```
 
 ## Quick Test
@@ -97,6 +112,18 @@ The test script automatically tests:
 - Maximum scores (100, 10000)
 - Invalid scores (should fail)
 
+## Common Issues
+
+| Error | Solution |
+|-------|----------|
+| `circom: command not found` | `npm install -g circom` or use `npx circom2` |
+| `snarkjs: command not found` | `npm install -g snarkjs` or use `npx snarkjs` |
+| `WASM file not found` | Run `./compile.sh` first |
+| `ZKey file not found` | Run `./generate-keys.sh` first |
+| `Powers of tau not found` | Script downloads automatically, or download manually |
+| `Circuit compilation failed` | Check Circom version (2.0.0+), verify syntax |
+| `Proof generation failed` | Verify input format and ranges |
+
 ## Performance Testing
 
 Measure proof generation time:
@@ -109,6 +136,53 @@ console.log(`Proof generation time: ${endTime - startTime}ms`);
 ```
 
 Target: <1000ms
+
+## Quick Reference
+
+### Prerequisites Check
+```bash
+cd token/zk-circuits
+
+# Check if tools are installed
+which circom
+which snarkjs
+node --version
+npm --version
+```
+
+### Full Automated Test
+```bash
+# This will compile, generate keys, and test
+npm run test:full
+```
+
+### Manual Step-by-Step
+```bash
+# 1. Setup environment
+./setup-test-env.sh
+
+# 2. Compile circuit
+./compile.sh
+
+# 3. Generate keys
+./generate-keys.sh
+
+# 4. Run test
+node test_circuit.js
+```
+
+### Test with SDK
+After circuit is compiled:
+```bash
+cd ../sdk
+npx ts-node test_zk_proof_generation.ts
+```
+
+### Test with Hardhat
+```bash
+cd ..
+npx hardhat test test/zk-proof-generation.test.ts
+```
 
 ## Troubleshooting
 
