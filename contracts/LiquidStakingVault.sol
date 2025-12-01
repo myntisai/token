@@ -8,6 +8,16 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
+ * @notice Interface for DualPoolStaking contract
+ * @dev SECURITY FIX: Use typed interface instead of low-level calls
+ */
+interface IDualPoolStaking {
+    function stakeToUserPool(uint256 amount, address user) external;
+    function unstakeFromUserPool(uint256 amount, address user) external;
+    function getUserPoolTotalStaked() external view returns (uint256);
+}
+
+/**
  * @title LiquidStakingVault
  * @notice ERC-4626 vault for liquid staking in the user pool
  * @dev Mints lsMYNT shares for user pool staking
@@ -21,9 +31,14 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     // Dual pool staking contract
     address public dualPoolStaking;
     
+    // SECURITY FIX: Track vault-specific deposits to fix totalAssets calculation
+    uint256 public totalVaultDeposits;
+    
     // Events
     event StakingContractUpdated(address indexed newStakingContract);
     event RewardsCompounded(uint256 amount);
+    event VaultDeposit(address indexed user, uint256 amount);
+    event VaultWithdraw(address indexed user, uint256 amount);
     
     constructor(
         address _asset,
@@ -111,6 +126,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
      * @param receiver Address to receive assets
      * @param owner Address that owns the shares
      * @return assets Amount of assets withdrawn
+     * @dev SECURITY FIX: Unstake before burning shares for correct ordering
      */
     function redeem(uint256 shares, address receiver, address owner)
         public 
@@ -118,10 +134,17 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 assets) 
     {
-        assets = super.redeem(shares, receiver, owner);
+        // SECURITY FIX: Calculate assets first, then unstake before burning shares
+        assets = previewRedeem(shares);
         
-        // Unstake from dual pool staking user pool
+        // Unstake from dual pool staking user pool FIRST
         _unstakeFromUserPool(assets, owner);
+        
+        // Then burn shares and transfer assets
+        uint256 actualAssets = super.redeem(shares, receiver, owner);
+        
+        // Verify the amounts match
+        require(actualAssets == assets, "Asset mismatch after redeem");
         
         return assets;
     }
@@ -141,24 +164,15 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     /**
      * @notice Get the total assets managed by this vault
      * @return Total assets (including staked amount + pending rewards)
-     * @dev Includes idle balance and staked amount in dual pool staking
+     * @dev SECURITY FIX: Uses vault-specific tracking instead of total pool stake
      */
     function totalAssets() public view override returns (uint256) {
         // Get idle balance in vault
         uint256 idle = IERC20(asset()).balanceOf(address(this));
         
-        // Get total staked in user pool (all vault deposits are in user pool)
-        // Note: This assumes all user pool stakes come from this vault
-        // In a multi-vault scenario, this would need per-vault tracking
-        (bool success, bytes memory data) = dualPoolStaking.staticcall(
-            abi.encodeWithSignature("getUserPoolTotalStaked()")
-        );
-        uint256 staked = 0;
-        if (success && data.length > 0) {
-            staked = abi.decode(data, (uint256));
-        }
-        
-        return idle + staked;
+        // SECURITY FIX: Use vault-specific deposit tracking
+        // This ensures correct share pricing in multi-vault scenarios
+        return idle + totalVaultDeposits;
     }
     
     /**
@@ -221,23 +235,35 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
      * @notice Stake assets in user pool on behalf of a user
      * @param amount Amount to stake
      * @param user Address to stake on behalf of (share owner)
+     * @dev SECURITY FIX: Uses typed interface and resets approval after staking
      */
     function _stakeInUserPool(uint256 amount, address user) internal {
         // Approve dual pool staking to spend assets
         IERC20(asset()).approve(dualPoolStaking, amount);
         
-        // Call stakeToUserPool on dual pool staking on behalf of user (share owner)
-        (bool success, ) = dualPoolStaking.call(
-            abi.encodeWithSignature("stakeToUserPool(uint256,address)", amount, user)
-        );
-        require(success, "Staking failed");
+        // SECURITY FIX: Use typed interface instead of low-level call
+        IDualPoolStaking(dualPoolStaking).stakeToUserPool(amount, user);
+        
+        // SECURITY FIX: Reset approval to 0 after staking
+        IERC20(asset()).approve(dualPoolStaking, 0);
+        
+        // SECURITY FIX: Track vault-specific deposits
+        totalVaultDeposits += amount;
+        emit VaultDeposit(user, amount);
     }
     
+    /**
+     * @notice Unstake assets from user pool
+     * @param amount Amount to unstake
+     * @param owner Address that owns the stake
+     * @dev SECURITY FIX: Uses typed interface and tracks vault withdrawals
+     */
     function _unstakeFromUserPool(uint256 amount, address owner) internal {
-        // Call unstakeFromUserPool on dual pool staking
-        (bool success, ) = dualPoolStaking.call(
-            abi.encodeWithSignature("unstakeFromUserPool(uint256,address)", amount, owner)
-        );
-        require(success, "Unstaking failed");
+        // SECURITY FIX: Use typed interface instead of low-level call
+        IDualPoolStaking(dualPoolStaking).unstakeFromUserPool(amount, owner);
+        
+        // SECURITY FIX: Track vault-specific withdrawals
+        totalVaultDeposits -= amount;
+        emit VaultWithdraw(owner, amount);
     }
 }

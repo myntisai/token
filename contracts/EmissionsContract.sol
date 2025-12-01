@@ -6,10 +6,12 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 
 interface IMyntisToken {
     function mint(address to, uint256 amount) external;
+    function totalSupply() external view returns (uint256);
 }
 
 interface IStakingPool {
     function getTotalStaked() external view returns (uint256);
+    function getProviderPoolStaked() external view returns (uint256);
     function getProviderInfo(address provider) external view returns (uint256 stake, uint256 rewardDebt);
     function notifyReward(address provider, uint256 amount) external;
 }
@@ -17,6 +19,8 @@ interface IStakingPool {
 /**
  * @title EmissionsContract
  * @notice Manages the emission schedule with halving logic and distributes rewards to providers.
+ * @dev Uses the MasterChef pattern for on-demand reward minting.
+ * @dev Provider calls harvest() through staking contract to claim rewards.
  */
 contract EmissionsContract is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
@@ -27,27 +31,46 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     // Emission parameters
     uint256 public constant HALVING_PERIOD = 4 * 365 days; // 4 years per halving
     uint256 public constant TOTAL_EMISSIONS = 800_000_000 * 1e18; // 800M total emissions
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18; // 1B max token supply
+    
     // Initial emission rate (400M over 4 years, then halving)
-    uint256 public constant INITIAL_EMISSION_RATE = (TOTAL_EMISSIONS / 2) / HALVING_PERIOD; // 400M first period
-    uint256 public constant EMISSION_SUPPLY = 700_000_000 * 1e18;
+    // 400M / (4 * 365 * 24 * 60 * 60) ≈ 3.17 tokens per second
+    uint256 public constant INITIAL_EMISSION_RATE = (TOTAL_EMISSIONS / 2) / HALVING_PERIOD;
+    
+    /// @notice Precision multiplier for reward per share calculations
+    uint256 public constant PRECISION = 1e12;
 
     uint256 public immutable startTime;
     uint256 public lastRewardTime;
     uint256 public mintedEmissions; // total minted supply from this contract
+    
+    // SECURITY FIX: Track emissions added to accRewardPerShare to prevent exceeding cap
+    uint256 public accountedEmissions;
 
     // Accumulated reward per share, scaled by 1e12
     uint256 public accRewardPerShare;
 
     // Events
-    event EmissionContractUpdated(address newStakingContract);
-    event EmissionsUpdated(uint256 timeElapsed, uint256 tokensToAccount, uint256 newAccRewardPerShare);
+    event StakingContractUpdated(address indexed oldContract, address indexed newContract);
+    event EmissionsUpdated(uint256 timeElapsed, uint256 tokensAccounted, uint256 newAccRewardPerShare);
     event ProviderRewardsHarvested(address indexed provider, uint256 amount);
+
+    // Errors
+    error ZeroAddress();
+    error OnlyStakingContract();
+    error ExceedsEmissionsCap(uint256 requested, uint256 remaining);
+    error ExceedsMaxSupply(uint256 newSupply, uint256 maxSupply);
 
     constructor(
         address _token,
         address _stakingContract,
         address _admin
     ) {
+        if (_token == address(0)) revert ZeroAddress();
+        if (_admin == address(0)) revert ZeroAddress();
+        // SECURITY FIX: Validate staking contract address
+        if (_stakingContract == address(0)) revert ZeroAddress();
+        
         token = IMyntisToken(_token);
         stakingContract = IStakingPool(_stakingContract);
         _grantRole(ADMIN_ROLE, _admin);
@@ -55,36 +78,71 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         startTime = block.timestamp;
         lastRewardTime = block.timestamp;
         mintedEmissions = 0;
+        accountedEmissions = 0;
     }
 
     // ----------------------------
     //         ADMIN
     // ----------------------------
 
+    /**
+     * @notice Update the staking contract address
+     * @param _stakingContract New staking contract address
+     */
     function setStakingContract(address _stakingContract) external onlyRole(ADMIN_ROLE) {
-        require(_stakingContract != address(0), "Invalid contract");
+        if (_stakingContract == address(0)) revert ZeroAddress();
+        address oldContract = address(stakingContract);
         stakingContract = IStakingPool(_stakingContract);
-        emit EmissionContractUpdated(_stakingContract);
+        emit StakingContractUpdated(oldContract, _stakingContract);
     }
 
     // ----------------------------
     //       EMISSION LOGIC
     // ----------------------------
 
+    /**
+     * @notice Get the current emission rate based on halving schedule
+     * @return rate Tokens per second at current halving period
+     */
     function getCurrentEmissionRate() public view returns (uint256) {
         if (block.timestamp <= startTime) return 0;
         uint256 elapsed = block.timestamp - startTime;
         uint256 periods = elapsed / HALVING_PERIOD;
-        if (periods >= 25) return 0; // safety cap
+        if (periods >= 25) return 0; // safety cap after ~100 years
         return INITIAL_EMISSION_RATE >> periods;
     }
 
+    /**
+     * @notice Get remaining emissions that can still be minted
+     * @return remaining Tokens remaining in emission allocation
+     */
+    function remainingEmissions() external view returns (uint256) {
+        return TOTAL_EMISSIONS > mintedEmissions ? TOTAL_EMISSIONS - mintedEmissions : 0;
+    }
+
+    /**
+     * @notice Update global emission accounting
+     * @dev Called internally before any harvest to ensure accRewardPerShare is current
+     * @dev SECURITY FIX: Uses provider pool stake only and tracks accountedEmissions
+     */
     function updateEmissions() public {
         if (block.timestamp <= lastRewardTime) {
             return;
         }
+        
         uint256 emissionRate = getCurrentEmissionRate();
         if (emissionRate == 0) {
+            lastRewardTime = block.timestamp;
+            return;
+        }
+
+        // SECURITY FIX: Use provider pool stake only (not total stake including user pool)
+        // This ensures emissions are distributed only to providers who can harvest
+        uint256 providerStake = stakingContract.getProviderPoolStaked();
+        
+        // If no provider stakers, just update time and skip emission accounting
+        // This prevents first-staker-gets-all attack
+        if (providerStake == 0) {
             lastRewardTime = block.timestamp;
             return;
         }
@@ -92,55 +150,121 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         uint256 timeElapsed = block.timestamp - lastRewardTime;
         uint256 tokensToAccount = emissionRate * timeElapsed;
 
-        // Cap at TOTAL_EMISSIONS (800M) but track against EMISSION_SUPPLY (700M) for compatibility
-        // Halving schedule: Years 0-4: 400M, Years 4-8: 200M, Years 8-12: 100M, etc.
-        uint256 maxEmissions = TOTAL_EMISSIONS;
-        if (mintedEmissions + tokensToAccount > maxEmissions) {
-            tokensToAccount = maxEmissions - mintedEmissions;
+        // SECURITY FIX: Cap at remaining accountable emissions (not just minted)
+        // This prevents accRewardPerShare from growing beyond what can be minted
+        uint256 remainingAccountable = TOTAL_EMISSIONS - accountedEmissions;
+        if (tokensToAccount > remainingAccountable) {
+            tokensToAccount = remainingAccountable;
         }
 
         if (tokensToAccount > 0) {
-            uint256 totalStake = stakingContract.getTotalStaked();
-
-            if (totalStake > 0) {
-                mintedEmissions += tokensToAccount;
-                accRewardPerShare += (tokensToAccount * 1e12) / totalStake;
-                emit EmissionsUpdated(timeElapsed, tokensToAccount, accRewardPerShare);
-            }
-            // Skip emissions when no providers are staked to keep emission schedule aligned
+            // SECURITY FIX: Track accounted emissions to prevent exceeding cap
+            accountedEmissions += tokensToAccount;
+            // Update accounting (does not mint yet - that happens in harvest)
+            accRewardPerShare += (tokensToAccount * PRECISION) / providerStake;
+            emit EmissionsUpdated(timeElapsed, tokensToAccount, accRewardPerShare);
         }
 
         lastRewardTime = block.timestamp;
     }
 
     /**
-     * @notice Called by StakingContract. Mints tokens based on pending rewards.
+     * @notice Harvest rewards for a provider
+     * @dev Called by StakingContract on behalf of provider
+     * @dev Uses checks-effects-interactions pattern for reentrancy safety
      * @param provider Provider address to harvest rewards for
      * @return mintedAmount The amount of tokens minted (0 if no rewards)
-     * @dev Removed nonReentrant modifier to avoid nested reentrancy issues.
      */
-    function harvest(address provider) external returns (uint256) {
-        require(msg.sender == address(stakingContract), "Only StakingContract can harvest");
-        require(provider != address(0), "Invalid provider");
+    function harvest(address provider) external nonReentrant returns (uint256) {
+        // Checks
+        if (msg.sender != address(stakingContract)) revert OnlyStakingContract();
+        if (provider == address(0)) revert ZeroAddress();
 
-        // Update global state
+        // Update global emission state
         updateEmissions();
 
         // Calculate pending rewards
         (uint256 stake, uint256 rewardDebt) = stakingContract.getProviderInfo(provider);
-        uint256 accumulated = (stake * accRewardPerShare) / 1e12;
+        uint256 accumulated = (stake * accRewardPerShare) / PRECISION;
         uint256 pending = accumulated > rewardDebt ? accumulated - rewardDebt : 0;
 
-        if (pending > 0) {
-            // Mint tokens to the staking contract
-            token.mint(address(stakingContract), pending);
-            // Let stakingContract update provider's reward debt
-            stakingContract.notifyReward(provider, pending);
+        if (pending == 0) return 0;
 
-            emit ProviderRewardsHarvested(provider, pending);
-            return pending;
+        // Verify emission cap
+        if (mintedEmissions + pending > TOTAL_EMISSIONS) {
+            revert ExceedsEmissionsCap(pending, TOTAL_EMISSIONS - mintedEmissions);
+        }
+
+        // Verify max supply cap
+        uint256 currentSupply = token.totalSupply();
+        if (currentSupply + pending > MAX_SUPPLY) {
+            revert ExceedsMaxSupply(currentSupply + pending, MAX_SUPPLY);
+        }
+
+        // Effects - update state BEFORE external calls
+        mintedEmissions += pending;
+        
+        // Notify staking contract to update provider's reward debt
+        // This must happen before mint to prevent reentrancy
+        stakingContract.notifyReward(provider, pending);
+
+        // Interactions - external calls last
+        token.mint(provider, pending);
+
+        emit ProviderRewardsHarvested(provider, pending);
+        return pending;
+    }
+
+    /**
+     * @notice Get pending rewards for a provider (view function)
+     * @param provider Provider address
+     * @return pending Pending reward amount
+     * @dev SECURITY FIX: Uses provider pool stake and accountedEmissions
+     */
+    function pendingRewards(address provider) external view returns (uint256) {
+        (uint256 stake, uint256 rewardDebt) = stakingContract.getProviderInfo(provider);
+        
+        // Calculate what accRewardPerShare would be if updated now
+        uint256 currentAccReward = accRewardPerShare;
+        
+        if (block.timestamp > lastRewardTime) {
+            // SECURITY FIX: Use provider pool stake only
+            uint256 providerStake = stakingContract.getProviderPoolStaked();
+            if (providerStake > 0) {
+                uint256 emissionRate = getCurrentEmissionRate();
+                uint256 timeElapsed = block.timestamp - lastRewardTime;
+                uint256 tokensToAccount = emissionRate * timeElapsed;
+                
+                // SECURITY FIX: Cap check against accountedEmissions
+                uint256 remainingAccountable = TOTAL_EMISSIONS - accountedEmissions;
+                if (tokensToAccount > remainingAccountable) {
+                    tokensToAccount = remainingAccountable;
+                }
+                
+                currentAccReward += (tokensToAccount * PRECISION) / providerStake;
+            }
         }
         
-        return 0;
+        uint256 accumulated = (stake * currentAccReward) / PRECISION;
+        return accumulated > rewardDebt ? accumulated - rewardDebt : 0;
+    }
+
+    /**
+     * @notice Get contract info for debugging/UI
+     */
+    function getContractInfo() external view returns (
+        uint256 totalEmissionsCap,
+        uint256 totalMinted,
+        uint256 currentRate,
+        uint256 accReward,
+        uint256 lastUpdate
+    ) {
+        return (
+            TOTAL_EMISSIONS,
+            mintedEmissions,
+            getCurrentEmissionRate(),
+            accRewardPerShare,
+            lastRewardTime
+        );
     }
 }

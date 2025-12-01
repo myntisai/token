@@ -25,6 +25,9 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     mapping(address => uint256) public lockedBalance;
     address public stakingContract;
     
+    // SECURITY FIX: Recipient for slashed tokens
+    address public slashRecipient;
+    
     // Epoch management
     struct EpochMerkleRoot {
         bytes32 root;
@@ -46,12 +49,16 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     event MerkleRootSubmitted(address indexed provider, uint256 rootIndex, bytes32 root, uint256 expiry, uint256 totalClaimable);
     event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount);
     event EpochClosed(address indexed provider, uint256 rootIndex);
-    event ProviderSlashed(address indexed provider, uint256 amount);
+    event ProviderSlashed(address indexed provider, uint256 amount, address indexed recipient);
     event StakingContractUpdated(address indexed stakingContract);
+    event SlashRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+    event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
 
     constructor(address _token, address _admin) {
         token = IERC20(_token);
         _grantRole(ADMIN_ROLE, _admin);
+        // SECURITY FIX: Set initial slash recipient to admin
+        slashRecipient = _admin;
     }
 
     /**
@@ -61,6 +68,35 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         require(staking != address(0), "invalid staking");
         stakingContract = staking;
         emit StakingContractUpdated(staking);
+    }
+    
+    /**
+     * @notice Set the recipient for slashed tokens
+     * @param recipient Address to receive slashed tokens
+     * @dev SECURITY FIX: Allows recovery of slashed tokens
+     */
+    function setSlashRecipient(address recipient) external onlyRole(ADMIN_ROLE) {
+        require(recipient != address(0), "invalid recipient");
+        address oldRecipient = slashRecipient;
+        slashRecipient = recipient;
+        emit SlashRecipientUpdated(oldRecipient, recipient);
+    }
+    
+    /**
+     * @notice Grant provider role to an address
+     * @param provider Address to grant provider role
+     */
+    function grantProviderRole(address provider) external onlyRole(ADMIN_ROLE) {
+        require(provider != address(0), "invalid provider");
+        _grantRole(PROVIDER_ROLE, provider);
+    }
+    
+    /**
+     * @notice Revoke provider role from an address
+     * @param provider Address to revoke provider role from
+     */
+    function revokeProviderRole(address provider) external onlyRole(ADMIN_ROLE) {
+        _revokeRole(PROVIDER_ROLE, provider);
     }
 
     /**
@@ -80,13 +116,14 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Submit Merkle root for an epoch
-     * @dev Fixed: Prevents balance exhaustion by locking funds
+     * @dev SECURITY FIX: Requires PROVIDER_ROLE to submit roots
+     * @dev Prevents balance exhaustion by locking funds
      */
     function submitMerkleRoot(
         bytes32 root,
         uint256 expiry,
         uint256 totalClaimableAmount
-    ) external nonReentrant {
+    ) external nonReentrant onlyRole(PROVIDER_ROLE) {
         require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
         require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
         require(totalClaimableAmount > 0, "zero claimable");
@@ -144,6 +181,10 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         // Update state AFTER checks and BEFORE transfer (CEI pattern)
         claimed[provider][rootIndex][claimant] = true;
         e.claimedAmount += amount; // Track claimed amount for this epoch
+        
+        // Update locked balance tracking
+        lockedBalance[provider] -= amount;
+        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
 
         token.safeTransfer(claimant, amount); // Actual token transfer
         emit RewardsClaimed(claimant, provider, rootIndex, amount);
@@ -195,11 +236,18 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Slash a provider's balance
+     * @dev SECURITY FIX: Transfers slashed tokens to slashRecipient
      */
     function slashProvider(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
         require(amount <= providerBalance[provider], "insufficient balance");
+        require(slashRecipient != address(0), "slash recipient not set");
+        
         providerBalance[provider] -= amount;
-        emit ProviderSlashed(provider, amount);
+        
+        // SECURITY FIX: Actually transfer slashed tokens to recipient
+        token.safeTransfer(slashRecipient, amount);
+        
+        emit ProviderSlashed(provider, amount, slashRecipient);
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
 

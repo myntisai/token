@@ -292,6 +292,7 @@ contract Myntis is
 
     /**
      * @notice Burn and bridge MYNT to a remote chain.
+     * @dev SECURITY FIX: Calculates net amount after burn fee to prevent supply inflation
      */
     function bridge(
         uint32 dstEid,
@@ -309,12 +310,18 @@ contract Myntis is
         if (peer == bytes32(0)) revert UnknownPeer(dstEid);
         require(amount > 0, "Myntis: zero amount");
 
+        // Calculate the net amount that will actually be burned (after fee)
+        // This is what should be minted on the destination chain
+        uint256 fee = (amount * _burnFee) / 10000;
+        uint256 netAmount = amount - fee;
+
         _burnWithFee(msg.sender, amount);
 
+        // Use netAmount in the bridge message to prevent supply inflation
         MessagingParams memory params = MessagingParams({
             dstEid: dstEid,
             receiver: peer,
-            message: abi.encode(BridgeMessage({to: to, amount: amount, metadata: metadata})),
+            message: abi.encode(BridgeMessage({to: to, amount: netAmount, metadata: metadata})),
             options: options,
             payInLzToken: payInLzToken
         });
@@ -324,7 +331,7 @@ contract Myntis is
 
         receipt = endpoint.send{value: msg.value}(params, refundAddress);
 
-        emit BridgeQueued(receipt.guid, dstEid, msg.sender, to, amount);
+        emit BridgeQueued(receipt.guid, dstEid, msg.sender, to, netAmount);
     }
 
     /**

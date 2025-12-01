@@ -76,6 +76,7 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     );
     event EpochClosed(address indexed provider, uint256 rootIndex);
     event ProviderSlashed(address indexed provider, uint256 amount);
+    event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
     
     constructor(address _token, address _verifier, address admin) {
         token = IERC20(_token);
@@ -106,13 +107,14 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
      * @param expiry Expiry timestamp
      * @param totalClaimableAmount Total claimable amount
      * @param zkEnabled Whether ZK proofs are required
+     * @dev SECURITY FIX: Requires PROVIDER_ROLE to prevent unauthorized root submissions
      */
     function submitMerkleRoot(
         bytes32 root,
         uint256 expiry,
         uint256 totalClaimableAmount,
         bool zkEnabled
-    ) external nonReentrant {
+    ) external nonReentrant onlyRole(PROVIDER_ROLE) {
         require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
         require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
         require(totalClaimableAmount > 0, "zero claimable");
@@ -160,6 +162,11 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         _claimWithZK(msg.sender, provider, rootIndex, amount, merkleProof, zkProof, publicInputs);
     }
 
+    /**
+     * @notice Internal function to claim with ZK proof
+     * @dev SECURITY FIX: Check nullifier BEFORE calling verifier to prevent race condition
+     * @dev SECURITY FIX: Use bytes32 casting for root comparison
+     */
     function _claimWithZK(
         address claimant,
         address provider,
@@ -183,29 +190,33 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         bytes32 leaf = keccak256(abi.encode(claimant, amount));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
         
-        // Verify ZK proof public inputs match the claim
-        // publicInputs[0] must equal the epoch's Merkle root
-        require(uint256(publicInputs[0]) == uint256(e.root), "ZK root mismatch");
+        // SECURITY FIX: Use consistent bytes32 encoding for root comparison
+        require(bytes32(publicInputs[0]) == e.root, "ZK root mismatch");
         // publicInputs[2] must equal the claimed amount
         require(publicInputs[2] == amount, "ZK amount mismatch");
         
-        // Verify ZK proof
-        require(verifier.verifyAndUseProof(zkProof, publicInputs), "invalid ZK proof");
-        
-        // Check nullifier
+        // SECURITY FIX: Extract and check nullifier BEFORE calling verifier
+        // This prevents the race condition where verifier consumes nullifier but claim fails later
         bytes32 nullifier = bytes32(publicInputs[1]);
         require(!zkClaimed[nullifier], "nullifier already used");
         
         // Ensure enough locked balance for this specific epoch
         require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
         
-        // Update state
+        // SECURITY FIX: Mark nullifier as used BEFORE calling external verifier (reentrancy protection)
+        zkClaimed[nullifier] = true;
         claimed[provider][rootIndex][claimant] = true;
         e.claimedAmount += amount;
-        zkClaimed[nullifier] = true;
         zkClaimCount[claimant]++;
         
-        // Transfer tokens
+        // CRITICAL FIX: Update lockedBalance (was missing, causing accounting corruption)
+        lockedBalance[provider] -= amount;
+        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
+        
+        // Now verify the ZK proof (verifier will also mark it, which is fine as a backup)
+        require(verifier.verifyAndUseProof(zkProof, publicInputs), "invalid ZK proof");
+        
+        // Transfer tokens (CEI pattern - interactions last)
         token.safeTransfer(claimant, amount);
         
         emit ZKRewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
@@ -254,6 +265,10 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         // Update state
         claimed[provider][rootIndex][claimant] = true;
         e.claimedAmount += amount;
+        
+        // CRITICAL FIX: Update lockedBalance (was missing, causing accounting corruption)
+        lockedBalance[provider] -= amount;
+        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
         
         // Transfer tokens
         token.safeTransfer(claimant, amount);

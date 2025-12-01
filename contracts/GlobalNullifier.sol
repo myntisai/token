@@ -8,15 +8,24 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  * @title GlobalNullifier
  * @notice Global nullifier system to prevent double-claiming across all chains
  * @dev Deployed on Base hub, used by all spoke chains
+ * 
+ * Storage Design Note:
+ * - `nullifiers`: Global mapping for O(1) lookup across all chains
+ * - `chainNullifiers`: Chain-specific mapping for auditing and chain isolation
+ * - `chainNullifierCount`: Statistics per chain for monitoring
+ * 
+ * Both mappings are maintained intentionally:
+ * - Global provides fast cross-chain verification
+ * - Chain-specific enables per-chain auditing and potential rollback scenarios
  */
 contract GlobalNullifier is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
     bytes32 public constant SPOKE_ROLE = keccak256("SPOKE_ROLE");
     
-    // Global nullifier mapping
+    /// @notice Global nullifier mapping - primary check for cross-chain claims
     mapping(bytes32 => bool) public nullifiers;
     
-    // Chain-specific nullifier tracking
+    /// @notice Chain-specific nullifier tracking - for auditing and chain isolation
     mapping(uint32 => uint256) public chainNullifierCount;
     mapping(uint32 => mapping(bytes32 => bool)) public chainNullifiers;
     

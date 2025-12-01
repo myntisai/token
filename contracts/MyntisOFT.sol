@@ -12,6 +12,10 @@ import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
  * @dev Hub token deployed on Base - handles minting/emissions
  * @dev Spoke tokens on other chains receive/send via OFT standard
  * 
+ * @custom:deprecated This contract is DEPRECATED in favor of Myntis.sol (UUPS upgradeable)
+ * Myntis.sol is the canonical token contract. This contract exists for backward
+ * compatibility with existing deployments but should not be used for new deployments.
+ * 
  * Tokenomics:
  * - Total Supply Cap: 1,000,000,000 MYNT (1 Billion)
  * - 800M via emissions (minted over time)

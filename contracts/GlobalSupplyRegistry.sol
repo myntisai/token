@@ -34,11 +34,17 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
         uint32 chainId;
         uint256 supplyDelta; // Positive for mint, negative for burn
         uint256 newTotalSupply;
+        uint256 nonce; // SECURITY FIX: Added nonce for ordering
     }
+    
+    // SECURITY FIX: Nonce tracking per chain to prevent stale updates
+    mapping(uint32 => uint256) public chainNonce;
     
     event SupplyUpdated(uint32 indexed chainId, uint256 supplyDelta, uint256 newTotalSupply, uint256 totalCrossChainSupply);
     event PeerUpdated(uint32 indexed eid, bytes32 indexed peer);
     event CapUpdated(uint256 oldCap, uint256 newCap);
+    event ChainReseeded(uint32 indexed chainId, uint256 oldSupply, uint256 newSupply);
+    event StaleUpdateRejected(uint32 indexed chainId, uint256 providedNonce, uint256 expectedNonce);
     
     error UnknownPeer(uint32 eid);
     error InvalidEndpoint();
@@ -74,6 +80,7 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
     
     /**
      * @notice Update supply from spoke chain (called via LayerZero)
+     * @dev SECURITY FIX: Validates nonce to prevent stale updates from overwriting newer ones
      */
     function lzReceive(
         Origin calldata origin,
@@ -93,6 +100,13 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
         uint32 chainId = update.chainId;
         uint256 supplyDelta = update.supplyDelta;
         uint256 newChainSupply = update.newTotalSupply;
+        
+        // SECURITY FIX: Validate nonce to prevent stale updates
+        if (update.nonce <= chainNonce[chainId]) {
+            emit StaleUpdateRejected(chainId, update.nonce, chainNonce[chainId]);
+            return; // Silently reject stale updates
+        }
+        chainNonce[chainId] = update.nonce;
         
         // Update chain supply
         uint256 oldChainSupply = chainSupply[chainId];
@@ -189,6 +203,40 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
         uint256 oldCap = globalCap;
         globalCap = newCap;
         emit CapUpdated(oldCap, newCap);
+    }
+    
+    /**
+     * @notice Re-seed chain supply for error correction (admin only)
+     * @param chainId Chain ID to reseed
+     * @param newSupply Corrected supply for that chain
+     * @param newNonce New nonce to set (should be higher than any pending messages)
+     * @dev SECURITY FIX: Allows admin to correct seeding errors
+     * @dev SECURITY FIX: Resets nonce to prevent replay attacks after reseed
+     */
+    function reseedChainSupply(uint32 chainId, uint256 newSupply, uint256 newNonce) external onlyRole(ADMIN_ROLE) {
+        uint256 oldSupply = chainSupply[chainId];
+        
+        // Calculate new total
+        uint256 newTotal = totalCrossChainSupply - oldSupply + newSupply;
+        require(newTotal <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+        
+        chainSupply[chainId] = newSupply;
+        totalCrossChainSupply = newTotal;
+        
+        // SECURITY FIX: Reset nonce to prevent replay attacks with old messages
+        chainNonce[chainId] = newNonce;
+        
+        emit ChainReseeded(chainId, oldSupply, newSupply);
+        emit SupplyUpdated(chainId, newSupply > oldSupply ? newSupply - oldSupply : oldSupply - newSupply, newSupply, totalCrossChainSupply);
+    }
+    
+    /**
+     * @notice Get current nonce for a chain
+     * @param chainId Chain ID to query
+     * @return Current nonce for the chain
+     */
+    function getChainNonce(uint32 chainId) external view returns (uint256) {
+        return chainNonce[chainId];
     }
 }
 

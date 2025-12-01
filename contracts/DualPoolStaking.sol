@@ -25,6 +25,9 @@ contract DualPoolStaking is
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant EMISSIONS_ROLE = keccak256("EMISSIONS_ROLE");
     
+    /// @notice Precision multiplier for reward per share calculations
+    uint256 public constant PRECISION = 1e12;
+    
     // Pool configuration
     enum PoolType { Provider, User }
     
@@ -63,6 +66,9 @@ contract DualPoolStaking is
     uint256 public providerPendingRewards;
     uint256 public userPendingRewards;
     
+    // Treasury address for unclaimed rewards (prevents first-staker attack)
+    address public treasury;
+    
     // Events
     event Staked(address indexed user, uint256 amount, PoolType poolType);
     event Unstaked(address indexed user, uint256 amount, PoolType poolType);
@@ -70,6 +76,9 @@ contract DualPoolStaking is
     event PoolUpdated(PoolType poolType, uint256 totalStaked, uint256 accRewardPerShare);
     event MinProviderStakeUpdated(uint256 oldStake, uint256 newStake);
     event RewardsQueued(uint256 providerAmount, uint256 userAmount);
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event RewardNotified(address indexed provider, uint256 amount);
+    event UnclaimedRewardsSentToTreasury(uint256 providerAmount, uint256 userAmount);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -110,9 +119,22 @@ contract DualPoolStaking is
     /**
      * @notice Set the liquid staking vault address
      * @param _liquidStakingVault The ERC-4626 vault address
+     * @dev SECURITY FIX: Added zero address validation
      */
     function setLiquidStakingVault(address _liquidStakingVault) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_liquidStakingVault != address(0), "Invalid vault address");
         liquidStakingVault = _liquidStakingVault;
+    }
+    
+    /**
+     * @notice Set the treasury address for unclaimed rewards
+     * @param _treasury The treasury address
+     */
+    function setTreasury(address _treasury) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_treasury != address(0), "Invalid treasury address");
+        address oldTreasury = treasury;
+        treasury = _treasury;
+        emit TreasuryUpdated(oldTreasury, _treasury);
     }
     
     /**
@@ -128,16 +150,17 @@ contract DualPoolStaking is
     /**
      * @notice Stake tokens in provider pool
      * @param amount Amount to stake
+     * @dev SECURITY FIX: Validates total stake meets minimum after deposit
      */
     function stakeToProviderPool(uint256 amount) external nonReentrant {
-        require(amount >= minProviderStake, "Below minimum stake");
+        require(amount > 0, "Amount must be positive");
         
         _updatePools();
         
         UserInfo storage user = userInfo[msg.sender];
         
         // Prevent users already in user pool from staking in provider pool
-        require(user.poolType != PoolType.User, "User pool participant cannot stake in provider pool");
+        require(user.poolType != PoolType.User || user.amount == 0, "User pool participant cannot stake in provider pool");
         
         // If user is already staked, harvest rewards first
         if (user.amount > 0) {
@@ -149,7 +172,11 @@ contract DualPoolStaking is
         
         // Update user info
         user.amount += amount;
-        user.rewardDebt = (user.amount * providerPool.accRewardPerShare) / 1e12;
+        
+        // SECURITY FIX: Validate total stake meets minimum after deposit
+        require(user.amount >= minProviderStake, "Total stake below minimum");
+        
+        user.rewardDebt = (user.amount * providerPool.accRewardPerShare) / PRECISION;
         user.poolType = PoolType.Provider;
         user.isProvider = true;
         user.lastStakeTime = block.timestamp;
@@ -187,7 +214,7 @@ contract DualPoolStaking is
         
         // Update user info
         userInfo_.amount += amount;
-        userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / 1e12;
+        userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / PRECISION;
         userInfo_.poolType = PoolType.User;
         userInfo_.isProvider = false;
         userInfo_.lastStakeTime = block.timestamp;
@@ -202,18 +229,30 @@ contract DualPoolStaking is
     /**
      * @notice Unstake from provider pool
      * @param amount Amount to unstake
+     * @dev SECURITY FIX: Enforces minimum stake requirement on remaining balance
      */
     function unstakeFromProviderPool(uint256 amount) external nonReentrant {
         UserInfo storage user = userInfo[msg.sender];
         require(user.poolType == PoolType.Provider, "Not in provider pool");
         require(user.amount >= amount, "Insufficient stake");
         
+        // SECURITY FIX: Enforce minimum stake on remaining balance
+        // Either full withdrawal (0) or remaining must meet minimum
+        uint256 remainingStake = user.amount - amount;
+        require(remainingStake == 0 || remainingStake >= minProviderStake, 
+            "Remaining stake below minimum - unstake all or leave minimum");
+        
         _updatePools();
         _harvestRewards(msg.sender);
         
         // Update user info
-        user.amount -= amount;
-        user.rewardDebt = (user.amount * providerPool.accRewardPerShare) / 1e12;
+        user.amount = remainingStake;
+        user.rewardDebt = (user.amount * providerPool.accRewardPerShare) / PRECISION;
+        
+        // If fully unstaked, reset provider status
+        if (user.amount == 0) {
+            user.isProvider = false;
+        }
         
         // Update pool
         providerPool.totalStaked -= amount;
@@ -242,7 +281,7 @@ contract DualPoolStaking is
         
         // Update user info
         userInfo_.amount -= amount;
-        userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / 1e12;
+        userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / PRECISION;
         
         // Update pool
         userPool.totalStaked -= amount;
@@ -273,8 +312,12 @@ contract DualPoolStaking is
     /**
      * @notice Sync newly minted emissions into reward accounting.
      * @dev Expects the emissions contract to mint/transfer rewards to this contract before calling.
+     * @dev SECURITY FIX: Requires treasury to be set to prevent first-staker attack
      */
     function syncEmissions() external onlyRole(EMISSIONS_ROLE) returns (uint256 totalRewards_) {
+        // SECURITY FIX: Treasury must be set to prevent first-staker attack
+        require(treasury != address(0), "DualPoolStaking: treasury not set");
+        
         uint256 balance = token.balanceOf(address(this));
         uint256 principal = providerPool.totalStaked + userPool.totalStaked;
         uint256 accounted = principal + providerPendingRewards + userPendingRewards;
@@ -295,20 +338,22 @@ contract DualPoolStaking is
     
     /**
      * @notice Notify reward for a provider (called by EmissionsContract)
-     * @dev Updates provider's reward debt after minting rewards
+     * @dev SECURITY FIX: Simplified to just emit event - reward debt is managed by harvest
      * @param provider Provider address
      * @param amount Reward amount that was minted
      */
     function notifyReward(address provider, uint256 amount) external {
         require(msg.sender == emissionsContract, "Only emissions contract");
         require(provider != address(0), "Invalid provider");
+        require(amount > 0, "Amount must be positive");
         
         UserInfo storage user = userInfo[provider];
         require(user.poolType == PoolType.Provider, "Not a provider");
         
-        // Update reward debt to account for the newly minted rewards
-        // This ensures the provider's accumulated rewards are properly tracked
-        user.rewardDebt = (user.amount * providerPool.accRewardPerShare) / 1e12;
+        // SECURITY FIX: Don't update rewardDebt here - let harvest handle it
+        // This function is just a notification that rewards were minted
+        // The actual reward debt update happens in _harvestRewards
+        emit RewardNotified(provider, amount);
     }
     
     /**
@@ -323,6 +368,14 @@ contract DualPoolStaking is
      */
     function getUserPoolTotalStaked() external view returns (uint256) {
         return userPool.totalStaked;
+    }
+    
+    /**
+     * @notice Get total staked amount in provider pool (for emissions calculation)
+     * @dev SECURITY FIX: Added for EmissionsContract to use provider-only stake
+     */
+    function getProviderPoolStaked() external view returns (uint256) {
+        return providerPool.totalStaked;
     }
     
     /**
@@ -366,24 +419,54 @@ contract DualPoolStaking is
     
     // Internal functions
     
+    /**
+     * @notice Internal function to update pool reward accounting
+     * @dev SECURITY FIX: Sends rewards to treasury when no stakers to prevent first-staker attack
+     */
     function _updatePools() internal {
-        if (providerPendingRewards > 0 && providerPool.totalStaked > 0) {
+        // Handle provider pool rewards
+        if (providerPendingRewards > 0) {
+            if (providerPool.totalStaked > 0) {
+                // Normal distribution to stakers
             uint256 rewards = providerPendingRewards;
             providerPendingRewards = 0;
-            providerPool.accRewardPerShare += (rewards * 1e12) / providerPool.totalStaked;
+                providerPool.accRewardPerShare += (rewards * PRECISION) / providerPool.totalStaked;
             providerPool.totalRewards += rewards;
             emit PoolUpdated(PoolType.Provider, providerPool.totalStaked, providerPool.accRewardPerShare);
+            } else if (treasury != address(0)) {
+                // SECURITY FIX: Send to treasury when no stakers (prevents first-staker attack)
+                uint256 unclaimedProvider = providerPendingRewards;
+                providerPendingRewards = 0;
+                token.safeTransfer(treasury, unclaimedProvider);
+                emit UnclaimedRewardsSentToTreasury(unclaimedProvider, 0);
+            }
+            // If no treasury and no stakers, rewards accumulate (legacy behavior)
         }
 
-        if (userPendingRewards > 0 && userPool.totalStaked > 0) {
+        // Handle user pool rewards
+        if (userPendingRewards > 0) {
+            if (userPool.totalStaked > 0) {
+                // Normal distribution to stakers
             uint256 rewards = userPendingRewards;
             userPendingRewards = 0;
-            userPool.accRewardPerShare += (rewards * 1e12) / userPool.totalStaked;
+                userPool.accRewardPerShare += (rewards * PRECISION) / userPool.totalStaked;
             userPool.totalRewards += rewards;
             emit PoolUpdated(PoolType.User, userPool.totalStaked, userPool.accRewardPerShare);
+            } else if (treasury != address(0)) {
+                // SECURITY FIX: Send to treasury when no stakers (prevents first-staker attack)
+                uint256 unclaimedUser = userPendingRewards;
+                userPendingRewards = 0;
+                token.safeTransfer(treasury, unclaimedUser);
+                emit UnclaimedRewardsSentToTreasury(0, unclaimedUser);
+            }
+            // If no treasury and no stakers, rewards accumulate (legacy behavior)
         }
     }
     
+    /**
+     * @notice Internal function to harvest rewards for a user
+     * @dev SECURITY FIX: Removed double-counting of totalRewards (already counted in _updatePools)
+     */
     function _harvestRewards(address user) internal {
         UserInfo storage userInfo_ = userInfo[user];
         
@@ -393,19 +476,20 @@ contract DualPoolStaking is
         if (userInfo_.poolType == PoolType.Provider) {
             pending = _pendingProviderRewards(userInfo_);
             if (pending > 0) {
-                userInfo_.rewardDebt = (userInfo_.amount * providerPool.accRewardPerShare) / 1e12;
-                providerPool.totalRewards += pending;
+                // FIX: Use PRECISION constant consistently (was 1e12)
+                userInfo_.rewardDebt = (userInfo_.amount * providerPool.accRewardPerShare) / PRECISION;
+                // REMOVED: providerPool.totalRewards += pending; (already counted in _updatePools)
             }
         } else {
             pending = _pendingUserRewards(userInfo_);
             if (pending > 0) {
-                userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / 1e12;
-                userPool.totalRewards += pending;
+                userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / PRECISION;
+                // REMOVED: userPool.totalRewards += pending; (already counted in _updatePools)
             }
         }
         
         if (pending > 0) {
-            // Mint rewards to user (in production, this would be handled by emissions contract)
+            // Transfer rewards to user
             token.safeTransfer(user, pending);
             emit RewardsHarvested(user, pending, userInfo_.poolType);
         }
@@ -417,7 +501,7 @@ contract DualPoolStaking is
         uint256 accRewardPerShare = providerPool.accRewardPerShare;
         // In production, this would calculate based on emissions
         
-        uint256 pending = (user.amount * accRewardPerShare) / 1e12;
+        uint256 pending = (user.amount * accRewardPerShare) / PRECISION;
         return pending > user.rewardDebt ? pending - user.rewardDebt : 0;
     }
     
@@ -427,7 +511,7 @@ contract DualPoolStaking is
         uint256 accRewardPerShare = userPool.accRewardPerShare;
         // In production, this would calculate based on emissions
         
-        uint256 pending = (user.amount * accRewardPerShare) / 1e12;
+        uint256 pending = (user.amount * accRewardPerShare) / PRECISION;
         return pending > user.rewardDebt ? pending - user.rewardDebt : 0;
     }
     

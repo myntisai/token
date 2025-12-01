@@ -38,11 +38,16 @@ contract MyntisSpokeOFT is
         bytes metadata;
     }
 
+    // SECURITY FIX: Added nonce field to match GlobalSupplyRegistry's expected struct
     struct SupplyUpdate {
         uint32 chainId;
         uint256 supplyDelta;
         uint256 newTotalSupply;
+        uint256 nonce;
     }
+    
+    // SECURITY FIX: Track nonce for supply updates to prevent replay attacks
+    uint256 public supplyUpdateNonce;
 
     ILayerZeroEndpointV2 public endpoint;
     mapping(uint32 => bytes32) public peers; // chainId => peer address
@@ -289,10 +294,14 @@ contract MyntisSpokeOFT is
         uint32 currentChainId = uint32(block.chainid);
         uint256 currentSupply = totalSupply();
         
+        // SECURITY FIX: Increment nonce for each update to prevent replay attacks
+        supplyUpdateNonce++;
+        
         SupplyUpdate memory update = SupplyUpdate({
             chainId: currentChainId,
             supplyDelta: 0, // Delta not used for sync, newTotalSupply is authoritative
-            newTotalSupply: currentSupply
+            newTotalSupply: currentSupply,
+            nonce: supplyUpdateNonce
         });
         
         MessagingParams memory params = MessagingParams({

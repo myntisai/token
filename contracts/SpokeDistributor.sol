@@ -6,9 +6,20 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 /**
+ * @title ISpokeToken
+ * @notice Interface for spoke token minting
+ * @dev SECURITY FIX: Typed interface for safer minting
+ */
+interface ISpokeToken {
+    function mint(address to, uint256 amount) external;
+    function balanceOf(address account) external view returns (uint256);
+}
+
+/**
  * @title SpokeDistributor
  * @notice Spoke-side claim handler with GlobalNullifier integration
  * @dev Prevents double-claiming via cross-chain nullifier verification
+ * @dev SECURITY FIX: Uses typed interface for spoke token
  */
 contract SpokeDistributor is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
@@ -17,7 +28,9 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
     // Hub chain information
     uint32 public immutable hubChainId;
     address public immutable hubGlobalNullifier;
-    address public immutable spokeToken;
+    
+    // SECURITY FIX: Use typed interface for spoke token
+    ISpokeToken public immutable spokeToken;
     
     // Claim tracking
     mapping(bytes32 => bool) public nullifiers;
@@ -50,9 +63,13 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         address _spokeToken,
         address admin
     ) {
+        require(_spokeToken != address(0), "invalid spoke token");
+        require(_hubGlobalNullifier != address(0), "invalid hub nullifier");
+        require(admin != address(0), "invalid admin");
+        
         hubChainId = _hubChainId;
         hubGlobalNullifier = _hubGlobalNullifier;
-        spokeToken = _spokeToken;
+        spokeToken = ISpokeToken(_spokeToken);
         
         _grantRole(ADMIN_ROLE, admin);
     }
@@ -124,11 +141,11 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         nullifiers[nullifier] = true;
         e.claimedAmount += amount;
 
-        // Mint tokens to user
-        (bool success, ) = spokeToken.call(
-            abi.encodeWithSignature("mint(address,uint256,string)", claimant, amount, "spoke-claim")
-        );
-        require(success, "mint failed");
+        // SECURITY FIX: Use typed interface and verify mint
+        uint256 balBefore = spokeToken.balanceOf(claimant);
+        spokeToken.mint(claimant, amount);
+        uint256 balAfter = spokeToken.balanceOf(claimant);
+        require(balAfter >= balBefore + amount, "mint verification failed");
 
         emit RewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
         emit NullifierBurned(nullifier, hubChainId, claimant);
