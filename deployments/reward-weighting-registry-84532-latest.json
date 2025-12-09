@@ -1,0 +1,14 @@
+{
+  "rewardWeightingRegistry": "0xc345E2ECb99F30a419215330706196Cc234ff991",
+  "rewardWeightingRegistryImpl": "0xEa382d47e68799c4acA4e5948B1735C5d70C6760",
+  "approvedStrategies": [
+    "myntis_default",
+    "quality_focused",
+    "engagement_focused",
+    "security_focused"
+  ],
+  "network": "base-sepolia",
+  "chainId": 84532,
+  "deployer": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+  "timestamp": "2025-12-03T12:01:09.527Z"
+}

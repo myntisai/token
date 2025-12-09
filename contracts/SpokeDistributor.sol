@@ -36,6 +36,10 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
     mapping(bytes32 => bool) public nullifiers;
     mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
     
+    // SECURITY FIX: Provider balance tracking (mirrors MerkleDistributor pattern)
+    mapping(address => uint256) public providerBalance;
+    mapping(address => uint256) public lockedBalance;
+    
     // Provider Merkle roots
     struct SpokeMerkleRoot {
         bytes32 root;
@@ -50,12 +54,16 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
     // Constants
     uint256 public constant MIN_EXPIRY_DURATION = 1 days;
     uint256 public constant EPOCH_GRACE_PERIOD = 2 days;
+    uint256 public constant CLOSE_DELAY = 1 hours; // SECURITY FIX: Delay after grace period
+    uint256 public constant MAX_BATCH_SIZE = 20; // SECURITY FIX: Prevent gas griefing
     
     // Events
     event MerkleRootSubmitted(address indexed provider, uint256 rootIndex, bytes32 root, uint256 expiry, uint256 totalClaimable);
     event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount, bytes32 nullifier);
     event EpochClosed(address indexed provider, uint256 rootIndex);
     event NullifierBurned(bytes32 indexed nullifier, uint32 indexed chainId, address indexed user);
+    event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
+    event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
 
     constructor(
         uint32 _hubChainId,
@@ -77,6 +85,7 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
     /**
      * @notice Submit Merkle root for an epoch
      * @dev Only providers can submit roots
+     * @dev SECURITY FIX: Requires provider to have sufficient balance (locked)
      */
     function submitMerkleRoot(
         bytes32 root,
@@ -85,6 +94,13 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
     ) external onlyRole(PROVIDER_ROLE) nonReentrant {
         require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
         require(totalClaimableAmount > 0, "zero claimable");
+        
+        // SECURITY FIX: Require provider has sufficient balance
+        require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
+        
+        // Lock the balance for this epoch
+        providerBalance[msg.sender] -= totalClaimableAmount;
+        lockedBalance[msg.sender] += totalClaimableAmount;
 
         providerMerkleRoots[msg.sender].push(SpokeMerkleRoot({
             root: root,
@@ -95,6 +111,20 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         }));
         
         emit MerkleRootSubmitted(msg.sender, providerMerkleRoots[msg.sender].length - 1, root, expiry, totalClaimableAmount);
+        emit LockedBalanceUpdated(msg.sender, lockedBalance[msg.sender]);
+    }
+    
+    /**
+     * @notice Add balance for a provider (hub should transfer tokens to spoke)
+     * @param provider Provider address
+     * @param amount Amount to add
+     * @dev Called by admin after verifying tokens were bridged
+     */
+    function addProviderBalance(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(amount > 0, "zero amount");
+        require(provider != address(0), "invalid provider");
+        providerBalance[provider] += amount;
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
 
     /**
@@ -140,6 +170,10 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         claimed[provider][rootIndex][claimant] = true;
         nullifiers[nullifier] = true;
         e.claimedAmount += amount;
+        
+        // SECURITY FIX: Update lockedBalance
+        lockedBalance[provider] -= amount;
+        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
 
         // SECURITY FIX: Use typed interface and verify mint
         uint256 balBefore = spokeToken.balanceOf(claimant);
@@ -153,6 +187,7 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Batch claim rewards
+     * @dev SECURITY FIX: Limited to MAX_BATCH_SIZE to prevent gas griefing
      */
     function batchClaim(
         address[] calldata providers,
@@ -161,6 +196,8 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         bytes32[][] calldata proofs,
         bytes32[] calldata nullifierList
     ) external nonReentrant {
+        // SECURITY FIX: Limit batch size to prevent gas griefing
+        require(providers.length <= MAX_BATCH_SIZE, "Batch too large");
         require(
             providers.length == rootIndices.length &&
             rootIndices.length == amounts.length &&
@@ -175,17 +212,42 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @notice Close an epoch
+     * @notice Close an epoch and return unclaimed funds
      * @dev Only admin can close epochs
+     * @dev SECURITY FIX: Returns unclaimed balance to provider
+     * @dev SECURITY FIX: Added CLOSE_DELAY for consistency with other distributors
      */
     function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         SpokeMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
         require(!e.closed, "already closed");
-        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD, "grace period not over");
+        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD + CLOSE_DELAY, "close delay not over");
         
         e.closed = true;
+        
+        // SECURITY FIX: Return unclaimed balance to provider
+        if (e.totalClaimable > e.claimedAmount) {
+            uint256 unclaimed = e.totalClaimable - e.claimedAmount;
+            lockedBalance[provider] -= unclaimed;
+            providerBalance[provider] += unclaimed;
+            emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+        }
+        
         emit EpochClosed(provider, rootIndex);
+    }
+    
+    /**
+     * @notice Get provider's available balance
+     */
+    function getProviderBalance(address provider) external view returns (uint256) {
+        return providerBalance[provider];
+    }
+    
+    /**
+     * @notice Get provider's locked balance
+     */
+    function getLockedBalance(address provider) external view returns (uint256) {
+        return lockedBalance[provider];
     }
 
     /**

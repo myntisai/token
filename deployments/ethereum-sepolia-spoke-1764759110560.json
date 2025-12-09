@@ -1,0 +1,12 @@
+{
+  "spoke": "0xdB59bb54c01aBe6DF427a7994AeDD986083D18D4",
+  "spokeImpl": "0xe382983E88511C55C5818Aa26e402f924993f304",
+  "hub": "0x8BEceC0fFbc93bBd94DEcaa9Bbf7b2CfDd286d55",
+  "hubEid": 40245,
+  "spokeEid": 40161,
+  "network": "ethereum-sepolia",
+  "chainId": 11155111,
+  "endpoint": "0x6EDCE65403992e310A62460808c4b910D972f10f",
+  "deployer": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+  "timestamp": "2025-12-03T10:51:50.560Z"
+}

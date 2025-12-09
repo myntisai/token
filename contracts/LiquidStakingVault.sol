@@ -15,6 +15,8 @@ interface IDualPoolStaking {
     function stakeToUserPool(uint256 amount, address user) external;
     function unstakeFromUserPool(uint256 amount, address user) external;
     function getUserPoolTotalStaked() external view returns (uint256);
+    function harvestRewards(address user) external;
+    function pendingRewards(address user) external view returns (uint256);
 }
 
 /**
@@ -22,6 +24,8 @@ interface IDualPoolStaking {
  * @notice ERC-4626 vault for liquid staking in the user pool
  * @dev Mints lsMYNT shares for user pool staking
  * @dev Shares are fully transferrable (liquid staking)
+ * @dev SECURITY FIX: All stakes are attributed to the vault address (not individual users)
+ *      This allows shares to be transferred while maintaining correct stake accounting
  * @dev Auto-compounds rewards
  */
 contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
@@ -64,6 +68,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
      * @param assets Amount of assets to deposit
      * @param receiver Address to receive shares
      * @return shares Amount of shares minted
+     * @dev SECURITY FIX: Stakes to vault address, not individual user
      */
     function deposit(uint256 assets, address receiver) 
         public 
@@ -73,8 +78,9 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     {
         shares = super.deposit(assets, receiver);
         
-        // Stake in dual pool staking user pool on behalf of receiver (share owner)
-        _stakeInUserPool(assets, receiver);
+        // SECURITY FIX: Stake to vault address (address(this)), not individual user
+        // This allows shares to be transferred and still redeemable
+        _stakeInUserPool(assets);
         
         return shares;
     }
@@ -84,6 +90,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
      * @param shares Amount of shares to mint
      * @param receiver Address to receive shares
      * @return assets Amount of assets deposited
+     * @dev SECURITY FIX: Stakes to vault address, not individual user
      */
     function mint(uint256 shares, address receiver) 
         public 
@@ -93,8 +100,8 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     {
         assets = super.mint(shares, receiver);
         
-        // Stake in dual pool staking user pool on behalf of receiver (share owner)
-        _stakeInUserPool(assets, receiver);
+        // SECURITY FIX: Stake to vault address (address(this)), not individual user
+        _stakeInUserPool(assets);
         
         return assets;
     }
@@ -105,6 +112,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
      * @param receiver Address to receive assets
      * @param owner Address that owns the shares
      * @return shares Amount of shares burned
+     * @dev SECURITY FIX: Unstakes from vault's position, not individual user
      */
     function withdraw(uint256 assets, address receiver, address owner)
         public 
@@ -112,8 +120,8 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 shares) 
     {
-        // Unstake from dual pool staking user pool
-        _unstakeFromUserPool(assets, owner);
+        // SECURITY FIX: Unstake from vault's position (not individual owner)
+        _unstakeFromUserPool(assets);
         
         shares = super.withdraw(assets, receiver, owner);
         
@@ -126,7 +134,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
      * @param receiver Address to receive assets
      * @param owner Address that owns the shares
      * @return assets Amount of assets withdrawn
-     * @dev SECURITY FIX: Unstake before burning shares for correct ordering
+     * @dev SECURITY FIX: Unstakes from vault's position for correct share transferability
      */
     function redeem(uint256 shares, address receiver, address owner)
         public 
@@ -134,11 +142,11 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 assets) 
     {
-        // SECURITY FIX: Calculate assets first, then unstake before burning shares
+        // Calculate assets first
         assets = previewRedeem(shares);
         
-        // Unstake from dual pool staking user pool FIRST
-        _unstakeFromUserPool(assets, owner);
+        // SECURITY FIX: Unstake from vault's position (not individual owner)
+        _unstakeFromUserPool(assets);
         
         // Then burn shares and transfer assets
         uint256 actualAssets = super.redeem(shares, receiver, owner);
@@ -150,15 +158,53 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     }
     
     /**
-     * @notice Compound rewards by harvesting and re-staking
-     * @dev Can be called by anyone to compound rewards for all stakers
+     * @notice Harvest staking rewards for the vault
+     * @dev SECURITY FIX: Harvests rewards from DualPoolStaking to vault balance
+     * @dev Anyone can call this to harvest rewards on behalf of all share holders
+     * @return harvested Amount of rewards harvested
      */
-    function compoundRewards() external nonReentrant {
-        // Harvest rewards from dual pool staking
-        // This would be implemented to harvest rewards and re-stake them
-        // For now, this is a placeholder
+    function harvestVaultRewards() external nonReentrant returns (uint256 harvested) {
+        uint256 balanceBefore = IERC20(asset()).balanceOf(address(this));
         
-        emit RewardsCompounded(0); // Placeholder
+        // Harvest rewards from staking contract (rewards sent to vault)
+        IDualPoolStaking(dualPoolStaking).harvestRewards(address(this));
+        
+        uint256 balanceAfter = IERC20(asset()).balanceOf(address(this));
+        harvested = balanceAfter - balanceBefore;
+        
+        emit RewardsCompounded(harvested);
+        return harvested;
+    }
+    
+    /**
+     * @notice Get pending rewards for the vault
+     * @return Pending rewards that can be harvested
+     */
+    function pendingVaultRewards() external view returns (uint256) {
+        return IDualPoolStaking(dualPoolStaking).pendingRewards(address(this));
+    }
+    
+    /**
+     * @notice Compound rewards by harvesting and re-staking
+     * @dev Harvests rewards and re-stakes them to increase share value
+     * @return compounded Amount of rewards compounded
+     */
+    function compoundRewards() external nonReentrant returns (uint256 compounded) {
+        uint256 balanceBefore = IERC20(asset()).balanceOf(address(this));
+        
+        // Harvest rewards
+        IDualPoolStaking(dualPoolStaking).harvestRewards(address(this));
+        
+        uint256 harvested = IERC20(asset()).balanceOf(address(this)) - balanceBefore;
+        
+        // Re-stake harvested rewards if any
+        if (harvested > 0) {
+            _stakeInUserPool(harvested);
+            compounded = harvested;
+        }
+        
+        emit RewardsCompounded(compounded);
+        return compounded;
     }
     
     /**
@@ -229,41 +275,51 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         return super.previewRedeem(shares);
     }
     
+    /**
+     * @notice Decimals offset for virtual share protection
+     * @dev SECURITY FIX: Protects against ERC-4626 first-depositor inflation attack
+     * @dev Adds virtual assets/shares to prevent share price manipulation
+     * @return Decimal offset (3 = 1000x virtual multiplier)
+     */
+    function _decimalsOffset() internal pure override returns (uint8) {
+        return 3; // Provides protection against inflation attacks
+    }
+    
     // Internal functions
     
     /**
-     * @notice Stake assets in user pool on behalf of a user
+     * @notice Stake assets in user pool for the vault
      * @param amount Amount to stake
-     * @param user Address to stake on behalf of (share owner)
-     * @dev SECURITY FIX: Uses typed interface and resets approval after staking
+     * @dev SECURITY FIX: Stakes to vault address (address(this)) for share transferability
+     * @dev All deposits are pooled under the vault's ownership in DualPoolStaking
      */
-    function _stakeInUserPool(uint256 amount, address user) internal {
+    function _stakeInUserPool(uint256 amount) internal {
         // Approve dual pool staking to spend assets
         IERC20(asset()).approve(dualPoolStaking, amount);
         
-        // SECURITY FIX: Use typed interface instead of low-level call
-        IDualPoolStaking(dualPoolStaking).stakeToUserPool(amount, user);
+        // SECURITY FIX: Stake to vault address (address(this))
+        // This ensures any share holder can redeem since the vault owns the stake
+        IDualPoolStaking(dualPoolStaking).stakeToUserPool(amount, address(this));
         
-        // SECURITY FIX: Reset approval to 0 after staking
+        // Reset approval to 0 after staking
         IERC20(asset()).approve(dualPoolStaking, 0);
         
-        // SECURITY FIX: Track vault-specific deposits
+        // Track vault deposits
         totalVaultDeposits += amount;
-        emit VaultDeposit(user, amount);
+        emit VaultDeposit(address(this), amount);
     }
     
     /**
-     * @notice Unstake assets from user pool
+     * @notice Unstake assets from vault's user pool position
      * @param amount Amount to unstake
-     * @param owner Address that owns the stake
-     * @dev SECURITY FIX: Uses typed interface and tracks vault withdrawals
+     * @dev SECURITY FIX: Unstakes from vault's position for share transferability
      */
-    function _unstakeFromUserPool(uint256 amount, address owner) internal {
-        // SECURITY FIX: Use typed interface instead of low-level call
-        IDualPoolStaking(dualPoolStaking).unstakeFromUserPool(amount, owner);
+    function _unstakeFromUserPool(uint256 amount) internal {
+        // SECURITY FIX: Unstake from vault's position (address(this))
+        IDualPoolStaking(dualPoolStaking).unstakeFromUserPool(amount, address(this));
         
-        // SECURITY FIX: Track vault-specific withdrawals
+        // Track vault withdrawals
         totalVaultDeposits -= amount;
-        emit VaultWithdraw(owner, amount);
+        emit VaultWithdraw(address(this), amount);
     }
 }

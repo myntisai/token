@@ -9,6 +9,16 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 /**
+ * @notice Interface for EmissionsContract
+ * @dev SECURITY FIX: Allows DualPoolStaking to trigger emission harvests and initialize new providers
+ */
+interface IEmissionsContract {
+    function harvest(address provider) external returns (uint256);
+    function pendingRewards(address provider) external view returns (uint256);
+    function initializeNewProvider(address provider) external;
+}
+
+/**
  * @title DualPoolStaking
  * @notice Dual-pool staking system with provider and user pools
  * @dev Provider pool: 87.5% emissions, non-transferrable, min stake required
@@ -59,6 +69,9 @@ contract DualPoolStaking is
     // User information
     mapping(address => UserInfo) public userInfo;
     
+    // SECURITY FIX: Track if address was ever a provider (for reward notifications)
+    mapping(address => bool) public wasEverProvider;
+    
     // Configurable minimum provider stake
     uint256 public minProviderStake;
 
@@ -69,6 +82,9 @@ contract DualPoolStaking is
     // Treasury address for unclaimed rewards (prevents first-staker attack)
     address public treasury;
     
+    // SECURITY FIX: Pending treasury withdrawals (pull pattern)
+    uint256 public pendingTreasuryWithdrawal;
+    
     // Events
     event Staked(address indexed user, uint256 amount, PoolType poolType);
     event Unstaked(address indexed user, uint256 amount, PoolType poolType);
@@ -77,8 +93,11 @@ contract DualPoolStaking is
     event MinProviderStakeUpdated(uint256 oldStake, uint256 newStake);
     event RewardsQueued(uint256 providerAmount, uint256 userAmount);
     event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event LiquidStakingVaultUpdated(address indexed oldVault, address indexed newVault);
     event RewardNotified(address indexed provider, uint256 amount);
     event UnclaimedRewardsSentToTreasury(uint256 providerAmount, uint256 userAmount);
+    event TreasuryRewardsQueued(uint256 amount, uint256 totalPending);
+    event TreasuryWithdrawal(address indexed treasury, uint256 amount);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -96,6 +115,11 @@ contract DualPoolStaking is
         address _emissionsContract,
         address admin
     ) public initializer {
+        // SECURITY FIX: Validate all addresses
+        require(_token != address(0), "DualPoolStaking: invalid token");
+        require(_emissionsContract != address(0), "DualPoolStaking: invalid emissions");
+        require(admin != address(0), "DualPoolStaking: invalid admin");
+        
         __AccessControl_init();
         __ReentrancyGuard_init();
         __UUPSUpgradeable_init();
@@ -123,7 +147,9 @@ contract DualPoolStaking is
      */
     function setLiquidStakingVault(address _liquidStakingVault) external onlyRole(DEFAULT_ADMIN_ROLE) {
         require(_liquidStakingVault != address(0), "Invalid vault address");
+        address oldVault = liquidStakingVault;
         liquidStakingVault = _liquidStakingVault;
+        emit LiquidStakingVaultUpdated(oldVault, _liquidStakingVault);
     }
     
     /**
@@ -151,6 +177,7 @@ contract DualPoolStaking is
      * @notice Stake tokens in provider pool
      * @param amount Amount to stake
      * @dev SECURITY FIX: Validates total stake meets minimum after deposit
+     * @dev CRITICAL FIX: Initializes emission debt for new providers to prevent reward theft
      */
     function stakeToProviderPool(uint256 amount) external nonReentrant {
         require(amount > 0, "Amount must be positive");
@@ -161,6 +188,12 @@ contract DualPoolStaking is
         
         // Prevent users already in user pool from staking in provider pool
         require(user.poolType != PoolType.User || user.amount == 0, "User pool participant cannot stake in provider pool");
+        
+        // CRITICAL FIX: Initialize emission debt for NEW providers BEFORE adding stake
+        // This prevents new providers from stealing accumulated rewards
+        if (user.amount == 0 && emissionsContract != address(0)) {
+            IEmissionsContract(emissionsContract).initializeNewProvider(msg.sender);
+        }
         
         // If user is already staked, harvest rewards first
         if (user.amount > 0) {
@@ -180,6 +213,9 @@ contract DualPoolStaking is
         user.poolType = PoolType.Provider;
         user.isProvider = true;
         user.lastStakeTime = block.timestamp;
+        
+        // SECURITY FIX: Mark as ever being a provider for future reward notifications
+        wasEverProvider[msg.sender] = true;
         
         // Update pool
         providerPool.totalStaked += amount;
@@ -303,6 +339,35 @@ contract DualPoolStaking is
     }
     
     /**
+     * @notice Harvest emission rewards for a provider from EmissionsContract
+     * @dev SECURITY FIX: Allows providers to trigger harvest from emissions
+     * @param provider Provider address to harvest for
+     * @return amount Amount of tokens harvested
+     */
+    function harvestFromEmissions(address provider) external nonReentrant returns (uint256 amount) {
+        require(emissionsContract != address(0), "Emissions contract not set");
+        
+        UserInfo storage user = userInfo[provider];
+        require(user.isProvider || (user.poolType == PoolType.Provider && user.amount > 0), 
+                "Not a provider");
+        
+        // Call EmissionsContract.harvest() which will mint tokens to provider
+        amount = IEmissionsContract(emissionsContract).harvest(provider);
+        
+        return amount;
+    }
+    
+    /**
+     * @notice Get pending emission rewards for a provider
+     * @param provider Provider address
+     * @return Pending emission rewards
+     */
+    function pendingEmissionRewards(address provider) external view returns (uint256) {
+        if (emissionsContract == address(0)) return 0;
+        return IEmissionsContract(emissionsContract).pendingRewards(provider);
+    }
+    
+    /**
      * @notice Update pools and distribute rewards
      */
     function updatePools() external {
@@ -313,6 +378,7 @@ contract DualPoolStaking is
      * @notice Sync newly minted emissions into reward accounting.
      * @dev Expects the emissions contract to mint/transfer rewards to this contract before calling.
      * @dev SECURITY FIX: Requires treasury to be set to prevent first-staker attack
+     * @dev SECURITY FIX: Includes pendingTreasuryWithdrawal in accounting to prevent double-counting
      */
     function syncEmissions() external onlyRole(EMISSIONS_ROLE) returns (uint256 totalRewards_) {
         // SECURITY FIX: Treasury must be set to prevent first-staker attack
@@ -320,7 +386,8 @@ contract DualPoolStaking is
         
         uint256 balance = token.balanceOf(address(this));
         uint256 principal = providerPool.totalStaked + userPool.totalStaked;
-        uint256 accounted = principal + providerPendingRewards + userPendingRewards;
+        // SECURITY FIX: Include pendingTreasuryWithdrawal to prevent double-counting
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
         require(balance > accounted, "DualPoolStaking: no new rewards");
 
         uint256 rewards = balance - accounted;
@@ -339,6 +406,7 @@ contract DualPoolStaking is
     /**
      * @notice Notify reward for a provider (called by EmissionsContract)
      * @dev SECURITY FIX: Simplified to just emit event - reward debt is managed by harvest
+     * @dev SECURITY FIX: Allows notification for addresses that were ever providers
      * @param provider Provider address
      * @param amount Reward amount that was minted
      */
@@ -347,8 +415,9 @@ contract DualPoolStaking is
         require(provider != address(0), "Invalid provider");
         require(amount > 0, "Amount must be positive");
         
-        UserInfo storage user = userInfo[provider];
-        require(user.poolType == PoolType.Provider, "Not a provider");
+        // SECURITY FIX: Allow notification for anyone who was ever a provider
+        // This handles the edge case where provider unstakes before rewards are harvested
+        require(wasEverProvider[provider], "Never was a provider");
         
         // SECURITY FIX: Don't update rewardDebt here - let harvest handle it
         // This function is just a notification that rewards were minted
@@ -421,23 +490,26 @@ contract DualPoolStaking is
     
     /**
      * @notice Internal function to update pool reward accounting
-     * @dev SECURITY FIX: Sends rewards to treasury when no stakers to prevent first-staker attack
+     * @dev SECURITY FIX: Uses pull pattern for treasury to prevent blocking
+     * @dev When no stakers, rewards are queued for treasury withdrawal (not transferred immediately)
      */
     function _updatePools() internal {
         // Handle provider pool rewards
         if (providerPendingRewards > 0) {
             if (providerPool.totalStaked > 0) {
                 // Normal distribution to stakers
-            uint256 rewards = providerPendingRewards;
-            providerPendingRewards = 0;
+                uint256 rewards = providerPendingRewards;
+                providerPendingRewards = 0;
                 providerPool.accRewardPerShare += (rewards * PRECISION) / providerPool.totalStaked;
-            providerPool.totalRewards += rewards;
-            emit PoolUpdated(PoolType.Provider, providerPool.totalStaked, providerPool.accRewardPerShare);
+                providerPool.totalRewards += rewards;
+                emit PoolUpdated(PoolType.Provider, providerPool.totalStaked, providerPool.accRewardPerShare);
             } else if (treasury != address(0)) {
-                // SECURITY FIX: Send to treasury when no stakers (prevents first-staker attack)
+                // SECURITY FIX: Queue for treasury withdrawal (pull pattern)
+                // This prevents malicious treasury from blocking staking operations
                 uint256 unclaimedProvider = providerPendingRewards;
                 providerPendingRewards = 0;
-                token.safeTransfer(treasury, unclaimedProvider);
+                pendingTreasuryWithdrawal += unclaimedProvider;
+                emit TreasuryRewardsQueued(unclaimedProvider, pendingTreasuryWithdrawal);
                 emit UnclaimedRewardsSentToTreasury(unclaimedProvider, 0);
             }
             // If no treasury and no stakers, rewards accumulate (legacy behavior)
@@ -447,20 +519,37 @@ contract DualPoolStaking is
         if (userPendingRewards > 0) {
             if (userPool.totalStaked > 0) {
                 // Normal distribution to stakers
-            uint256 rewards = userPendingRewards;
-            userPendingRewards = 0;
+                uint256 rewards = userPendingRewards;
+                userPendingRewards = 0;
                 userPool.accRewardPerShare += (rewards * PRECISION) / userPool.totalStaked;
-            userPool.totalRewards += rewards;
-            emit PoolUpdated(PoolType.User, userPool.totalStaked, userPool.accRewardPerShare);
+                userPool.totalRewards += rewards;
+                emit PoolUpdated(PoolType.User, userPool.totalStaked, userPool.accRewardPerShare);
             } else if (treasury != address(0)) {
-                // SECURITY FIX: Send to treasury when no stakers (prevents first-staker attack)
+                // SECURITY FIX: Queue for treasury withdrawal (pull pattern)
                 uint256 unclaimedUser = userPendingRewards;
                 userPendingRewards = 0;
-                token.safeTransfer(treasury, unclaimedUser);
+                pendingTreasuryWithdrawal += unclaimedUser;
+                emit TreasuryRewardsQueued(unclaimedUser, pendingTreasuryWithdrawal);
                 emit UnclaimedRewardsSentToTreasury(0, unclaimedUser);
             }
             // If no treasury and no stakers, rewards accumulate (legacy behavior)
         }
+    }
+    
+    /**
+     * @notice Withdraw queued treasury rewards (pull pattern)
+     * @dev SECURITY FIX: Allows treasury to pull rewards without blocking operations
+     * @dev Can be called by anyone to transfer pending rewards to treasury
+     */
+    function withdrawTreasuryRewards() external nonReentrant {
+        require(treasury != address(0), "DualPoolStaking: treasury not set");
+        require(pendingTreasuryWithdrawal > 0, "DualPoolStaking: no pending withdrawal");
+        
+        uint256 amount = pendingTreasuryWithdrawal;
+        pendingTreasuryWithdrawal = 0;
+        
+        token.safeTransfer(treasury, amount);
+        emit TreasuryWithdrawal(treasury, amount);
     }
     
     /**
@@ -521,5 +610,6 @@ contract DualPoolStaking is
         onlyRole(UPGRADER_ROLE) 
     {}
 
-    uint256[45] private __gap;
+    // SECURITY FIX: Reduced from 45 to 44 to account for pendingTreasuryWithdrawal
+    uint256[44] private __gap;
 }

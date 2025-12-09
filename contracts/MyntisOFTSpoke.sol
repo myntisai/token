@@ -21,17 +21,23 @@ contract MyntisOFTSpoke is OFT, Pausable {
     // ============ State ============
     uint32 public immutable hubChainEid;  // LayerZero EID of hub chain (Base)
     
+    // SECURITY FIX: Track total emergency mints
+    uint256 public totalEmergencyMinted;
+    
     // ============ Constants ============
     uint256 public constant EMERGENCY_MINT_LIMIT = 1_000_000 * 1e18; // 1M per tx limit
+    uint256 public constant MAX_TOTAL_EMERGENCY = 10_000_000 * 1e18; // 10M lifetime cap
     
     // ============ Events ============
     event EmergencyMint(address indexed to, uint256 amount, string reason);
     event EmergencyBurn(address indexed from, uint256 amount, string reason);
+    event SupplyChangeRequiresReporting(uint256 newTotalSupply, uint32 hubChainEid);
     
     // ============ Errors ============
     error ZeroAddress();
     error ZeroAmount();
     error ExceedsEmergencyLimit();
+    error ExceedsTotalEmergencyLimit();
     error InvalidEndpoint();
     
     /**
@@ -55,9 +61,10 @@ contract MyntisOFTSpoke is OFT, Pausable {
     /**
      * @notice Emergency mint - ONLY for bridge recovery scenarios
      * @dev Should almost never be used - OFT handles minting automatically
-     * @dev Limited to 1M tokens per transaction to prevent abuse
+     * @dev Limited to 1M tokens per transaction and 10M total lifetime
+     * @dev SECURITY FIX: Added global cap and supply reporting
      * @param _to Recipient address
-     * @param _amount Amount to mint (max 1M per tx)
+     * @param _amount Amount to mint (max 1M per tx, 10M total)
      * @param _reason Reason for emergency mint (logged)
      */
     function emergencyMint(
@@ -69,8 +76,19 @@ contract MyntisOFTSpoke is OFT, Pausable {
         if (_amount == 0) revert ZeroAmount();
         if (_amount > EMERGENCY_MINT_LIMIT) revert ExceedsEmergencyLimit();
         
+        // SECURITY FIX: Check lifetime cap
+        if (totalEmergencyMinted + _amount > MAX_TOTAL_EMERGENCY) {
+            revert ExceedsTotalEmergencyLimit();
+        }
+        
+        // SECURITY FIX: Track total emergency mints
+        totalEmergencyMinted += _amount;
+        
         _mint(_to, _amount);
         emit EmergencyMint(_to, _amount, _reason);
+        
+        // SECURITY FIX: Emit supply change for registry sync
+        emit SupplyChangeRequiresReporting(totalSupply(), hubChainEid);
     }
     
     /**

@@ -1,0 +1,14 @@
+{
+  "myntis": "0x8BEceC0fFbc93bBd94DEcaa9Bbf7b2CfDd286d55",
+  "rewardClaimVerifier": "0xC24e30632a02950d476d27D2De6Ceb7F2C5E9978",
+  "emissionsContract": "0x39a211De877c74a9e181e2253EDe847bB4eC70cf",
+  "dualPoolStaking": "0x1a48bf090b02da27c0e60cb6659d4450904A846F",
+  "dualPoolStakingImpl": "0x425DA859900706E8E40eB09276BBDeB2eea4be21",
+  "zkMerkleDistributor": "0x01AD9e797234026c61E523BC9BaB2293Ac140F6a",
+  "liquidStakingVault": "0xB7976Bc67327cCD41435c5a555ADbf8B987F8E1E",
+  "globalSupplyRegistry": "0x74880966F4e89b86B3Cda7B8eB34eb7E5413cc66",
+  "network": "base-sepolia",
+  "chainId": 84532,
+  "deployer": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+  "timestamp": "2025-12-03T10:46:35.495Z"
+}

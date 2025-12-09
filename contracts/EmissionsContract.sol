@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.22;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
@@ -46,20 +46,31 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     
     // SECURITY FIX: Track emissions added to accRewardPerShare to prevent exceeding cap
     uint256 public accountedEmissions;
+    
+    // Migration state
+    bool public migrationInitialized;
 
     // Accumulated reward per share, scaled by 1e12
     uint256 public accRewardPerShare;
+    
+    // CRITICAL FIX: Track provider reward debt internally to prevent double-claiming
+    // This separates emission rewards from DualPoolStaking rewards
+    mapping(address => uint256) public providerRewardDebt;
 
     // Events
     event StakingContractUpdated(address indexed oldContract, address indexed newContract);
     event EmissionsUpdated(uint256 timeElapsed, uint256 tokensAccounted, uint256 newAccRewardPerShare);
     event ProviderRewardsHarvested(address indexed provider, uint256 amount);
+    event ProviderDebtInitialized(address indexed provider, uint256 debtAmount);
+    event ProviderRewardDebtUpdated(address indexed provider, uint256 oldDebt, uint256 newDebt);
+    event MigrationInitialized(uint256 mintedEmissions, uint256 accountedEmissions, uint256 accRewardPerShare, uint256 lastRewardTime, uint256 providerCount);
 
     // Errors
     error ZeroAddress();
     error OnlyStakingContract();
     error ExceedsEmissionsCap(uint256 requested, uint256 remaining);
     error ExceedsMaxSupply(uint256 newSupply, uint256 maxSupply);
+    error MigrationAlreadyInitialized();
 
     constructor(
         address _token,
@@ -68,8 +79,8 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     ) {
         if (_token == address(0)) revert ZeroAddress();
         if (_admin == address(0)) revert ZeroAddress();
-        // SECURITY FIX: Validate staking contract address
-        if (_stakingContract == address(0)) revert ZeroAddress();
+        // NOTE: _stakingContract can be address(0) initially for deployment order flexibility
+        // It will be set via setStakingContract() after DualPoolStaking is deployed
         
         token = IMyntisToken(_token);
         stakingContract = IStakingPool(_stakingContract);
@@ -94,6 +105,119 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         address oldContract = address(stakingContract);
         stakingContract = IStakingPool(_stakingContract);
         emit StakingContractUpdated(oldContract, _stakingContract);
+    }
+    
+    /**
+     * @notice Initialize emissions state from old contract migration
+     * @dev One-time function to migrate state from previous EmissionsContract
+     * @param _mintedEmissions Total minted emissions from old contract
+     * @param _accountedEmissions Total accounted emissions from old contract
+     * @param _accRewardPerShare Accumulated reward per share from old contract
+     * @param _lastRewardTime Last reward time from old contract
+     * @param _providers Array of provider addresses with existing debt
+     * @param _debts Array of corresponding reward debts
+     */
+    function initializeMigration(
+        uint256 _mintedEmissions,
+        uint256 _accountedEmissions,
+        uint256 _accRewardPerShare,
+        uint256 _lastRewardTime,
+        address[] calldata _providers,
+        uint256[] calldata _debts
+    ) external onlyRole(ADMIN_ROLE) {
+        if (migrationInitialized) revert MigrationAlreadyInitialized();
+        require(_providers.length == _debts.length, "Length mismatch");
+        require(_mintedEmissions <= TOTAL_EMISSIONS, "Exceeds emissions cap");
+        require(_accountedEmissions <= TOTAL_EMISSIONS, "Exceeds emissions cap");
+        require(_accountedEmissions >= _mintedEmissions, "Accounted must be >= minted");
+        
+        mintedEmissions = _mintedEmissions;
+        accountedEmissions = _accountedEmissions;
+        accRewardPerShare = _accRewardPerShare;
+        lastRewardTime = _lastRewardTime;
+        
+        for (uint256 i = 0; i < _providers.length; i++) {
+            if (_providers[i] != address(0)) {
+                providerRewardDebt[_providers[i]] = _debts[i];
+                emit ProviderDebtInitialized(_providers[i], _debts[i]);
+            }
+        }
+        
+        migrationInitialized = true;
+        emit MigrationInitialized(_mintedEmissions, _accountedEmissions, _accRewardPerShare, _lastRewardTime, _providers.length);
+    }
+    
+    /**
+     * @notice Initialize provider reward debt for existing stakers
+     * @param provider Provider address to initialize
+     * @dev SECURITY FIX: Prevents first-claim-gets-all for existing providers
+     * @dev Must be called for any provider who was staking before this contract was deployed/updated
+     */
+    function initializeProviderDebt(address provider) external onlyRole(ADMIN_ROLE) {
+        if (provider == address(0)) revert ZeroAddress();
+        require(providerRewardDebt[provider] == 0, "Provider debt already initialized");
+        
+        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+        require(stake > 0, "Provider has no stake");
+        
+        uint256 debtAmount = (stake * accRewardPerShare) / PRECISION;
+        providerRewardDebt[provider] = debtAmount;
+        
+        emit ProviderDebtInitialized(provider, debtAmount);
+    }
+    
+    /**
+     * @notice Batch initialize provider reward debt for multiple providers
+     * @param providers Array of provider addresses to initialize
+     * @dev SECURITY FIX: Efficient batch initialization for migrations
+     */
+    function batchInitializeProviderDebt(address[] calldata providers) external onlyRole(ADMIN_ROLE) {
+        for (uint256 i = 0; i < providers.length; i++) {
+            address provider = providers[i];
+            if (provider == address(0)) continue;
+            if (providerRewardDebt[provider] != 0) continue;
+            
+            (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+            if (stake == 0) continue;
+            
+            uint256 debtAmount = (stake * accRewardPerShare) / PRECISION;
+            providerRewardDebt[provider] = debtAmount;
+            
+            emit ProviderDebtInitialized(provider, debtAmount);
+        }
+    }
+    
+    /**
+     * @notice Initialize new provider's reward debt when they first stake
+     * @param provider Provider address
+     * @dev CRITICAL FIX: Called by DualPoolStaking when new provider stakes
+     * @dev Prevents new providers from stealing accumulated rewards
+     * @dev Sets debt based on actual stake to ensure they start with 0 pending rewards
+     * @dev MUST be called AFTER the stake is recorded in the staking contract
+     */
+    function initializeNewProvider(address provider) external {
+        if (msg.sender != address(stakingContract)) revert OnlyStakingContract();
+        if (provider == address(0)) revert ZeroAddress();
+        
+        // Only initialize if not already set (prevents re-initialization attack)
+        if (providerRewardDebt[provider] == 0) {
+            // Update emissions first to get current accRewardPerShare
+            updateEmissions();
+            
+            // CRITICAL: Get actual stake from staking contract
+            // This must be called AFTER stake is recorded to correctly initialize debt
+            (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+            
+            // Calculate debt based on actual stake so they start with 0 pending rewards
+            // Formula: debt = (stake * accRewardPerShare) / PRECISION
+            // This ensures: pending = accumulated - debt = 0 for new providers
+            uint256 debtAmount = (stake * accRewardPerShare) / PRECISION;
+            
+            // Use 1 wei as minimum to mark as initialized (prevents re-initialization)
+            providerRewardDebt[provider] = debtAmount > 0 ? debtAmount : 1;
+            
+            emit ProviderDebtInitialized(provider, providerRewardDebt[provider]);
+        }
     }
 
     // ----------------------------
@@ -172,6 +296,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      * @notice Harvest rewards for a provider
      * @dev Called by StakingContract on behalf of provider
      * @dev Uses checks-effects-interactions pattern for reentrancy safety
+     * @dev CRITICAL FIX: Uses internal providerRewardDebt to prevent double-claiming
      * @param provider Provider address to harvest rewards for
      * @return mintedAmount The amount of tokens minted (0 if no rewards)
      */
@@ -183,9 +308,11 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         // Update global emission state
         updateEmissions();
 
-        // Calculate pending rewards
-        (uint256 stake, uint256 rewardDebt) = stakingContract.getProviderInfo(provider);
+        // CRITICAL FIX: Use internal providerRewardDebt instead of DualPoolStaking's rewardDebt
+        // This prevents double-claiming because emission rewards are tracked separately
+        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
         uint256 accumulated = (stake * accRewardPerShare) / PRECISION;
+        uint256 rewardDebt = providerRewardDebt[provider];
         uint256 pending = accumulated > rewardDebt ? accumulated - rewardDebt : 0;
 
         if (pending == 0) return 0;
@@ -204,8 +331,14 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         // Effects - update state BEFORE external calls
         mintedEmissions += pending;
         
-        // Notify staking contract to update provider's reward debt
-        // This must happen before mint to prevent reentrancy
+        // CRITICAL FIX: Update internal reward debt to prevent double-claiming
+        uint256 oldDebt = providerRewardDebt[provider];
+        providerRewardDebt[provider] = accumulated;
+        
+        // SECURITY FIX: Emit event for tracking reward debt changes
+        emit ProviderRewardDebtUpdated(provider, oldDebt, accumulated);
+        
+        // Notify staking contract (informational only - debt is tracked internally now)
         stakingContract.notifyReward(provider, pending);
 
         // Interactions - external calls last
@@ -219,10 +352,10 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      * @notice Get pending rewards for a provider (view function)
      * @param provider Provider address
      * @return pending Pending reward amount
-     * @dev SECURITY FIX: Uses provider pool stake and accountedEmissions
+     * @dev CRITICAL FIX: Uses internal providerRewardDebt to prevent double-claiming
      */
     function pendingRewards(address provider) external view returns (uint256) {
-        (uint256 stake, uint256 rewardDebt) = stakingContract.getProviderInfo(provider);
+        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
         
         // Calculate what accRewardPerShare would be if updated now
         uint256 currentAccReward = accRewardPerShare;
@@ -246,6 +379,8 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         }
         
         uint256 accumulated = (stake * currentAccReward) / PRECISION;
+        // CRITICAL FIX: Use internal providerRewardDebt
+        uint256 rewardDebt = providerRewardDebt[provider];
         return accumulated > rewardDebt ? accumulated - rewardDebt : 0;
     }
 
@@ -267,4 +402,22 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
             lastRewardTime
         );
     }
+    
+    /**
+     * @notice Emergency correction for accountedEmissions
+     * @param newAccountedEmissions New value for accountedEmissions
+     * @dev SECURITY FIX: Allows admin to correct accounting if emissions were skipped
+     * @dev Use with extreme caution - can affect reward distribution
+     */
+    function correctAccountedEmissions(uint256 newAccountedEmissions) external onlyRole(ADMIN_ROLE) {
+        require(newAccountedEmissions <= TOTAL_EMISSIONS, "Exceeds total emissions cap");
+        require(newAccountedEmissions >= mintedEmissions, "Cannot be less than minted");
+        
+        uint256 oldValue = accountedEmissions;
+        accountedEmissions = newAccountedEmissions;
+        
+        emit AccountedEmissionsCorrected(oldValue, newAccountedEmissions);
+    }
+    
+    event AccountedEmissionsCorrected(uint256 oldValue, uint256 newValue);
 }

@@ -43,6 +43,8 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     // Constants
     uint256 public constant MIN_EXPIRY_DURATION = 1 days;
     uint256 public constant EPOCH_GRACE_PERIOD = 2 days; // 48 hours grace period
+    uint256 public constant CLOSE_DELAY = 1 hours; // SECURITY FIX: Delay after grace period before closing
+    uint256 public constant MAX_BATCH_SIZE = 20; // SECURITY FIX: Prevent gas griefing
     
     // Events
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
@@ -192,6 +194,7 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Batch claim rewards
+     * @dev SECURITY FIX: Limited to MAX_BATCH_SIZE to prevent gas griefing
      */
     function batchClaim(
         address[] calldata providers,
@@ -199,6 +202,8 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         uint256[] calldata amounts,
         bytes32[][] calldata proofs
     ) external nonReentrant {
+        // SECURITY FIX: Limit batch size to prevent gas griefing
+        require(providers.length <= MAX_BATCH_SIZE, "Batch too large");
         require(
             providers.length == rootIndices.length &&
             rootIndices.length == amounts.length &&
@@ -213,13 +218,14 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
 
     /**
      * @notice Close an epoch and return unclaimed funds
-     * @dev Fixed: Only close after grace period
+     * @dev Fixed: Only close after grace period + close delay
+     * @dev SECURITY FIX: Added CLOSE_DELAY to prevent frontrunning legitimate claims
      */
     function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
         require(!e.closed, "already closed");
-        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD, "grace period not over");
+        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD + CLOSE_DELAY, "close delay not over");
         
         e.closed = true;
 
@@ -288,11 +294,35 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @notice Notify reward (called by StakingContract)
+     * @notice Notify reward with token transfer from staking contract
+     * @dev SECURITY FIX: Now requires actual token transfer to prevent unbacked balance
+     * @dev Called by staking contract when it wants to fund provider balance
+     * @param provider Provider address
+     * @param amount Amount to transfer and add to balance
+     */
+    function notifyRewardWithTransfer(address provider, uint256 amount) external {
+        require(msg.sender == stakingContract, "unauthorised notifier");
+        require(amount > 0, "zero amount");
+        require(provider != address(0), "invalid provider");
+        
+        // SECURITY FIX: Require actual token transfer to back the balance
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
+        providerBalance[provider] += amount;
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+    }
+    
+    /**
+     * @notice Notify reward - DEPRECATED, use notifyRewardWithTransfer
+     * @dev SECURITY WARNING: This function only updates accounting without token transfer
+     * @dev Kept for backwards compatibility but should be avoided
+     * @dev Only call this if tokens were ALREADY transferred to this contract
      */
     function notifyReward(address provider, uint256 amount) external {
         require(msg.sender == stakingContract, "unauthorised notifier");
         require(amount > 0, "zero amount");
+        
+        // WARNING: No token transfer - assumes staking contract pre-transferred tokens
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }

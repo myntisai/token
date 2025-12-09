@@ -101,6 +101,10 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
         uint256 supplyDelta = update.supplyDelta;
         uint256 newChainSupply = update.newTotalSupply;
         
+        // CRITICAL FIX: Validate chainId matches the actual source chain
+        // Prevents spoke from spoofing supply updates for other chains
+        require(chainId == origin.srcEid, "GlobalSupplyRegistry: chainId mismatch");
+        
         // SECURITY FIX: Validate nonce to prevent stale updates
         if (update.nonce <= chainNonce[chainId]) {
             emit StaleUpdateRejected(chainId, update.nonce, chainNonce[chainId]);
@@ -238,5 +242,44 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
     function getChainNonce(uint32 chainId) external view returns (uint256) {
         return chainNonce[chainId];
     }
+    
+    /**
+     * @notice Force accept next supply update for a chain (admin recovery)
+     * @param chainId Chain ID to reset nonce for
+     * @dev SECURITY FIX: Allows recovery from out-of-order message scenarios
+     * @dev Sets nonce to 0 so next update will be accepted regardless of its nonce
+     * @dev Use with caution - can allow replay of old messages
+     */
+    function resetChainNonce(uint32 chainId) external onlyRole(ADMIN_ROLE) {
+        uint256 oldNonce = chainNonce[chainId];
+        chainNonce[chainId] = 0;
+        emit ChainNonceReset(chainId, oldNonce);
+    }
+    
+    /**
+     * @notice Force synchronize supply from a chain (bypass LayerZero)
+     * @param chainId Chain ID
+     * @param newSupply New supply value
+     * @param minNonce Optional minimum nonce to set (0 to keep current)
+     * @dev SECURITY FIX: Emergency recovery when LZ messages are stuck/lost
+     * @dev SECURITY FIX: Optionally sets minNonce to reject old in-flight messages
+     */
+    function forceSupplySync(uint32 chainId, uint256 newSupply, uint256 minNonce) external onlyRole(ADMIN_ROLE) {
+        uint256 oldSupply = chainSupply[chainId];
+        uint256 newTotal = totalCrossChainSupply - oldSupply + newSupply;
+        require(newTotal <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+        
+        chainSupply[chainId] = newSupply;
+        totalCrossChainSupply = newTotal;
+        
+        // SECURITY FIX: Optionally update nonce to reject old in-flight messages
+        if (minNonce > chainNonce[chainId]) {
+            chainNonce[chainId] = minNonce;
+        }
+        
+        emit SupplyUpdated(chainId, newSupply > oldSupply ? newSupply - oldSupply : oldSupply - newSupply, newSupply, totalCrossChainSupply);
+    }
+    
+    event ChainNonceReset(uint32 indexed chainId, uint256 oldNonce);
 }
 

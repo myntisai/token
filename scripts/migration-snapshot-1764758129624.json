@@ -1,0 +1,230 @@
+{
+  "timestamp": "2025-12-03T10:35:29.624Z",
+  "blockNumber": 34494681,
+  "network": "base-sepolia",
+  "contracts": {
+    "token": "0xD3DD83F3D310288C77aB7f69A9426Fa6adE603d1",
+    "staking": "0xe2A90b4324717Dcfd479f6fcBd4f177B81aAB90e",
+    "emissions": "0x56Ad5c5285d036833828886108b733873345E86b",
+    "merkle": "0xdF890dA39bB3B7ad15A66d793Ec4B3D804E9BB16"
+  },
+  "tokenInfo": {
+    "name": "Myntis",
+    "symbol": "MYNT",
+    "decimals": 18,
+    "totalSupply": "12834079.654997463214896",
+    "totalSupplyWei": "12834079654997463214896000"
+  },
+  "holders": [
+    {
+      "address": "0x26B9c344a5245f7402f047F622F57be9E3975718",
+      "balance": "3895706.4941653982744575",
+      "balanceWei": "3895706494165398274457500"
+    },
+    {
+      "address": "0xdF890dA39bB3B7ad15A66d793Ec4B3D804E9BB16",
+      "balance": "2279806.221233866224741976",
+      "balanceWei": "2279806221233866224741976"
+    },
+    {
+      "address": "0x02BD8a85d52d58AB416a4D63DAEFF4C61D557C2D",
+      "balance": "2093816.726826197894953199",
+      "balanceWei": "2093816726826197894953199"
+    },
+    {
+      "address": "0xE81a67087D1FF2932D0fEDcDbB4eAB4192De16fC",
+      "balance": "1193372.212703891232257176",
+      "balanceWei": "1193372212703891232257176"
+    },
+    {
+      "address": "0x1303c39823d7e559674D45cd86dA06EEC6f5048b",
+      "balance": "975672.25640204377967329",
+      "balanceWei": "975672256402043779673290"
+    },
+    {
+      "address": "0xe099e78733D8560F384F3720e95e764FA5d97BD4",
+      "balance": "404398.496101070158444711",
+      "balanceWei": "404398496101070158444711"
+    },
+    {
+      "address": "0xae51542362c04dC0A2f85A806C78ADE58E43221C",
+      "balance": "346297.925283366123574477",
+      "balanceWei": "346297925283366123574477"
+    },
+    {
+      "address": "0x29Eb3404d32E0670fEDFc86597d90BFe0c0F4028",
+      "balance": "345252.533332100034920547",
+      "balanceWei": "345252533332100034920547"
+    },
+    {
+      "address": "0xec431787af43eE294d8167821f7D26bcbF847E26",
+      "balance": "236254.502843842876885466",
+      "balanceWei": "236254502843842876885466"
+    },
+    {
+      "address": "0x034179Bee1022d5626526c71A5004CBFe200D0B6",
+      "balance": "234042.730447912140727489",
+      "balanceWei": "234042730447912140727489"
+    },
+    {
+      "address": "0xDFed85e4dBC56Bc8053ce394f2ea27a152FbA2f1",
+      "balance": "228357.424755519278853029",
+      "balanceWei": "228357424755519278853029"
+    },
+    {
+      "address": "0x3bFAc7C5398aea13b567e321eD215C9a61ce1596",
+      "balance": "155973.173068290714976642",
+      "balanceWei": "155973173068290714976642"
+    },
+    {
+      "address": "0x54400CAF64E7249a6B92851297967021Ee79BC13",
+      "balance": "134085.439065510385202875",
+      "balanceWei": "134085439065510385202875"
+    },
+    {
+      "address": "0x0a45A0f5A2e46DaA75f5A8CcCC54B3Ac84CDba27",
+      "balance": "74889.867367293011927674",
+      "balanceWei": "74889867367293011927674"
+    },
+    {
+      "address": "0x0390F1C0F63cCb5b1091AB58d59e68C40F15D19a",
+      "balance": "65453.500281655937788784",
+      "balanceWei": "65453500281655937788784"
+    },
+    {
+      "address": "0xd1c60b6f00bb9b344B9B5a3EbdF784Bb5bA6d118",
+      "balance": "33106.485458066829149064",
+      "balanceWei": "33106485458066829149064"
+    },
+    {
+      "address": "0xd7d46aa9ff207B3594f9ac3060f23230e2e682a5",
+      "balance": "31992.675236201559175221",
+      "balanceWei": "31992675236201559175221"
+    },
+    {
+      "address": "0x5821323e067247BB4e9cB2C0B11A2Ab81877F04c",
+      "balance": "18386.656416603273690028",
+      "balanceWei": "18386656416603273690028"
+    },
+    {
+      "address": "0xB407CCB17e3866160c112b542Df0cee6521848e3",
+      "balance": "17043.801780326932089276",
+      "balanceWei": "17043801780326932089276"
+    },
+    {
+      "address": "0xa95748301d7C9C4a3169Ef5a8264A5Aceee1Ab20",
+      "balance": "14846.06165941216551442",
+      "balanceWei": "14846061659412165514420"
+    },
+    {
+      "address": "0xE28A08771001aCff23916779555e5ee53317AF68",
+      "balance": "10391.448182866769971637",
+      "balanceWei": "10391448182866769971637"
+    },
+    {
+      "address": "0x364EF929396D63510D955c6a979f1b64068fC9eA",
+      "balance": "9337.838277943939856943",
+      "balanceWei": "9337838277943939856943"
+    },
+    {
+      "address": "0x13699640cf2C8C3022F664BB706abB3A0495853f",
+      "balance": "8968.62423063422718329",
+      "balanceWei": "8968624230634227183290"
+    },
+    {
+      "address": "0x213351313165350b27da8745d0Ea14b41F2276a1",
+      "balance": "8691.66715495321479586",
+      "balanceWei": "8691667154953214795860"
+    },
+    {
+      "address": "0xfE740D75ee010701b116A8695b3EF37FfB3627d5",
+      "balance": "6705.828829673042715398",
+      "balanceWei": "6705828829673042715398"
+    },
+    {
+      "address": "0xbeE41ADab54f214Cd23D895E032d55c6237a371d",
+      "balance": "6352.36604340951555422",
+      "balanceWei": "6352366043409515554220"
+    },
+    {
+      "address": "0x7deF50f8ef8EE24983B083C469F92e124f091302",
+      "balance": "1438.555225070013641308",
+      "balanceWei": "1438555225070013641308"
+    },
+    {
+      "address": "0x07bA30dE7640f7D2375da995eF4d6f2F03E2474f",
+      "balance": "1132.344514003522614998",
+      "balanceWei": "1132344514003522614998"
+    },
+    {
+      "address": "0xe2A90b4324717Dcfd479f6fcBd4f177B81aAB90e",
+      "balance": "1000.0",
+      "balanceWei": "1000000000000000000000"
+    },
+    {
+      "address": "0xeB2240768ACb4eC0D2CdEbE6767a2c0062b6a13E",
+      "balance": "665.272928654233505153",
+      "balanceWei": "665272928654233505153"
+    },
+    {
+      "address": "0x2481aD7B8f2e867Fecaad933B3764A24D60A8291",
+      "balance": "634.525180234981701972",
+      "balanceWei": "634525180234981701972"
+    },
+    {
+      "address": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "balance": "6.0",
+      "balanceWei": "6000000000000000000"
+    },
+    {
+      "address": "0xDFF6703E9E28DE22d2ac59e062126f3D9205b539",
+      "balance": "0.000000806852777255",
+      "balanceWei": "806852777255"
+    },
+    {
+      "address": "0x82A92f6BF70648364e91DA668C28C410c43cf58B",
+      "balance": "0.000000644071575122",
+      "balanceWei": "644071575122"
+    }
+  ],
+  "holderCount": 34,
+  "emissions": {
+    "tokenAddress": "",
+    "stakingContract": "",
+    "startTime": 0,
+    "lastRewardTime": 0,
+    "mintedEmissions": "0",
+    "mintedEmissionsWei": "0",
+    "accountedEmissions": "0",
+    "accountedEmissionsWei": "0",
+    "accRewardPerShare": "0",
+    "currentEmissionRate": "0",
+    "totalEmissionsCap": "0",
+    "precision": "0",
+    "providerDebts": []
+  },
+  "staking": {
+    "totalStaked": "1000.0",
+    "totalStakedWei": "1000000000000000000000",
+    "providers": [
+      {
+        "address": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+        "stake": "1000.0",
+        "stakeWei": "1000000000000000000000",
+        "rewardDebt": "0.0",
+        "rewardDebtWei": "0"
+      }
+    ]
+  },
+  "merkle": {
+    "tokenAddress": "0xD3DD83F3D310288C77aB7f69A9426Fa6adE603d1",
+    "stakingContract": "0xe2A90b4324717Dcfd479f6fcBd4f177B81aAB90e",
+    "providerBalances": [
+      {
+        "address": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+        "available": "1383934.987024880394207636",
+        "locked": "7553438.173807184546230864"
+      }
+    ]
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "spokeDistributor": "0x01C18388635236c13F7D26B1D141f3A87E106035",
+  "spokeToken": "0xdB59bb54c01aBe6DF427a7994AeDD986083D18D4",
+  "hubChainEid": 40245,
+  "hubGlobalNullifier": "0x0000000000000000000000000000000000000001",
+  "network": "ethereum-sepolia",
+  "chainId": 11155111,
+  "deployer": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+  "timestamp": "2025-12-03T11:02:15.506Z"
+}

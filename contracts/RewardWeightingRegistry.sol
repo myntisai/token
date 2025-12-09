@@ -37,6 +37,9 @@ contract RewardWeightingRegistry is
     // Strategy name => usage count
     mapping(string => uint256) public strategyUsageCount;
     
+    // SECURITY FIX: Array to track all approved strategy names
+    string[] private _approvedStrategyList;
+    
     // Events
     event StrategyRegistered(
         address indexed provider, 
@@ -63,8 +66,11 @@ contract RewardWeightingRegistry is
     /**
      * @notice Initialize the reward weighting registry
      * @param admin Admin address
+     * @dev SECURITY FIX: Added zero address validation
      */
     function initialize(address admin) public initializer {
+        require(admin != address(0), "RewardWeightingRegistry: invalid admin");
+        
         __AccessControl_init();
         __UUPSUpgradeable_init();
         
@@ -73,6 +79,7 @@ contract RewardWeightingRegistry is
         
         // Approve default Myntis strategy
         approvedStrategies["myntis_default"] = true;
+        _approvedStrategyList.push("myntis_default");
         emit StrategyApproved("myntis_default");
     }
     
@@ -140,12 +147,19 @@ contract RewardWeightingRegistry is
     /**
      * @notice Approve a new strategy (admin only)
      * @param strategyName Name of the strategy to approve
+     * @dev SECURITY FIX: Maintains _approvedStrategyList for accurate getApprovedStrategies()
      */
     function approveStrategy(string memory strategyName) 
         external 
         onlyRole(DEFAULT_ADMIN_ROLE) 
     {
         require(bytes(strategyName).length > 0, "Invalid strategy name");
+        
+        // Only add to list if not already approved
+        if (!approvedStrategies[strategyName]) {
+            _approvedStrategyList.push(strategyName);
+        }
+        
         approvedStrategies[strategyName] = true;
         emit StrategyApproved(strategyName);
     }
@@ -238,16 +252,31 @@ contract RewardWeightingRegistry is
     
     /**
      * @notice Get all approved strategies
-     * @return Array of approved strategy names
-     * @dev Note: This is a view function and may not be gas-efficient for large numbers of strategies
+     * @return Array of approved strategy names (only currently approved ones)
+     * @dev SECURITY FIX: Returns actual approved strategies from _approvedStrategyList
+     * @dev Note: This may include revoked strategies in the underlying array
+     *      but only returns currently approved ones
      */
     function getApprovedStrategies() external view returns (string[] memory) {
-        // This would require storing strategy names in an array
-        // For now, return empty array
-        // In production, you'd maintain an array of approved strategies
-        string[] memory strategies = new string[](1);
-        strategies[0] = "myntis_default";
-        return strategies;
+        // Count approved strategies
+        uint256 count = 0;
+        for (uint256 i = 0; i < _approvedStrategyList.length; i++) {
+            if (approvedStrategies[_approvedStrategyList[i]]) {
+                count++;
+            }
+        }
+        
+        // Create result array
+        string[] memory result = new string[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < _approvedStrategyList.length; i++) {
+            if (approvedStrategies[_approvedStrategyList[i]]) {
+                result[index] = _approvedStrategyList[i];
+                index++;
+            }
+        }
+        
+        return result;
     }
     
     /**

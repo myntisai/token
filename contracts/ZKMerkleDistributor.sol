@@ -30,6 +30,9 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     mapping(address => uint256) public providerBalance;
     mapping(address => uint256) public lockedBalance;
     
+    // SECURITY FIX: Recipient for slashed tokens
+    address public slashRecipient;
+    
     // Epoch management
     struct EpochMerkleRoot {
         bytes32 root;
@@ -50,6 +53,8 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     // Constants
     uint256 public constant MIN_EXPIRY_DURATION = 1 days;
     uint256 public constant EPOCH_GRACE_PERIOD = 2 days;
+    uint256 public constant CLOSE_DELAY = 1 hours; // SECURITY FIX: Delay after grace period before closing
+    uint256 public constant MAX_BATCH_SIZE = 20; // SECURITY FIX: Prevent gas griefing in batch operations
     
     // Events
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
@@ -77,6 +82,7 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     event EpochClosed(address indexed provider, uint256 rootIndex);
     event ProviderSlashed(address indexed provider, uint256 amount);
     event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
+    event SlashRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
     
     constructor(address _token, address _verifier, address admin) {
         token = IERC20(_token);
@@ -195,28 +201,29 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         // publicInputs[2] must equal the claimed amount
         require(publicInputs[2] == amount, "ZK amount mismatch");
         
-        // SECURITY FIX: Extract and check nullifier BEFORE calling verifier
-        // This prevents the race condition where verifier consumes nullifier but claim fails later
+        // SECURITY FIX: Extract and check nullifier BEFORE any state changes
         bytes32 nullifier = bytes32(publicInputs[1]);
         require(!zkClaimed[nullifier], "nullifier already used");
         
         // Ensure enough locked balance for this specific epoch
         require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
         
-        // SECURITY FIX: Mark nullifier as used BEFORE calling external verifier (reentrancy protection)
+        // CRITICAL FIX: Update ALL local state BEFORE any external calls
+        // This prevents the vulnerability where verifier marks nullifier but local state isn't set
+        // If verifier call fails after this, the whole transaction reverts including local state
+        // If transfer fails after verifier, whole transaction reverts and nullifier is not burned
         zkClaimed[nullifier] = true;
         claimed[provider][rootIndex][claimant] = true;
         e.claimedAmount += amount;
         zkClaimCount[claimant]++;
-        
-        // CRITICAL FIX: Update lockedBalance (was missing, causing accounting corruption)
         lockedBalance[provider] -= amount;
         emit LockedBalanceUpdated(provider, lockedBalance[provider]);
         
-        // Now verify the ZK proof (verifier will also mark it, which is fine as a backup)
+        // Now verify ZK proof - if this fails, ALL state changes above revert
+        // The verifier marking the nullifier is a backup/double-check
         require(verifier.verifyAndUseProof(zkProof, publicInputs), "invalid ZK proof");
         
-        // Transfer tokens (CEI pattern - interactions last)
+        // Transfer tokens last (CEI pattern - interactions last)
         token.safeTransfer(claimant, amount);
         
         emit ZKRewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
@@ -284,6 +291,7 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
      * @param merkleProofs Merkle proofs
      * @param zkProofs ZK proofs
      * @param publicInputsList Public inputs for each claim
+     * @dev SECURITY FIX: Limited to MAX_BATCH_SIZE to prevent gas griefing
      */
     function batchClaimWithZK(
         address[] calldata providers,
@@ -293,6 +301,8 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         RewardClaimVerifier.Proof[] memory zkProofs,
         uint256[3][] memory publicInputsList
     ) external nonReentrant {
+        // SECURITY FIX: Limit batch size to prevent gas griefing
+        require(providers.length <= MAX_BATCH_SIZE, "Batch too large");
         require(
             providers.length == rootIndices.length &&
             rootIndices.length == amounts.length &&
@@ -319,12 +329,13 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
      * @notice Close an epoch and return unclaimed funds
      * @param provider Provider address
      * @param rootIndex Merkle root index
+     * @dev SECURITY FIX: Added CLOSE_DELAY to prevent frontrunning legitimate claims
      */
     function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
         require(!e.closed, "already closed");
-        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD, "grace period not over");
+        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD + CLOSE_DELAY, "close delay not over");
         
         e.closed = true;
         
@@ -340,13 +351,32 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     }
     
     /**
+     * @notice Set the recipient for slashed tokens
+     * @param recipient Address to receive slashed tokens
+     * @dev SECURITY FIX: Required for slash to actually transfer tokens
+     */
+    function setSlashRecipient(address recipient) external onlyRole(ADMIN_ROLE) {
+        require(recipient != address(0), "invalid recipient");
+        address oldRecipient = slashRecipient;
+        slashRecipient = recipient;
+        emit SlashRecipientUpdated(oldRecipient, recipient);
+    }
+    
+    /**
      * @notice Slash a provider's balance
      * @param provider Provider address
      * @param amount Amount to slash
+     * @dev SECURITY FIX: Now actually transfers tokens to slashRecipient
      */
     function slashProvider(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
         require(amount <= providerBalance[provider], "insufficient balance");
+        require(slashRecipient != address(0), "slash recipient not set");
+        
         providerBalance[provider] -= amount;
+        
+        // SECURITY FIX: Transfer slashed tokens to recipient
+        token.safeTransfer(slashRecipient, amount);
+        
         emit ProviderSlashed(provider, amount);
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }

@@ -1,395 +1,471 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.22;
 
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {ERC20Upgradeable} from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
-import {PausableUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {
-    ILayerZeroEndpointV2,
-    MessagingParams,
-    MessagingReceipt,
-    MessagingFee,
-    Origin
-} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import {OFT} from "@layerzerolabs/oft-evm/contracts/OFT.sol";
+import {IOFT} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IGlobalSupplyRegistry} from "./IGlobalSupplyRegistry.sol";
 
 /**
  * @title Myntis
- * @notice Canonical omnichain MYNT token with LayerZero V2 OFT support
- * @dev UUPS upgradeable token with cross-chain bridging capabilities
+ * @notice Canonical omnichain MYNT token - LayerZero V2 OFT
+ * @dev Standard LayerZero V2 OFT with cross-chain bridging
  * @dev 1B total supply: 800M emissions + 200M immediate allocation
  * @dev Hub token on Base, spoke tokens on other chains
+ * 
+ * Features:
+ * - Standard OFT send/receive with automatic burn/mint
+ * - Shared decimals (6) for cross-chain compatibility  
+ * - Configurable burn fee on source chain (no double-fee on cross-chain)
+ * - Global supply registry integration
+ * - Pausable cross-chain operations
+ * 
+ * LayerZero V2 Best Practices:
+ * - Properly overrides _debit/_credit with correct return values
+ * - Respects slippage protection after fee application
+ * - Uses OApp's built-in Ownable (no duplicate inheritance)
+ * - Implements IOFT interface correctly
  */
-contract Myntis is 
-    Initializable,
-    ERC20Upgradeable, 
-    PausableUpgradeable, 
-    AccessControlUpgradeable,
-    UUPSUpgradeable 
-{
-    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+contract Myntis is OFT, Pausable {
+    // ============ Roles ============
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
-    bytes32 public constant BURNER_ROLE = keccak256("BURNER_ROLE");
-    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
-
-    struct BridgeMessage {
-        address to;
-        uint256 amount;
-        bytes metadata;
-    }
-
-    ILayerZeroEndpointV2 public endpoint;
-    mapping(uint32 eid => bytes32 peer) public peers;
-    IGlobalSupplyRegistry public globalSupplyRegistry;
-    mapping(bytes32 guid => bool) public consumedGuids;
-
-    // Production: 1 Billion total supply
-    uint256 private _cap;
-    uint256 private _maxSupply;
-    uint256 private _mintFee; // Fee for minting (in basis points)
-    uint256 private _burnFee; // Fee for burning (in basis points)
-    address private _feeRecipient;
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
     
-    // Events
-    event CapUpdated(uint256 oldCap, uint256 newCap);
-    event MintFeeUpdated(uint256 oldFee, uint256 newFee);
+    // ============ Supply Constants ============
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18; // 1B tokens
+    uint256 public constant EMISSIONS_ALLOCATION = 800_000_000 * 1e18; // 800M for emissions
+    uint256 public constant IMMEDIATE_ALLOCATION = 200_000_000 * 1e18; // 200M immediate
+    
+    // ============ State ============
+    uint256 public totalMintedEmissions;
+    uint256 public totalMintedImmediate;
+    
+    // Role management
+    mapping(bytes32 => mapping(address => bool)) private _roles;
+    
+    // Fee state (in basis points, 100 = 1%)
+    // NOTE: Only burnFee is used (applied in _debit on source chain)
+    // No mintFee to prevent double-fee on cross-chain transfers
+    uint256 public burnFee;
+    address public feeRecipient;
+    
+    // Global supply registry
+    IGlobalSupplyRegistry public globalSupplyRegistry;
+    
+    // Migration state
+    bool public migrationComplete;
+    
+    // Contract metadata URI (ERC-7572) - for token logo, description, etc.
+    string public contractURI;
+    
+    // ============ Events ============
+    event EmissionsMinted(address indexed to, uint256 amount, uint256 totalEmissions);
+    event ImmediateMinted(address indexed to, uint256 amount, uint256 totalImmediate);
     event BurnFeeUpdated(uint256 oldFee, uint256 newFee);
     event FeeRecipientUpdated(address oldRecipient, address newRecipient);
-    event PeerUpdated(uint32 indexed eid, bytes32 indexed peer);
     event GlobalSupplyRegistryUpdated(address indexed previousRegistry, address indexed newRegistry);
-    event BridgeQueued(bytes32 indexed guid, uint32 indexed dstEid, address indexed sender, address recipient, uint256 amount);
-    event BridgeReceived(bytes32 indexed guid, uint32 indexed srcEid, address indexed recipient, uint256 amount);
-    event TokensMinted(address indexed to, uint256 amount, uint256 fee);
-    event TokensBurned(address indexed from, uint256 amount, uint256 fee);
-
-    error UnknownPeer(uint32 eid);
-    error InvalidEndpoint();
-    error InvalidPeer();
-    error GuidConsumed(bytes32 guid);
-
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
+    event RoleGranted(bytes32 indexed role, address indexed account);
+    event RoleRevoked(bytes32 indexed role, address indexed account);
+    event BalanceMigrated(address indexed recipient, uint256 amount);
+    event MigrationCompleted(uint256 totalMigrated);
+    event ContractURIUpdated(string oldURI, string newURI);
+    
+    // ============ Errors ============
+    error ExceedsMaxSupply();
+    error ExceedsEmissionsAllocation();
+    error ExceedsImmediateAllocation();
+    error ZeroAddress();
+    error ZeroAmount();
+    error GlobalCapExceeded();
+    error FeeTooHigh();
+    error Unauthorized();
+    error MigrationAlreadyComplete();
+    
+    // ============ Modifiers ============
+    
+    modifier onlyRole(bytes32 role) {
+        if (!hasRole(role, msg.sender) && msg.sender != owner()) revert Unauthorized();
+        _;
     }
-
+    
     /**
-     * @notice Initialize the upgradeable token with 1B supply and LayerZero support
-     * @param admin The admin address
-     * @param cap_ The token cap (1B)
-     * @param maxSupply_ The maximum supply (1B)
-     * @param endpoint_ LayerZero endpoint address (can be zero if not using cross-chain yet)
+     * @notice Constructor for Myntis OFT
+     * @param _lzEndpoint LayerZero V2 endpoint address
+     * @param _delegate Admin/owner address (OApp delegate)
+     * @dev OFT already inherits Ownable via OAppCore - delegate is passed to OFT which
+     *      handles Ownable initialization in its inheritance chain
      */
-    function initialize(
-        address admin,
-        uint256 cap_,
-        uint256 maxSupply_,
-        address endpoint_
-    ) public initializer {
-        __ERC20_init("Myntis", "MYNT");
-        __Pausable_init();
-        __AccessControl_init();
-        __UUPSUpgradeable_init();
-
-        // Production: 1 Billion total supply
-        require(cap_ == 1_000_000_000 * 1e18, "Cap must be 1B");
-        require(maxSupply_ == 1_000_000_000 * 1e18, "Max supply must be 1B");
-        require(cap_ <= maxSupply_, "Cap exceeds max supply");
+    constructor(
+        address _lzEndpoint,
+        address _delegate
+    ) OFT("Myntis", "MYNT", _lzEndpoint, _delegate) Ownable(_delegate) {
+        if (_delegate == address(0)) revert ZeroAddress();
+        if (_lzEndpoint == address(0)) revert ZeroAddress();
         
-        _cap = cap_;
-        _maxSupply = maxSupply_;
-        _mintFee = 0; // 0% fee by default
-        _burnFee = 0; // 0% fee by default
-        _feeRecipient = admin;
+        feeRecipient = _delegate;
+        burnFee = 0;
 
-        if (endpoint_ != address(0)) {
-            endpoint = ILayerZeroEndpointV2(endpoint_);
+        // Grant roles to delegate
+        _roles[MINTER_ROLE][_delegate] = true;
+        _roles[PAUSER_ROLE][_delegate] = true;
+        
+        emit RoleGranted(MINTER_ROLE, _delegate);
+        emit RoleGranted(PAUSER_ROLE, _delegate);
+    }
+    
+    // ============ Role Management ============
+    
+    function hasRole(bytes32 role, address account) public view returns (bool) {
+        return _roles[role][account];
+    }
+    
+    function grantRole(bytes32 role, address account) external onlyOwner {
+        if (account == address(0)) revert ZeroAddress();
+        _roles[role][account] = true;
+        emit RoleGranted(role, account);
+    }
+    
+    function revokeRole(bytes32 role, address account) external onlyOwner {
+        _roles[role][account] = false;
+        emit RoleRevoked(role, account);
+    }
+    
+    // ============ OFT Overrides (LayerZero V2 Best Practices) ============
+    
+    /**
+     * @notice Override _debit to add pause check and burn fees
+     * @dev CRITICAL: Returns correct values after fee application
+     * @dev Burns tokens from sender before cross-chain send
+     * @param _from Address to debit from
+     * @param _amountLD Amount in local decimals
+     * @param _minAmountLD Minimum amount after fees (slippage protection)
+     * @param _dstEid Destination endpoint ID
+     * @return amountSentLD Actual amount sent (after dust removal)
+     * @return amountReceivedLD Amount that will be received on destination (after fees)
+     */
+    function _debit(
+        address _from,
+        uint256 _amountLD,
+        uint256 _minAmountLD,
+        uint32 _dstEid
+    ) internal virtual override whenNotPaused returns (uint256 amountSentLD, uint256 amountReceivedLD) {
+        // Get dust-removed amounts from base implementation
+        (amountSentLD, ) = _debitView(_amountLD, _minAmountLD, _dstEid);
+        
+        // Calculate fee on the amount being sent
+        uint256 fee = (amountSentLD * burnFee) / 10000;
+        
+        // Amount received on destination is amount sent minus fee
+        amountReceivedLD = amountSentLD - fee;
+        
+        // CRITICAL: Check slippage AFTER fee application
+        // Uses IOFT.SlippageExceeded from LayerZero
+        if (amountReceivedLD < _minAmountLD) {
+            revert IOFT.SlippageExceeded(amountReceivedLD, _minAmountLD);
         }
-
-        _grantRole(ADMIN_ROLE, admin);
-        _grantRole(MINTER_ROLE, admin);
-        _grantRole(BURNER_ROLE, admin);
-        _grantRole(UPGRADER_ROLE, admin);
-    }
-
-    /**
-     * @notice Authorize upgrade (UUPS pattern)
-     */
-    function _authorizeUpgrade(address newImplementation) internal override onlyRole(UPGRADER_ROLE) {}
-
-    /**
-     * @notice Mint tokens with fee
-     * @dev Only authorized minters can mint
-     */
-    function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) {
-        require(!paused(), "Minting is paused");
-        _mintWithFee(to, amount);
-    }
-
-    /**
-     * @notice Burn tokens with fee
-     * @dev Only authorized burners can burn
-     */
-    function burn(address from, uint256 amount) external onlyRole(BURNER_ROLE) {
-        require(!paused(), "Burning is paused");
-        _burnWithFee(from, amount);
-    }
-
-    function _mintWithFee(address to, uint256 amount) internal {
-        require(to != address(0), "Myntis: mint to zero");
-        require(totalSupply() + amount <= _cap, "Myntis: cap exceeded");
-
-        // Check global supply cap if registry is set
+        
+        // Transfer fee to recipient (if any)
+        if (fee > 0 && feeRecipient != address(0)) {
+            _transfer(_from, feeRecipient, fee);
+        }
+        
+        // Burn the net amount (what will be minted on destination)
+        _burn(_from, amountReceivedLD);
+        
+        // Record burn in global registry
         if (address(globalSupplyRegistry) != address(0)) {
-            require(globalSupplyRegistry.canMint(amount), "Myntis: global cap exceeded");
+            globalSupplyRegistry.recordBurn(amountReceivedLD);
         }
-
-        uint256 fee = (amount * _mintFee) / 10000;
-        uint256 netAmount = amount - fee;
         
-        _mint(to, netAmount);
+        // Return correct values: amountSentLD is total taken from user, amountReceivedLD is what arrives
+        return (amountSentLD, amountReceivedLD);
+    }
+    
+    /**
+     * @notice Override _credit to add pause check and supply cap
+     * @dev CRITICAL: Checks MAX_SUPPLY to prevent exceeding 1B via cross-chain
+     * @dev Mints tokens to recipient on cross-chain receive
+     * @dev NOTE: No fee applied here - fee is already deducted in _debit on source chain
+     *      to prevent double-fee charging on cross-chain transfers
+     * @param _to Address to credit
+     * @param _amountLD Amount in local decimals (from source chain, already net of burnFee)
+     * @param _srcEid Source endpoint ID
+     * @return amountReceivedLD Amount actually credited (same as input, no additional fee)
+     */
+    function _credit(
+        address _to,
+        uint256 _amountLD,
+        uint32 _srcEid
+    ) internal virtual override whenNotPaused returns (uint256 amountReceivedLD) {
+        // Handle zero address (LayerZero standard)
+        if (_to == address(0x0)) _to = address(0xdead);
         
-        if (fee > 0) {
-            _mint(_feeRecipient, fee);
+        // No fee applied here - burnFee was already applied in _debit on source chain
+        // This prevents double-fee charging on cross-chain transfers
+        amountReceivedLD = _amountLD;
+        
+        // CRITICAL: Check MAX_SUPPLY before minting
+        if (totalSupply() + amountReceivedLD > MAX_SUPPLY) {
+            revert ExceedsMaxSupply();
         }
-
-        // Record mint in global registry if set
+        
+        // Check global cap if registry is set
         if (address(globalSupplyRegistry) != address(0)) {
-            globalSupplyRegistry.recordMint(amount);
+            if (!globalSupplyRegistry.canMint(amountReceivedLD)) revert GlobalCapExceeded();
         }
         
-        emit TokensMinted(to, amount, fee);
-    }
-
-    function _burnWithFee(address from, uint256 amount) internal {
-        if (from != msg.sender) {
-            uint256 currentAllowance = allowance(from, msg.sender);
-            require(currentAllowance >= amount, "insufficient allowance");
-            unchecked { _approve(from, msg.sender, currentAllowance - amount); }
-        }
+        // Mint full amount to recipient (fee was already taken on source chain)
+        _mint(_to, amountReceivedLD);
         
-        uint256 fee = (amount * _burnFee) / 10000;
-        uint256 netAmount = amount - fee;
-
-        if (fee > 0) {
-            _transfer(from, _feeRecipient, fee);
-        }
-        
-        _burn(from, netAmount);
-
-        // Record net burn amount (fee stays in circulation, so only netAmount reduces supply)
+        // Record mint in global registry
         if (address(globalSupplyRegistry) != address(0)) {
-            globalSupplyRegistry.recordBurn(netAmount);
+            globalSupplyRegistry.recordMint(amountReceivedLD);
         }
         
-        emit TokensBurned(from, amount, fee);
+        return amountReceivedLD;
     }
-
+    
     /**
-     * @notice Update the token cap
+     * @notice Override _debitView to include fee in quote calculation
+     * @dev Provides accurate quote including fees for UI/frontend
      */
-    function updateCap(uint256 newCap) external onlyRole(ADMIN_ROLE) {
-        require(newCap <= _maxSupply, "Cap exceeds max supply");
-        uint256 oldCap = _cap;
-        _cap = newCap;
-        emit CapUpdated(oldCap, newCap);
+    function _debitView(
+        uint256 _amountLD,
+        uint256 _minAmountLD,
+        uint32 _dstEid
+    ) internal view virtual override returns (uint256 amountSentLD, uint256 amountReceivedLD) {
+        // Get base dust-removed amount
+        (amountSentLD, amountReceivedLD) = super._debitView(_amountLD, _minAmountLD, _dstEid);
+        
+        // Apply burn fee to get actual received amount
+        uint256 fee = (amountSentLD * burnFee) / 10000;
+        amountReceivedLD = amountSentLD - fee;
+        
+        // Note: Base _debitView already checks minAmountLD, but that's before fees
+        // The actual check with fees happens in _debit()
     }
-
+    
+    // ============ Minting Functions ============
+    
     /**
-     * @notice Update minting fee
+     * @notice Mint tokens from emissions allocation (for staking rewards)
+     * @dev Only MINTER_ROLE can call (Emissions contract)
+     * @param _to Recipient address
+     * @param _amount Amount to mint
      */
-    function updateMintFee(uint256 newFee) external onlyRole(ADMIN_ROLE) {
-        require(newFee <= 1000, "Fee cannot exceed 10%");
-        uint256 oldFee = _mintFee;
-        _mintFee = newFee;
-        emit MintFeeUpdated(oldFee, newFee);
+    function mint(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) whenNotPaused {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (totalMintedEmissions + _amount > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
+        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        
+        // Check global supply cap
+        if (address(globalSupplyRegistry) != address(0)) {
+            if (!globalSupplyRegistry.canMint(_amount)) revert GlobalCapExceeded();
+        }
+        
+        totalMintedEmissions += _amount;
+        _mint(_to, _amount);
+        
+        // Record in global registry
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordMint(_amount);
+        }
+        
+        emit EmissionsMinted(_to, _amount, totalMintedEmissions);
     }
-
+    
     /**
-     * @notice Update burning fee
+     * @notice Mint tokens from emissions allocation (alias for compatibility)
      */
-    function updateBurnFee(uint256 newFee) external onlyRole(ADMIN_ROLE) {
-        require(newFee <= 1000, "Fee cannot exceed 10%");
-        uint256 oldFee = _burnFee;
-        _burnFee = newFee;
-        emit BurnFeeUpdated(oldFee, newFee);
+    function mintEmissions(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) whenNotPaused {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (totalMintedEmissions + _amount > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
+        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            if (!globalSupplyRegistry.canMint(_amount)) revert GlobalCapExceeded();
+        }
+        
+        totalMintedEmissions += _amount;
+        _mint(_to, _amount);
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordMint(_amount);
+        }
+        
+        emit EmissionsMinted(_to, _amount, totalMintedEmissions);
     }
-
+    
     /**
-     * @notice Update fee recipient
+     * @notice Mint tokens from immediate allocation (team, treasury, etc.)
+     * @dev Only owner can call
+     * @param _to Recipient address  
+     * @param _amount Amount to mint
      */
-    function updateFeeRecipient(address newRecipient) external onlyRole(ADMIN_ROLE) {
-        require(newRecipient != address(0), "Invalid recipient");
-        address oldRecipient = _feeRecipient;
-        _feeRecipient = newRecipient;
-        emit FeeRecipientUpdated(oldRecipient, newRecipient);
+    function mintImmediate(address _to, uint256 _amount) external onlyOwner whenNotPaused {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (totalMintedImmediate + _amount > IMMEDIATE_ALLOCATION) revert ExceedsImmediateAllocation();
+        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            if (!globalSupplyRegistry.canMint(_amount)) revert GlobalCapExceeded();
+        }
+        
+        totalMintedImmediate += _amount;
+        _mint(_to, _amount);
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordMint(_amount);
+        }
+        
+        emit ImmediateMinted(_to, _amount, totalMintedImmediate);
     }
-
+    
+    // ============ Migration Functions ============
+    
     /**
-     * @notice Set LayerZero peer contract on another chain
+     * @notice Migrate token balances from old contract (one-time operation)
+     * @dev Only owner can call. Used to migrate ~12.8M tokens from old contract.
+     * @dev Counts migrated tokens against emissions allocation to preserve tokenomics.
+     * @param recipients Array of recipient addresses
+     * @param amounts Array of amounts to mint to each recipient
      */
-    function setPeer(uint32 eid, bytes32 peer) external onlyRole(ADMIN_ROLE) {
-        require(address(endpoint) != address(0), "Myntis: endpoint not set");
-        peers[eid] = peer;
-        emit PeerUpdated(eid, peer);
+    function migrateMint(
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external onlyOwner {
+        if (migrationComplete) revert MigrationAlreadyComplete();
+        if (recipients.length != amounts.length) revert ZeroAmount(); // Length mismatch
+        
+        for (uint256 i = 0; i < recipients.length; i++) {
+            if (recipients[i] == address(0)) revert ZeroAddress();
+            if (amounts[i] == 0) continue; // Skip zero amounts
+            
+            if (totalSupply() + amounts[i] > MAX_SUPPLY) revert ExceedsMaxSupply();
+            if (totalMintedEmissions + amounts[i] > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
+            
+            totalMintedEmissions += amounts[i];
+            _mint(recipients[i], amounts[i]);
+            
+            emit BalanceMigrated(recipients[i], amounts[i]);
+        }
     }
-
+    
     /**
-     * @notice Set global supply registry
-     * @dev IMPORTANT: After calling this, admin must call registry.registerToken(address(this))
-     *      to grant TOKEN_ROLE, otherwise mint/burn will revert when registry is used.
+     * @notice Complete the migration and prevent further migration mints
+     * @dev Only owner can call. Should be called after all balances are migrated.
      */
-    function setGlobalSupplyRegistry(address registry) external onlyRole(ADMIN_ROLE) {
-        require(registry != address(0), "Myntis: registry zero");
-        address previous = address(globalSupplyRegistry);
-        globalSupplyRegistry = IGlobalSupplyRegistry(registry);
-        emit GlobalSupplyRegistryUpdated(previous, registry);
+    function completeMigration() external onlyOwner {
+        if (migrationComplete) revert MigrationAlreadyComplete();
+        migrationComplete = true;
+        emit MigrationCompleted(totalMintedEmissions);
     }
-
+    
     /**
-     * @notice Pause the contract
+     * @notice Burn tokens from sender's balance
+     * @param _amount Amount to burn
      */
-    function pause() external onlyRole(ADMIN_ROLE) {
+    function burn(uint256 _amount) external {
+        if (_amount == 0) revert ZeroAmount();
+        _burn(msg.sender, _amount);
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordBurn(_amount);
+        }
+    }
+    
+    /**
+     * @notice Burn tokens from specified address (with approval)
+     * @param _from Address to burn from
+     * @param _amount Amount to burn
+     */
+    function burnFrom(address _from, uint256 _amount) external {
+        if (_amount == 0) revert ZeroAmount();
+        _spendAllowance(_from, msg.sender, _amount);
+        _burn(_from, _amount);
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordBurn(_amount);
+        }
+    }
+    
+    // ============ Admin Functions ============
+    
+    function pause() external onlyRole(PAUSER_ROLE) {
         _pause();
     }
-
-    /**
-     * @notice Unpause the contract
-     */
-    function unpause() external onlyRole(ADMIN_ROLE) {
+    
+    function unpause() external onlyRole(PAUSER_ROLE) {
         _unpause();
     }
-
-    // ----------------------------------------------------------------------------------------
-    // LayerZero bridging
-    // ----------------------------------------------------------------------------------------
-
-    /**
-     * @notice Quote the native fee for bridging a given amount.
-     */
-    function quoteBridge(
-        uint32 dstEid,
-        address to,
-        uint256 amount,
-        bytes calldata metadata,
-        bytes calldata options,
-        bool payInLzToken
-    ) external view returns (MessagingFee memory fee) {
-        require(address(endpoint) != address(0), "Myntis: endpoint not set");
-        bytes32 peer = peers[dstEid];
-        if (peer == bytes32(0)) revert UnknownPeer(dstEid);
-        bytes memory payload = abi.encode(BridgeMessage({to: to, amount: amount, metadata: metadata}));
-        MessagingParams memory params = MessagingParams({
-            dstEid: dstEid,
-            receiver: peer,
-            message: payload,
-            options: options,
-            payInLzToken: payInLzToken
-        });
-        return endpoint.quote(params, address(this));
+    
+    function setBurnFee(uint256 _newFee) external onlyOwner {
+        if (_newFee > 1000) revert FeeTooHigh(); // Max 10%
+        uint256 oldFee = burnFee;
+        burnFee = _newFee;
+        emit BurnFeeUpdated(oldFee, _newFee);
     }
-
-    /**
-     * @notice Burn and bridge MYNT to a remote chain.
-     * @dev SECURITY FIX: Calculates net amount after burn fee to prevent supply inflation
-     */
-    function bridge(
-        uint32 dstEid,
-        address to,
-        uint256 amount,
-        bytes calldata metadata,
-        bytes calldata options,
-        address refundAddress,
-        bool payInLzToken
-    ) external payable whenNotPaused returns (MessagingReceipt memory receipt) {
-        require(address(endpoint) != address(0), "Myntis: endpoint not set");
-        require(to != address(0), "Myntis: zero recipient");
-        require(refundAddress != address(0), "Myntis: zero refund");
-        bytes32 peer = peers[dstEid];
-        if (peer == bytes32(0)) revert UnknownPeer(dstEid);
-        require(amount > 0, "Myntis: zero amount");
-
-        // Calculate the net amount that will actually be burned (after fee)
-        // This is what should be minted on the destination chain
-        uint256 fee = (amount * _burnFee) / 10000;
-        uint256 netAmount = amount - fee;
-
-        _burnWithFee(msg.sender, amount);
-
-        // Use netAmount in the bridge message to prevent supply inflation
-        MessagingParams memory params = MessagingParams({
-            dstEid: dstEid,
-            receiver: peer,
-            message: abi.encode(BridgeMessage({to: to, amount: netAmount, metadata: metadata})),
-            options: options,
-            payInLzToken: payInLzToken
-        });
-
-        uint256 nativeFee = endpoint.quote(params, msg.sender).nativeFee;
-        require(msg.value >= nativeFee, "Myntis: insufficient fee");
-
-        receipt = endpoint.send{value: msg.value}(params, refundAddress);
-
-        emit BridgeQueued(receipt.guid, dstEid, msg.sender, to, netAmount);
+    
+    function setFeeRecipient(address _newRecipient) external onlyOwner {
+        if (_newRecipient == address(0)) revert ZeroAddress();
+        address oldRecipient = feeRecipient;
+        feeRecipient = _newRecipient;
+        emit FeeRecipientUpdated(oldRecipient, _newRecipient);
     }
-
-    /**
-     * @notice LayerZero entrypoint for received packets.
-     * @dev Endpoint guarantees (guid, origin) uniqueness; peers guard prevents untrusted senders.
-     */
-    function lzReceive(
-        Origin calldata origin,
-        address receiver,
-        bytes32 guid,
-        bytes calldata message,
-        bytes calldata /* extraData */
-    ) external payable {
-        require(address(endpoint) != address(0), "Myntis: endpoint not set");
-        if (msg.sender != address(endpoint)) revert InvalidEndpoint();
-        if (receiver != address(this)) revert InvalidEndpoint();
-
-        if (consumedGuids[guid]) revert GuidConsumed(guid);
-        consumedGuids[guid] = true;
-
-        bytes32 expectedPeer = peers[origin.srcEid];
-        if (expectedPeer == bytes32(0) || expectedPeer != origin.sender) revert InvalidPeer();
-
-        BridgeMessage memory bridgeMsg = abi.decode(message, (BridgeMessage));
-        require(bridgeMsg.to != address(0), "Myntis: zero recipient");
-        require(bridgeMsg.amount > 0, "Myntis: zero amount");
-
-        _mintWithFee(bridgeMsg.to, bridgeMsg.amount);
-        emit BridgeReceived(guid, origin.srcEid, bridgeMsg.to, bridgeMsg.amount);
+    
+    function setGlobalSupplyRegistry(address _registry) external onlyOwner {
+        address previous = address(globalSupplyRegistry);
+        globalSupplyRegistry = IGlobalSupplyRegistry(_registry);
+        emit GlobalSupplyRegistryUpdated(previous, _registry);
     }
-
-    // View functions
-    function cap() public view returns (uint256) { return _cap; }
-    function maxSupply() public view returns (uint256) { return _maxSupply; }
-    function mintFee() public view returns (uint256) { return _mintFee; }
-    function burnFee() public view returns (uint256) { return _burnFee; }
-    function feeRecipient() public view returns (address) { return _feeRecipient; }
-
+    
     /**
-     * @notice Get contract information
+     * @notice Set the contract metadata URI (ERC-7572)
+     * @param _contractURI URI pointing to JSON metadata (logo, description, etc.)
+     * @dev Can be IPFS, HTTPS, or data URI. Example: "ipfs://Qm..." or "https://myntis.com/metadata.json"
+     * @dev JSON format: { "name": "Myntis", "symbol": "MYNT", "image": "ipfs://...", "description": "..." }
      */
+    function setContractURI(string calldata _contractURI) external onlyOwner {
+        string memory oldURI = contractURI;
+        contractURI = _contractURI;
+        emit ContractURIUpdated(oldURI, _contractURI);
+    }
+    
+    // ============ View Functions ============
+    
+    function remainingEmissions() external view returns (uint256) {
+        return EMISSIONS_ALLOCATION - totalMintedEmissions;
+    }
+    
+    function remainingImmediate() external view returns (uint256) {
+        return IMMEDIATE_ALLOCATION - totalMintedImmediate;
+    }
+    
+    function isHub() external pure returns (bool) {
+        return true;
+    }
+    
     function getContractInfo() external view returns (
         string memory name_,
         string memory symbol_,
         uint256 totalSupply_,
-        uint256 cap_,
         uint256 maxSupply_,
-        bool paused_,
-        address admin
+        uint256 emissionsMinted_,
+        uint256 immediateMinted_,
+        bool paused_
     ) {
         return (
             name(),
             symbol(),
             totalSupply(),
-            cap(),
-            maxSupply(),
-            paused(),
-            address(0) // Admin address - would need to be tracked separately
+            MAX_SUPPLY,
+            totalMintedEmissions,
+            totalMintedImmediate,
+            paused()
         );
     }
 }

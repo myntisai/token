@@ -56,6 +56,9 @@ contract MyntisSpokeOFT is
     bytes32 public registryPeer; // Registry peer address on hub chain (for supply reporting)
     mapping(bytes32 guid => bool) public consumedGuids;
 
+    // SECURITY: Emergency mint limit per call (prevents massive inflation)
+    uint256 public constant EMERGENCY_MINT_LIMIT = 100_000 * 1e18; // 100k tokens max per emergency
+    
     // Events
     event PeerSet(uint32 indexed chainId, bytes32 indexed peer);
     event BridgeQueued(bytes32 indexed guid, uint32 indexed dstChainId, address indexed sender, address recipient, uint256 amount);
@@ -63,6 +66,7 @@ contract MyntisSpokeOFT is
     event TokensBridgedIn(address indexed to, uint256 amount);
     event TokensBridgedOut(address indexed from, uint256 amount);
     event SupplyChangeRequiresReporting(uint256 newTotalSupply, uint32 chainId);
+    event EmergencyMint(address indexed to, uint256 amount, string reason);
 
     error UnknownPeer(uint32 eid);
     error InvalidEndpoint();
@@ -91,7 +95,11 @@ contract MyntisSpokeOFT is
         address _hubToken,
         address _endpoint
     ) public initializer {
+        // SECURITY FIX: Validate all critical addresses
         require(_endpoint != address(0), "MyntisSpokeOFT: endpoint zero");
+        require(_delegate != address(0), "MyntisSpokeOFT: delegate zero");
+        require(_hubToken != address(0), "MyntisSpokeOFT: hub token zero");
+        require(_hubChainId != 0, "MyntisSpokeOFT: invalid hub chain");
 
         __ERC20_init(_name, _symbol);
         __Pausable_init();
@@ -183,6 +191,10 @@ contract MyntisSpokeOFT is
         return _bridge(_from, _dstChainId, recipient, _amount, bytes(""), bytes(""), msg.sender, false);
     }
 
+    /**
+     * @notice Internal bridge function
+     * @dev SECURITY FIX: Added whenNotPaused as defense-in-depth
+     */
     function _bridge(
         address from,
         uint32 dstChainId,
@@ -192,7 +204,7 @@ contract MyntisSpokeOFT is
         bytes memory options,
         address refundAddress,
         bool payInLzToken
-    ) internal returns (MessagingReceipt memory receipt) {
+    ) internal whenNotPaused returns (MessagingReceipt memory receipt) {
         require(amount > 0, "MyntisSpokeOFT: zero amount");
         require(to != address(0), "MyntisSpokeOFT: zero recipient");
         require(refundAddress != address(0), "MyntisSpokeOFT: zero refund");
@@ -247,6 +259,8 @@ contract MyntisSpokeOFT is
     /**
      * @notice LayerZero entrypoint for received packets.
      * @dev Endpoint guarantees (guid, origin) uniqueness; peers guard prevents untrusted senders.
+     * @dev SECURITY FIX: Added whenNotPaused to prevent minting during security incidents
+     * @dev Note: This may cause in-flight tokens to fail if contract is paused
      */
     function lzReceive(
         Origin calldata origin,
@@ -254,7 +268,7 @@ contract MyntisSpokeOFT is
         bytes32 guid,
         bytes calldata message,
         bytes calldata /* extraData */
-    ) external payable {
+    ) external payable whenNotPaused {
         if (msg.sender != address(endpoint)) revert InvalidEndpoint();
         if (receiver != address(this)) revert InvalidEndpoint();
 
@@ -353,6 +367,34 @@ contract MyntisSpokeOFT is
         }
     }
 
+    /**
+     * @notice Emergency mint for disaster recovery
+     * @param _to Recipient address
+     * @param _amount Amount to mint (capped)
+     * @param _reason Documented reason for emergency mint
+     * @dev SECURITY: This bypasses GlobalSupplyRegistry - use with extreme caution
+     * @dev SECURITY FIX: Emits SupplyChangeRequiresReporting for registry sync
+     * @dev Limited to EMERGENCY_MINT_LIMIT per call to prevent massive inflation
+     */
+    function emergencyMint(
+        address _to,
+        uint256 _amount,
+        string calldata _reason
+    ) external onlyRole(ADMIN_ROLE) {
+        require(_to != address(0), "MyntisSpokeOFT: zero recipient");
+        require(_amount > 0, "MyntisSpokeOFT: zero amount");
+        require(_amount <= EMERGENCY_MINT_LIMIT, "MyntisSpokeOFT: exceeds emergency limit");
+        require(bytes(_reason).length > 0, "MyntisSpokeOFT: reason required");
+        
+        _mint(_to, _amount);
+        
+        emit EmergencyMint(_to, _amount, _reason);
+        
+        // SECURITY FIX: Always emit supply change for registry sync
+        // This ensures the GlobalSupplyRegistry can be updated even though we bypass cap check
+        emit SupplyChangeRequiresReporting(totalSupply(), uint32(block.chainid));
+    }
+    
     /**
      * @notice Pause the contract
      */

@@ -28,7 +28,9 @@
   "dependencies": {
     "@layerzerolabs/lz-evm-protocol-v2": "^2.3.0",
     "@layerzerolabs/oapp-evm": "^0.4.0",
+    "@layerzerolabs/oapp-evm-upgradeable": "^0.1.2",
     "@layerzerolabs/oft-evm": "^4.0.0",
+    "@layerzerolabs/oft-evm-upgradeable": "^4.0.0",
     "@openzeppelin/contracts": "^5.2.0",
     "@openzeppelin/contracts-upgradeable": "^5.4.0",
     "circomlibjs": "^0.1.7",
