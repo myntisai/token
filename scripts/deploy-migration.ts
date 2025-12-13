@@ -34,6 +34,7 @@ interface MigrationDeploymentResult {
     dualPoolStaking: string;
     dualPoolStakingImpl: string;
     zkMerkleDistributor: string;
+    globalNullifier: string;
     liquidStakingVault: string;
     globalSupplyRegistry: string;
     network: string;
@@ -279,10 +280,23 @@ async function deployMigration(): Promise<MigrationDeploymentResult> {
     console.log(`  LiquidStakingVault deployed to: ${vaultAddress}`);
 
     // ============================================================
-    // STEP 9: Deploy GlobalSupplyRegistry
+    // STEP 9: Deploy GlobalNullifier
     // ============================================================
     console.log(`\n${"=".repeat(80)}`);
-    console.log("STEP 9: Deploying GlobalSupplyRegistry");
+    console.log("STEP 9: Deploying GlobalNullifier");
+    console.log("=".repeat(80));
+
+    const GlobalNullifierFactory = await ethers.getContractFactory("GlobalNullifier");
+    const globalNullifier = await GlobalNullifierFactory.deploy(deployer.address);
+    await globalNullifier.waitForDeployment();
+    const globalNullifierAddress = await globalNullifier.getAddress();
+    console.log(`  GlobalNullifier deployed to: ${globalNullifierAddress}`);
+
+    // ============================================================
+    // STEP 10: Deploy GlobalSupplyRegistry (Optional)
+    // ============================================================
+    console.log(`\n${"=".repeat(80)}`);
+    console.log("STEP 10: Deploying GlobalSupplyRegistry (Optional)");
     console.log("=".repeat(80));
 
     const RegistryFactory = await ethers.getContractFactory("GlobalSupplyRegistry");
@@ -295,10 +309,10 @@ async function deployMigration(): Promise<MigrationDeploymentResult> {
     console.log(`  GlobalSupplyRegistry deployed to: ${registryAddress}`);
 
     // ============================================================
-    // STEP 10: Configure Contracts
+    // STEP 11: Configure Contracts
     // ============================================================
     console.log(`\n${"=".repeat(80)}`);
-    console.log("STEP 10: Configuring Contracts");
+    console.log("STEP 11: Configuring Contracts");
     console.log("=".repeat(80));
 
     // Grant MINTER_ROLE to EmissionsContract
@@ -357,6 +371,7 @@ async function deployMigration(): Promise<MigrationDeploymentResult> {
         dualPoolStaking: stakingAddress,
         dualPoolStakingImpl: stakingImpl,
         zkMerkleDistributor: distributorAddress,
+        globalNullifier: globalNullifierAddress,
         liquidStakingVault: vaultAddress,
         globalSupplyRegistry: registryAddress,
         network: network.name,
@@ -377,8 +392,9 @@ async function deployMigration(): Promise<MigrationDeploymentResult> {
     console.log(`  4. DualPoolStaking:     ${stakingAddress}`);
     console.log(`     (Implementation):    ${stakingImpl}`);
     console.log(`  5. ZKMerkleDistributor: ${distributorAddress}`);
-    console.log(`  6. LiquidStakingVault:  ${vaultAddress}`);
-    console.log(`  7. GlobalSupplyRegistry: ${registryAddress}`);
+    console.log(`  6. GlobalNullifier:     ${globalNullifierAddress}`);
+    console.log(`  7. LiquidStakingVault:  ${vaultAddress}`);
+    console.log(`  8. GlobalSupplyRegistry: ${registryAddress}`);
     
     console.log(`\nMigration Stats:`);
     console.log(`  Holders migrated: ${result.migrationStats.totalHolders}`);
@@ -412,6 +428,7 @@ async function deployMigration(): Promise<MigrationDeploymentResult> {
     console.log(`EMISSIONS_CONTRACT_ADDRESS=${emissionsAddress}`);
     console.log(`MERKLE_DISTRIBUTOR_ADDRESS=${distributorAddress}`);
     console.log(`REWARD_CLAIM_VERIFIER_ADDRESS=${verifierAddress}`);
+    console.log(`GLOBAL_NULLIFIER_ADDRESS=${globalNullifierAddress}`);
     console.log(`LIQUID_STAKING_VAULT_ADDRESS=${vaultAddress}`);
     console.log(`GLOBAL_SUPPLY_REGISTRY_ADDRESS=${registryAddress}`);
 

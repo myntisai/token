@@ -333,6 +333,25 @@ contract MyntisSpokeOFT is
     }
 
     /**
+     * @notice Mint tokens to an address
+     * @param to Recipient address
+     * @param amount Amount to mint
+     * @dev Used by SpokeDistributor for reward payouts
+     * @dev MINTER_ROLE required - should be granted to SpokeDistributor
+     */
+    function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) whenNotPaused {
+        require(to != address(0), "MyntisSpokeOFT: zero recipient");
+        require(amount > 0, "MyntisSpokeOFT: zero amount");
+        
+        _mint(to, amount);
+        
+        // Emit event to trigger supply reporting
+        if (registryPeer != bytes32(0)) {
+            emit SupplyChangeRequiresReporting(totalSupply(), uint32(block.chainid));
+        }
+    }
+
+    /**
      * @notice Bridge tokens in from hub chain
      * @param _to Destination address
      * @param _amount Amount to bridge

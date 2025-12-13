@@ -16,10 +16,21 @@ interface ISpokeToken {
 }
 
 /**
+ * @title IGlobalNullifier
+ * @notice Interface for hub-side global nullifier contract
+ * @dev Used by spokes to prevent cross-chain double-claims
+ */
+interface IGlobalNullifier {
+    function burnNullifier(bytes32 nullifier, uint32 chainId, address user) external;
+    function isNullifierBurned(bytes32 nullifier) external view returns (bool);
+}
+
+/**
  * @title SpokeDistributor
  * @notice Spoke-side claim handler with GlobalNullifier integration
  * @dev Prevents double-claiming via cross-chain nullifier verification
  * @dev SECURITY FIX: Uses typed interface for spoke token
+ * @dev Calls hub GlobalNullifier to enforce cross-chain anti-double-claim
  */
 contract SpokeDistributor is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
@@ -27,12 +38,13 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
 
     // Hub chain information
     uint32 public immutable hubChainId;
-    address public immutable hubGlobalNullifier;
+    IGlobalNullifier public immutable globalNullifier;
     
     // SECURITY FIX: Use typed interface for spoke token
     ISpokeToken public immutable spokeToken;
     
-    // Claim tracking
+    // Claim tracking - local mapping as additional guard against replay
+    // The hub's GlobalNullifier is the authoritative source
     mapping(bytes32 => bool) public nullifiers;
     mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
     
@@ -76,7 +88,7 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         require(admin != address(0), "invalid admin");
         
         hubChainId = _hubChainId;
-        hubGlobalNullifier = _hubGlobalNullifier;
+        globalNullifier = IGlobalNullifier(_hubGlobalNullifier);
         spokeToken = ISpokeToken(_spokeToken);
         
         _grantRole(ADMIN_ROLE, admin);
@@ -166,7 +178,11 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         // Ensure enough balance for this epoch
         require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
 
-        // Mark as claimed and burn nullifier
+        // CRITICAL: Burn nullifier on hub to prevent cross-chain double-claims
+        // This call will revert if the nullifier was already used on ANY chain
+        globalNullifier.burnNullifier(nullifier, uint32(block.chainid), claimant);
+        
+        // Mark as claimed locally
         claimed[provider][rootIndex][claimant] = true;
         nullifiers[nullifier] = true;
         e.claimedAmount += amount;
@@ -182,7 +198,7 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         require(balAfter >= balBefore + amount, "mint verification failed");
 
         emit RewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
-        emit NullifierBurned(nullifier, hubChainId, claimant);
+        emit NullifierBurned(nullifier, uint32(block.chainid), claimant);
     }
 
     /**
@@ -294,7 +310,7 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
     /**
      * @notice Get hub chain information
      */
-    function getHubInfo() external view returns (uint32 chainId, address globalNullifier) {
-        return (hubChainId, hubGlobalNullifier);
+    function getHubInfo() external view returns (uint32 chainId, address globalNullifierAddr) {
+        return (hubChainId, address(globalNullifier));
     }
 }
