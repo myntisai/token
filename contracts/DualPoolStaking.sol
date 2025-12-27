@@ -62,6 +62,9 @@ contract DualPoolStaking is
     address public emissionsContract;
     address public liquidStakingVault;
     
+    // OPTION B: ZK Merkle Distributor for auto-funding provider balances
+    address public zkMerkleDistributor;
+    
     // Pool information
     PoolInfo public providerPool;
     PoolInfo public userPool;
@@ -98,6 +101,9 @@ contract DualPoolStaking is
     event UnclaimedRewardsSentToTreasury(uint256 providerAmount, uint256 userAmount);
     event TreasuryRewardsQueued(uint256 amount, uint256 totalPending);
     event TreasuryWithdrawal(address indexed treasury, uint256 amount);
+    event ZkMerkleDistributorUpdated(address indexed oldDistributor, address indexed newDistributor);
+    event EmissionsContractUpdated(address indexed oldEmissions, address indexed newEmissions);
+    event ProviderBalanceFunded(address indexed provider, uint256 amount, address indexed distributor);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -161,6 +167,35 @@ contract DualPoolStaking is
         address oldTreasury = treasury;
         treasury = _treasury;
         emit TreasuryUpdated(oldTreasury, _treasury);
+    }
+    
+    /**
+     * @notice Set the ZK Merkle Distributor address
+     * @param _zkMerkleDistributor The distributor contract address
+     * @dev OPTION B: Staking will auto-fund provider balances on this distributor
+     */
+    function setZkMerkleDistributor(address _zkMerkleDistributor) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_zkMerkleDistributor != address(0), "Invalid distributor address");
+        address oldDistributor = zkMerkleDistributor;
+        zkMerkleDistributor = _zkMerkleDistributor;
+        emit ZkMerkleDistributorUpdated(oldDistributor, _zkMerkleDistributor);
+    }
+    
+    /**
+     * @notice Set the emissions contract address
+     * @param _emissionsContract The new emissions contract address
+     * @dev Allows upgrading emissions logic without redeploying staking
+     */
+    function setEmissionsContract(address _emissionsContract) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_emissionsContract != address(0), "Invalid emissions address");
+        address oldEmissions = emissionsContract;
+        emissionsContract = _emissionsContract;
+        
+        // Update emissions role
+        _revokeRole(EMISSIONS_ROLE, oldEmissions);
+        _grantRole(EMISSIONS_ROLE, _emissionsContract);
+        
+        emit EmissionsContractUpdated(oldEmissions, _emissionsContract);
     }
     
     /**
@@ -341,6 +376,7 @@ contract DualPoolStaking is
     /**
      * @notice Harvest emission rewards for a provider from EmissionsContract
      * @dev SECURITY FIX: Allows providers to trigger harvest from emissions
+     * @dev OPTION B: After harvest, minted tokens are held in this contract (staking)
      * @param provider Provider address to harvest for
      * @return amount Amount of tokens harvested
      */
@@ -351,10 +387,50 @@ contract DualPoolStaking is
         require(user.isProvider || (user.poolType == PoolType.Provider && user.amount > 0), 
                 "Not a provider");
         
-        // Call EmissionsContract.harvest() which will mint tokens to provider
+        // Call EmissionsContract.harvest() which mints tokens to THIS contract (staking)
+        // Emissions were updated to mint to staking for OPTION B architecture
         amount = IEmissionsContract(emissionsContract).harvest(provider);
         
         return amount;
+    }
+    
+    /**
+     * @notice Fund provider balance on ZK Merkle Distributor
+     * @param provider Provider address to fund
+     * @param amount Amount to fund
+     * @dev OPTION B: Transfers harvested tokens from staking to distributor providerBalance
+     * @dev Can be called by provider or admin after harvest
+     */
+    function fundProviderBalance(address provider, uint256 amount) external nonReentrant {
+        require(zkMerkleDistributor != address(0), "Distributor not set");
+        require(provider != address(0), "Invalid provider");
+        require(amount > 0, "Amount must be positive");
+        
+        // Only provider themselves or admin can fund
+        require(
+            msg.sender == provider || hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
+            "Only provider or admin"
+        );
+        
+        // Check staking contract has sufficient balance
+        uint256 stakingBalance = token.balanceOf(address(this));
+        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
+        uint256 available = stakingBalance > accounted ? stakingBalance - accounted : 0;
+        
+        require(available >= amount, "Insufficient available balance in staking");
+        
+        // Approve distributor to pull tokens
+        token.approve(zkMerkleDistributor, amount);
+        
+        // Call distributor to fund provider balance
+        // Distributor will pull tokens via transferFrom
+        (bool success, ) = zkMerkleDistributor.call(
+            abi.encodeWithSignature("notifyRewardWithTransfer(address,uint256)", provider, amount)
+        );
+        require(success, "Distributor funding failed");
+        
+        emit ProviderBalanceFunded(provider, amount, zkMerkleDistributor);
     }
     
     /**

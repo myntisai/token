@@ -342,7 +342,8 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         stakingContract.notifyReward(provider, pending);
 
         // Interactions - external calls last
-        token.mint(provider, pending);
+        // OPTION B: Mint to staking contract (not provider EOA) so staking can fund distributor
+        token.mint(address(stakingContract), pending);
 
         emit ProviderRewardsHarvested(provider, pending);
         return pending;

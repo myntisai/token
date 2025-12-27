@@ -16,35 +16,21 @@ interface ISpokeToken {
 }
 
 /**
- * @title IGlobalNullifier
- * @notice Interface for hub-side global nullifier contract
- * @dev Used by spokes to prevent cross-chain double-claims
- */
-interface IGlobalNullifier {
-    function burnNullifier(bytes32 nullifier, uint32 chainId, address user) external;
-    function isNullifierBurned(bytes32 nullifier) external view returns (bool);
-}
-
-/**
  * @title SpokeDistributor
- * @notice Spoke-side claim handler with GlobalNullifier integration
- * @dev Prevents double-claiming via cross-chain nullifier verification
+ * @notice Spoke-side Merkle distributor for reward claims
+ * @dev Cross-chain safety via chainId in Merkle leaf (not global nullifier)
  * @dev SECURITY FIX: Uses typed interface for spoke token
- * @dev Calls hub GlobalNullifier to enforce cross-chain anti-double-claim
+ * @dev Mints tokens on claim (spoke-side minting model)
  */
 contract SpokeDistributor is AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
     bytes32 public constant PROVIDER_ROLE = keccak256("PROVIDER_ROLE");
-
-    // Hub chain information
-    uint32 public immutable hubChainId;
-    IGlobalNullifier public immutable globalNullifier;
     
     // SECURITY FIX: Use typed interface for spoke token
     ISpokeToken public immutable spokeToken;
     
-    // Claim tracking - local mapping as additional guard against replay
-    // The hub's GlobalNullifier is the authoritative source
+    // Claim tracking - prevent same-chain replay attacks
+    // Cross-chain protection via chainId in Merkle leaf
     mapping(bytes32 => bool) public nullifiers;
     mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
     
@@ -73,22 +59,16 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
     event MerkleRootSubmitted(address indexed provider, uint256 rootIndex, bytes32 root, uint256 expiry, uint256 totalClaimable);
     event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount, bytes32 nullifier);
     event EpochClosed(address indexed provider, uint256 rootIndex);
-    event NullifierBurned(bytes32 indexed nullifier, uint32 indexed chainId, address indexed user);
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
     event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
 
     constructor(
-        uint32 _hubChainId,
-        address _hubGlobalNullifier,
         address _spokeToken,
         address admin
     ) {
         require(_spokeToken != address(0), "invalid spoke token");
-        require(_hubGlobalNullifier != address(0), "invalid hub nullifier");
         require(admin != address(0), "invalid admin");
         
-        hubChainId = _hubChainId;
-        globalNullifier = IGlobalNullifier(_hubGlobalNullifier);
         spokeToken = ISpokeToken(_spokeToken);
         
         _grantRole(ADMIN_ROLE, admin);
@@ -171,16 +151,12 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
         require(!e.closed, "epoch closed");
 
-        // Verify Merkle proof
-        bytes32 leaf = keccak256(abi.encode(claimant, amount));
+        // Verify Merkle proof with chainId to prevent cross-chain proof reuse
+        bytes32 leaf = keccak256(abi.encode(claimant, amount, block.chainid));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
 
         // Ensure enough balance for this epoch
         require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
-
-        // CRITICAL: Burn nullifier on hub to prevent cross-chain double-claims
-        // This call will revert if the nullifier was already used on ANY chain
-        globalNullifier.burnNullifier(nullifier, uint32(block.chainid), claimant);
         
         // Mark as claimed locally
         claimed[provider][rootIndex][claimant] = true;
@@ -198,7 +174,6 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         require(balAfter >= balBefore + amount, "mint verification failed");
 
         emit RewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
-        emit NullifierBurned(nullifier, uint32(block.chainid), claimant);
     }
 
     /**
