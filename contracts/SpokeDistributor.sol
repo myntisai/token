@@ -269,23 +269,4 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         SpokeMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
         return (e.root, e.expiry, e.closed, e.totalClaimable, e.claimedAmount);
     }
-
-    /**
-     * @notice Generate nullifier hash
-     * @dev Should match the hub's GlobalNullifier.generateNullifier
-     */
-    function generateNullifier(
-        address user,
-        uint256 rootId,
-        uint32 chainId
-    ) external pure returns (bytes32) {
-        return keccak256(abi.encode(user, rootId, chainId));
-    }
-
-    /**
-     * @notice Get hub chain information
-     */
-    function getHubInfo() external view returns (uint32 chainId, address globalNullifierAddr) {
-        return (hubChainId, address(globalNullifier));
-    }
 }
