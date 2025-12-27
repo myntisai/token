@@ -147,6 +147,23 @@ contract DualPoolStaking is
     }
     
     /**
+     * @notice Reinitialize pool configuration (fixes broken state from v1)
+     * @dev Uses reinitializer(2) to allow one-time execution after v1
+     */
+    function reinitializeV2() public reinitializer(2) onlyRole(DEFAULT_ADMIN_ROLE) {
+        // Fix pool emission shares
+        providerPool.emissionShare = 875; // 87.5%
+        userPool.emissionShare = 125;     // 12.5%
+        
+        // Fix lastRewardTime to current timestamp
+        providerPool.lastRewardTime = block.timestamp;
+        userPool.lastRewardTime = block.timestamp;
+        
+        // Fix minProviderStake (1000 MYNT)
+        minProviderStake = 1000 * 1e18;
+    }
+    
+    /**
      * @notice Set the liquid staking vault address
      * @param _liquidStakingVault The ERC-4626 vault address
      * @dev SECURITY FIX: Added zero address validation
