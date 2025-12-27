@@ -10,9 +10,17 @@ import {RewardClaimVerifier} from "./RewardClaimVerifier.sol";
 
 /**
  * @title ZKMerkleDistributor
- * @notice ZK-verified Merkle distributor for privacy-preserving reward claims
- * @dev Integrates ZK proof verification with Merkle tree distribution
- * @dev Prevents double-claiming through nullifier tracking
+ * @notice Provider-side ZK-verified Merkle distributor for reward claims
+ * @dev Providers submit Merkle roots with ZK proofs proving honest reward calculation
+ * @dev Users claim with simple Merkle proofs (no user-side ZK required)
+ * 
+ * Architecture:
+ * - Provider generates ONE ZK proof per epoch proving:
+ *   1. AI scores/multipliers are within valid bounds
+ *   2. Total reward amount is reasonable
+ *   3. Batch data commitment binds to Merkle root
+ * - Users claim with standard Merkle proofs (~50k gas vs ~280k with user ZK)
+ * - Privacy: Hides provider's AI strategy, not individual user addresses
  */
 contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -23,15 +31,14 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     // Token contract
     IERC20 public immutable token;
     
-    // ZK verifier contract
+    // ZK verifier contract (for provider proofs)
     RewardClaimVerifier public immutable verifier;
     
     // Provider balances and locked amounts
+    // providerBalance: tokens available for new epochs
+    // lockedBalance: tokens reserved for active epochs
     mapping(address => uint256) public providerBalance;
     mapping(address => uint256) public lockedBalance;
-    
-    // SECURITY FIX: Recipient for slashed tokens
-    address public slashRecipient;
     
     // Epoch management
     struct EpochMerkleRoot {
@@ -40,21 +47,21 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         bool closed;
         uint256 totalClaimable;
         uint256 claimedAmount;
-        bool zkEnabled; // Whether ZK proofs are required for this epoch
+        bool providerProofVerified; // Whether provider's ZK proof was verified
+        bytes32 batchHash; // Hash of batch data for verification
     }
     
     mapping(address => EpochMerkleRoot[]) public providerMerkleRoots;
     mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
     
-    // ZK claim tracking
-    mapping(bytes32 => bool) public zkClaimed; // nullifier => claimed
-    mapping(address => uint256) public zkClaimCount; // user => claim count
+    // Slash recipient (receives tokens when provider is slashed)
+    address public slashRecipient;
     
     // Constants
     uint256 public constant MIN_EXPIRY_DURATION = 1 days;
     uint256 public constant EPOCH_GRACE_PERIOD = 2 days;
-    uint256 public constant CLOSE_DELAY = 1 hours; // SECURITY FIX: Delay after grace period before closing
-    uint256 public constant MAX_BATCH_SIZE = 20; // SECURITY FIX: Prevent gas griefing in batch operations
+    uint256 public constant CLOSE_DELAY = 1 hours;
+    uint256 public constant MAX_BATCH_SIZE = 50; // Batch claim limit
     
     // Events
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
@@ -64,14 +71,7 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         bytes32 root, 
         uint256 expiry, 
         uint256 totalClaimable,
-        bool zkEnabled
-    );
-    event ZKRewardsClaimed(
-        address indexed user, 
-        address indexed provider, 
-        uint256 rootIndex, 
-        uint256 amount,
-        bytes32 nullifier
+        bytes32 batchHash
     );
     event RewardsClaimed(
         address indexed user, 
@@ -82,7 +82,6 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     event EpochClosed(address indexed provider, uint256 rootIndex);
     event ProviderSlashed(address indexed provider, uint256 amount);
     event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
-    event SlashRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
     
     constructor(address _token, address _verifier, address admin) {
         token = IERC20(_token);
@@ -91,36 +90,123 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     }
     
     /**
+     * @notice Set the slash recipient address
+     * @param _slashRecipient Address to receive slashed tokens
+     */
+    function setSlashRecipient(address _slashRecipient) external onlyRole(ADMIN_ROLE) {
+        require(_slashRecipient != address(0), "invalid slash recipient");
+        slashRecipient = _slashRecipient;
+    }
+    
+    /**
      * @notice Add balance for a provider
      * @param provider Provider address
      * @param amount Amount to add
-     * @dev Requires actual token transfer to prevent claims without funds
+     * @dev HUB CHAIN ARCHITECTURE:
+     *      - Tokens are held in this contract (NOT burned)
+     *      - providerBalance tracks how much provider can distribute
+     *      - Users claim via transfer from contract holdings
+     *      - For spoke chains, use SpokeDistributor which mints tokens
      */
     function addProviderBalance(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
         require(amount > 0, "zero amount");
         require(provider != address(0), "invalid provider");
         
-        // Require actual token transfer to ensure funds are available
+        // Transfer tokens from sender to this contract and HOLD them
         token.safeTransferFrom(msg.sender, address(this), amount);
         
+        // Update accounting (tokens are held in contract for claims)
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
     
     /**
-     * @notice Submit Merkle root for an epoch with ZK option
-     * @param root Merkle root
+     * @notice Deposit tokens to fund your own provider balance
+     * @param amount Amount to deposit
+     * @dev Allows providers to deposit their harvested rewards without needing ADMIN_ROLE
+     * @dev Provider must approve this contract first, then call depositBalance
+     * @dev HUB CHAIN: Tokens are held in contract (NOT burned)
+     */
+    function depositBalance(uint256 amount) external onlyRole(PROVIDER_ROLE) {
+        require(amount > 0, "zero amount");
+        
+        // Transfer tokens from provider to this contract
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
+        // Update accounting for the calling provider
+        providerBalance[msg.sender] += amount;
+        emit ProviderBalanceUpdated(msg.sender, providerBalance[msg.sender]);
+    }
+    
+    /**
+     * @notice Submit Merkle root with provider ZK proof
+     * @param root Merkle root of the reward distribution
      * @param expiry Expiry timestamp
      * @param totalClaimableAmount Total claimable amount
-     * @param zkEnabled Whether ZK proofs are required
-     * @dev SECURITY FIX: Requires PROVIDER_ROLE to prevent unauthorized root submissions
+     * @param providerZKProof Provider's ZK proof proving honest calculation
+     * @param publicInputs Public inputs [merkleRoot, totalAmount, batchHash]
+     * @dev Provider's ZK proof proves:
+     *      - AI scores/multipliers are within valid bounds
+     *      - Total amount is reasonable given user count and multipliers
+     *      - Merkle root is correctly derived from batch commitment
      */
     function submitMerkleRoot(
         bytes32 root,
         uint256 expiry,
         uint256 totalClaimableAmount,
-        bool zkEnabled
+        RewardClaimVerifier.Proof calldata providerZKProof,
+        uint256[3] calldata publicInputs
     ) external nonReentrant onlyRole(PROVIDER_ROLE) {
+        require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
+        require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
+        require(totalClaimableAmount > 0, "zero claimable");
+        
+        // Verify public inputs match submitted values
+        // publicInputs[0] = merkleRoot (as uint256)
+        // publicInputs[1] = totalAmount
+        // publicInputs[2] = batchHash
+        require(bytes32(publicInputs[0]) == root, "Root mismatch");
+        require(publicInputs[1] == totalClaimableAmount, "Amount mismatch");
+        
+        // Verify provider's ZK proof (reverts if invalid)
+        verifier.verifyProviderProof(providerZKProof, publicInputs);
+        
+        // Lock the balance for this epoch
+        providerBalance[msg.sender] -= totalClaimableAmount;
+        lockedBalance[msg.sender] += totalClaimableAmount;
+        
+        providerMerkleRoots[msg.sender].push(EpochMerkleRoot({
+            root: root,
+            expiry: expiry,
+            closed: false,
+            totalClaimable: totalClaimableAmount,
+            claimedAmount: 0,
+            providerProofVerified: true,
+            batchHash: bytes32(publicInputs[2])
+        }));
+        
+        emit MerkleRootSubmitted(
+            msg.sender, 
+            providerMerkleRoots[msg.sender].length - 1, 
+            root, 
+            expiry, 
+            totalClaimableAmount,
+            bytes32(publicInputs[2])
+        );
+    }
+    
+    /**
+     * @notice Submit Merkle root without ZK proof (for legacy/testing)
+     * @param root Merkle root
+     * @param expiry Expiry timestamp
+     * @param totalClaimableAmount Total claimable amount
+     * @dev Only for testing or migration, should be disabled in production
+     */
+    function submitMerkleRootWithoutProof(
+        bytes32 root,
+        uint256 expiry,
+        uint256 totalClaimableAmount
+    ) external nonReentrant onlyRole(ADMIN_ROLE) {
         require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
         require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
         require(totalClaimableAmount > 0, "zero claimable");
@@ -135,7 +221,8 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
             closed: false,
             totalClaimable: totalClaimableAmount,
             claimedAmount: 0,
-            zkEnabled: zkEnabled
+            providerProofVerified: false, // Not ZK verified
+            batchHash: bytes32(0)
         }));
         
         emit MerkleRootSubmitted(
@@ -144,108 +231,34 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
             root, 
             expiry, 
             totalClaimableAmount,
-            zkEnabled
+            bytes32(0)
         );
     }
     
     /**
-     * @notice Claim rewards with ZK proof
+     * @notice Claim rewards with Merkle proof
      * @param provider Provider address
      * @param rootIndex Merkle root index
      * @param amount Claim amount
      * @param merkleProof Merkle proof
-     * @param zkProof ZK proof
-     * @param publicInputs Public inputs [merkleRoot, nullifier, claimAmount]
+     * @dev Users only need Merkle proof, no ZK proof required
+     * @dev Gas cost: ~50k (vs ~280k with user ZK)
      */
-    function claimWithZK(
+    function claim(
         address provider,
         uint256 rootIndex,
         uint256 amount,
-        bytes32[] calldata merkleProof,
-        RewardClaimVerifier.Proof memory zkProof,
-        uint256[3] memory publicInputs
+        bytes32[] calldata merkleProof
     ) external nonReentrant {
-        _claimWithZK(msg.sender, provider, rootIndex, amount, merkleProof, zkProof, publicInputs);
-    }
-
-    /**
-     * @notice Internal function to claim with ZK proof
-     * @dev SECURITY FIX: Check nullifier BEFORE calling verifier to prevent race condition
-     * @dev SECURITY FIX: Use bytes32 casting for root comparison
-     */
-    function _claimWithZK(
-        address claimant,
-        address provider,
-        uint256 rootIndex,
-        uint256 amount,
-        bytes32[] calldata merkleProof,
-        RewardClaimVerifier.Proof memory zkProof,
-        uint256[3] memory publicInputs
-    ) internal {
-        require(provider != address(0), "invalid provider");
-        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
-        require(amount > 0, "zero amount");
-        require(!claimed[provider][rootIndex][claimant], "already claimed");
-        
-        EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
-        require(e.zkEnabled, "ZK not enabled for this epoch");
-        require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
-        require(!e.closed, "epoch closed");
-        
-        // Verify Merkle proof
-        bytes32 leaf = keccak256(abi.encode(claimant, amount));
-        require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
-        
-        // SECURITY FIX: Use consistent bytes32 encoding for root comparison
-        require(bytes32(publicInputs[0]) == e.root, "ZK root mismatch");
-        // publicInputs[2] must equal the claimed amount
-        require(publicInputs[2] == amount, "ZK amount mismatch");
-        
-        // SECURITY FIX: Extract and check nullifier BEFORE any state changes
-        bytes32 nullifier = bytes32(publicInputs[1]);
-        require(!zkClaimed[nullifier], "nullifier already used");
-        
-        // Ensure enough locked balance for this specific epoch
-        require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
-        
-        // CRITICAL FIX: Update ALL local state BEFORE any external calls
-        // This prevents the vulnerability where verifier marks nullifier but local state isn't set
-        // If verifier call fails after this, the whole transaction reverts including local state
-        // If transfer fails after verifier, whole transaction reverts and nullifier is not burned
-        zkClaimed[nullifier] = true;
-        claimed[provider][rootIndex][claimant] = true;
-        e.claimedAmount += amount;
-        zkClaimCount[claimant]++;
-        lockedBalance[provider] -= amount;
-        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
-        
-        // Now verify ZK proof - if this fails, ALL state changes above revert
-        // The verifier marking the nullifier is a backup/double-check
-        require(verifier.verifyAndUseProof(zkProof, publicInputs), "invalid ZK proof");
-        
-        // Transfer tokens last (CEI pattern - interactions last)
-        token.safeTransfer(claimant, amount);
-        
-        emit ZKRewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
+        _claim(msg.sender, provider, rootIndex, amount, merkleProof);
     }
     
     /**
-     * @notice Claim rewards without ZK proof (legacy support)
-     * @param provider Provider address
-     * @param rootIndex Merkle root index
-     * @param amount Claim amount
-     * @param merkleProof Merkle proof
+     * @notice Internal claim function
+     * @dev Merkle leaf includes chainId: keccak256(user, amount, chainId)
+     * @dev This prevents cross-chain double-claims by design
      */
-    function claimWithoutZK(
-        address provider,
-        uint256 rootIndex,
-        uint256 amount,
-        bytes32[] calldata merkleProof
-    ) external nonReentrant {
-        _claimWithoutZK(msg.sender, provider, rootIndex, amount, merkleProof);
-    }
-
-    function _claimWithoutZK(
+    function _claim(
         address claimant,
         address provider,
         uint256 rootIndex,
@@ -258,12 +271,12 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         require(!claimed[provider][rootIndex][claimant], "already claimed");
         
         EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
-        require(!e.zkEnabled, "ZK required for this epoch");
         require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
         require(!e.closed, "epoch closed");
         
-        // Verify Merkle proof
-        bytes32 leaf = keccak256(abi.encode(claimant, amount));
+        // Verify Merkle proof with chainId in leaf
+        // This prevents cross-chain double-claims - proof only valid on this chain
+        bytes32 leaf = keccak256(abi.encode(claimant, amount, block.chainid));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
         
         // Ensure enough locked balance for this specific epoch
@@ -272,8 +285,6 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         // Update state
         claimed[provider][rootIndex][claimant] = true;
         e.claimedAmount += amount;
-        
-        // CRITICAL FIX: Update lockedBalance (was missing, causing accounting corruption)
         lockedBalance[provider] -= amount;
         emit LockedBalanceUpdated(provider, lockedBalance[provider]);
         
@@ -284,52 +295,45 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     }
     
     /**
-     * @notice Batch claim rewards with ZK proofs
+     * @notice Batch claim rewards from multiple epochs
      * @param providers Provider addresses
      * @param rootIndices Merkle root indices
      * @param amounts Claim amounts
      * @param merkleProofs Merkle proofs
-     * @param zkProofs ZK proofs
-     * @param publicInputsList Public inputs for each claim
-     * @dev SECURITY FIX: Limited to MAX_BATCH_SIZE to prevent gas griefing
+     * @dev Limited to MAX_BATCH_SIZE to prevent gas griefing
      */
-    function batchClaimWithZK(
+    function batchClaim(
         address[] calldata providers,
         uint256[] calldata rootIndices,
         uint256[] calldata amounts,
-        bytes32[][] calldata merkleProofs,
-        RewardClaimVerifier.Proof[] memory zkProofs,
-        uint256[3][] memory publicInputsList
+        bytes32[][] calldata merkleProofs
     ) external nonReentrant {
-        // SECURITY FIX: Limit batch size to prevent gas griefing
         require(providers.length <= MAX_BATCH_SIZE, "Batch too large");
         require(
             providers.length == rootIndices.length &&
             rootIndices.length == amounts.length &&
-            amounts.length == merkleProofs.length &&
-            merkleProofs.length == zkProofs.length &&
-            zkProofs.length == publicInputsList.length,
+            amounts.length == merkleProofs.length,
             "Arrays length mismatch"
         );
         
         for (uint256 i = 0; i < providers.length; i++) {
-            _claimWithZK(
+            _claim(
                 msg.sender,
                 providers[i], 
                 rootIndices[i], 
                 amounts[i], 
-                merkleProofs[i], 
-                zkProofs[i], 
-                publicInputsList[i]
+                merkleProofs[i]
             );
         }
     }
     
     /**
-     * @notice Close an epoch and return unclaimed funds
+     * @notice Close an epoch - unclaimed tokens returned to provider balance
      * @param provider Provider address
      * @param rootIndex Merkle root index
-     * @dev SECURITY FIX: Added CLOSE_DELAY to prevent frontrunning legitimate claims
+     * @dev HUB CHAIN ARCHITECTURE:
+     *      - Tokens are held in contract
+     *      - Unclaimed tokens are returned to providerBalance for future epochs
      */
     function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
@@ -339,11 +343,12 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         
         e.closed = true;
         
-        // Return any unclaimed balance to the provider
+        // Return unclaimed tokens to provider's available balance
         if (e.totalClaimable > e.claimedAmount) {
             uint256 unclaimed = e.totalClaimable - e.claimedAmount;
             lockedBalance[provider] -= unclaimed;
-            providerBalance[provider] += unclaimed;
+            providerBalance[provider] += unclaimed; // Return to available balance
+            emit LockedBalanceUpdated(provider, lockedBalance[provider]);
             emit ProviderBalanceUpdated(provider, providerBalance[provider]);
         }
         
@@ -351,30 +356,21 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     }
     
     /**
-     * @notice Set the recipient for slashed tokens
-     * @param recipient Address to receive slashed tokens
-     * @dev SECURITY FIX: Required for slash to actually transfer tokens
-     */
-    function setSlashRecipient(address recipient) external onlyRole(ADMIN_ROLE) {
-        require(recipient != address(0), "invalid recipient");
-        address oldRecipient = slashRecipient;
-        slashRecipient = recipient;
-        emit SlashRecipientUpdated(oldRecipient, recipient);
-    }
-    
-    /**
-     * @notice Slash a provider's balance
+     * @notice Slash a provider's balance and transfer tokens to slash recipient
      * @param provider Provider address
      * @param amount Amount to slash
-     * @dev SECURITY FIX: Now actually transfers tokens to slashRecipient
+     * @dev HUB CHAIN ARCHITECTURE:
+     *      - Tokens are held in contract
+     *      - Slashing transfers tokens from provider's balance to slash recipient
      */
     function slashProvider(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
         require(amount <= providerBalance[provider], "insufficient balance");
         require(slashRecipient != address(0), "slash recipient not set");
         
+        // Reduce provider's accounting balance
         providerBalance[provider] -= amount;
         
-        // SECURITY FIX: Transfer slashed tokens to recipient
+        // Transfer slashed tokens to recipient
         token.safeTransfer(slashRecipient, amount);
         
         emit ProviderSlashed(provider, amount);
@@ -408,7 +404,8 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
      * @return closed Whether epoch is closed
      * @return totalClaimable Total claimable amount
      * @return claimedAmount Amount already claimed
-     * @return zkEnabled Whether ZK is enabled
+     * @return providerProofVerified Whether provider ZK proof was verified
+     * @return batchHash Batch hash from ZK proof
      */
     function getEpochInfo(address provider, uint256 rootIndex) external view returns (
         bytes32 root,
@@ -416,11 +413,12 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         bool closed,
         uint256 totalClaimable,
         uint256 claimedAmount,
-        bool zkEnabled
+        bool providerProofVerified,
+        bytes32 batchHash
     ) {
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
-        return (e.root, e.expiry, e.closed, e.totalClaimable, e.claimedAmount, e.zkEnabled);
+        return (e.root, e.expiry, e.closed, e.totalClaimable, e.claimedAmount, e.providerProofVerified, e.batchHash);
     }
     
     /**
@@ -435,20 +433,11 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     }
     
     /**
-     * @notice Check if nullifier has been used
-     * @param nullifier Nullifier to check
-     * @return True if nullifier has been used
+     * @notice Get number of epochs for a provider
+     * @param provider Provider address
+     * @return Number of epochs
      */
-    function isNullifierUsed(bytes32 nullifier) external view returns (bool) {
-        return zkClaimed[nullifier];
-    }
-    
-    /**
-     * @notice Get user's ZK claim count
-     * @param user User address
-     * @return Number of ZK claims made
-     */
-    function getZKClaimCount(address user) external view returns (uint256) {
-        return zkClaimCount[user];
+    function getEpochCount(address provider) external view returns (uint256) {
+        return providerMerkleRoots[provider].length;
     }
 }

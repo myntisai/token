@@ -8,25 +8,32 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 /**
+ * @title IBurnableToken
+ * @notice Interface for tokens that support burning
+ */
+interface IBurnableToken is IERC20 {
+    function burn(uint256 amount) external;
+}
+
+/**
  * @title MerkleDistributor
  * @notice Production Merkle distributor for Myntis rewards
  * @dev Fixed balance exhaustion and CEI pattern issues
  */
 contract MerkleDistributor is AccessControl, ReentrancyGuard {
-    using SafeERC20 for IERC20;
+    using SafeERC20 for IBurnableToken;
 
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
     bytes32 public constant PROVIDER_ROLE = keccak256("PROVIDER_ROLE");
 
-    IERC20 public immutable token;
+    // Token contract (must support burning for Option B architecture)
+    IBurnableToken public immutable token;
     
     // Provider balances and locked amounts
+    // NOTE: In Option B, these are accounting-only - actual tokens are burned on deposit
     mapping(address => uint256) public providerBalance;
     mapping(address => uint256) public lockedBalance;
     address public stakingContract;
-    
-    // SECURITY FIX: Recipient for slashed tokens
-    address public slashRecipient;
     
     // Epoch management
     struct EpochMerkleRoot {
@@ -51,16 +58,13 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     event MerkleRootSubmitted(address indexed provider, uint256 rootIndex, bytes32 root, uint256 expiry, uint256 totalClaimable);
     event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount);
     event EpochClosed(address indexed provider, uint256 rootIndex);
-    event ProviderSlashed(address indexed provider, uint256 amount, address indexed recipient);
+    event ProviderSlashed(address indexed provider, uint256 amount);
     event StakingContractUpdated(address indexed stakingContract);
-    event SlashRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
     event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
 
     constructor(address _token, address _admin) {
-        token = IERC20(_token);
+        token = IBurnableToken(_token);
         _grantRole(ADMIN_ROLE, _admin);
-        // SECURITY FIX: Set initial slash recipient to admin
-        slashRecipient = _admin;
     }
 
     /**
@@ -70,18 +74,6 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         require(staking != address(0), "invalid staking");
         stakingContract = staking;
         emit StakingContractUpdated(staking);
-    }
-    
-    /**
-     * @notice Set the recipient for slashed tokens
-     * @param recipient Address to receive slashed tokens
-     * @dev SECURITY FIX: Allows recovery of slashed tokens
-     */
-    function setSlashRecipient(address recipient) external onlyRole(ADMIN_ROLE) {
-        require(recipient != address(0), "invalid recipient");
-        address oldRecipient = slashRecipient;
-        slashRecipient = recipient;
-        emit SlashRecipientUpdated(oldRecipient, recipient);
     }
     
     /**
@@ -102,18 +94,50 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @notice Add balance for a provider
-     * @dev Requires actual token transfer to prevent claims without funds
+     * @notice Add balance for a provider (Option B: burns tokens to reserve supply for spoke mints)
+     * @param provider Provider address
+     * @param amount Amount to add
+     * @dev OPTION B ARCHITECTURE:
+     *      - Tokens are burned on hub to reserve supply for spoke mints
+     *      - providerBalance is accounting only - actual tokens are burned
+     *      - When user claims on spoke, SpokeDistributor mints fresh tokens
+     *      - GlobalSupplyRegistry tracks total supply across chains
      */
     function addProviderBalance(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
         require(amount > 0, "zero amount");
         require(provider != address(0), "invalid provider");
         
-        // Require actual token transfer to ensure funds are available
+        // Transfer tokens from sender to this contract
         token.safeTransferFrom(msg.sender, address(this), amount);
         
+        // OPTION B: Burn tokens to reserve supply for spoke mints
+        // This ensures tokens don't exist on hub AND spokes simultaneously
+        token.burn(amount);
+        
+        // Update accounting (providerBalance represents claimable amount on spokes)
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+    }
+    
+    /**
+     * @notice Deposit tokens to fund your own provider balance
+     * @param amount Amount to deposit
+     * @dev Allows providers to deposit their harvested rewards without needing ADMIN_ROLE
+     * @dev Provider must approve this contract first, then call depositBalance
+     * @dev OPTION B ARCHITECTURE: Tokens are burned on deposit
+     */
+    function depositBalance(uint256 amount) external onlyRole(PROVIDER_ROLE) {
+        require(amount > 0, "zero amount");
+        
+        // Transfer tokens from provider to this contract
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
+        // OPTION B: Burn tokens to reserve supply for spoke mints
+        token.burn(amount);
+        
+        // Update accounting for the calling provider
+        providerBalance[msg.sender] += amount;
+        emit ProviderBalanceUpdated(msg.sender, providerBalance[msg.sender]);
     }
 
     /**
@@ -174,7 +198,9 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
         require(!e.closed, "epoch closed");
 
-        bytes32 leaf = keccak256(abi.encode(claimant, amount));
+        // Verify Merkle proof with chainId in leaf
+        // This prevents cross-chain double-claims - proof only valid on this chain
+        bytes32 leaf = keccak256(abi.encode(claimant, amount, block.chainid));
         require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
 
         // Ensure enough locked balance for this specific epoch
@@ -217,9 +243,13 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @notice Close an epoch and return unclaimed funds
-     * @dev Fixed: Only close after grace period + close delay
-     * @dev SECURITY FIX: Added CLOSE_DELAY to prevent frontrunning legitimate claims
+     * @notice Close an epoch - unclaimed tokens are permanently burned
+     * @param provider Provider address
+     * @param rootIndex Merkle root index
+     * @dev OPTION B ARCHITECTURE:
+     *      - Tokens were burned on addProviderBalance
+     *      - Unclaimed tokens are NOT returned - they remain burned permanently
+     *      - This incentivizes providers to submit accurate merkle roots
      */
     function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
@@ -229,31 +259,36 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
         
         e.closed = true;
 
-        // Return any unclaimed balance to the provider
+        // OPTION B: Do NOT return unclaimed tokens - they are permanently burned
+        // This is intentional: tokens were burned on deposit, and unclaimed portions
+        // are lost. This incentivizes accurate merkle root submissions.
         if (e.totalClaimable > e.claimedAmount) {
             uint256 unclaimed = e.totalClaimable - e.claimedAmount;
             lockedBalance[provider] -= unclaimed;
-            providerBalance[provider] += unclaimed; // Return to general balance
-            emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+            // Note: unclaimed tokens remain burned - not returned to providerBalance
+            emit LockedBalanceUpdated(provider, lockedBalance[provider]);
         }
         
         emit EpochClosed(provider, rootIndex);
     }
 
     /**
-     * @notice Slash a provider's balance
-     * @dev SECURITY FIX: Transfers slashed tokens to slashRecipient
+     * @notice Slash a provider's balance (reduces claimable amount)
+     * @param provider Provider address
+     * @param amount Amount to slash
+     * @dev OPTION B ARCHITECTURE:
+     *      - Tokens were already burned on deposit
+     *      - Slashing just reduces the provider's claimable accounting balance
+     *      - Slashed amount represents tokens that will never be minted on spokes
      */
     function slashProvider(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
         require(amount <= providerBalance[provider], "insufficient balance");
-        require(slashRecipient != address(0), "slash recipient not set");
         
+        // OPTION B: Just reduce accounting - tokens were already burned
+        // The slashed amount will never be mintable on spokes
         providerBalance[provider] -= amount;
         
-        // SECURITY FIX: Actually transfer slashed tokens to recipient
-        token.safeTransfer(slashRecipient, amount);
-        
-        emit ProviderSlashed(provider, amount, slashRecipient);
+        emit ProviderSlashed(provider, amount);
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
 
@@ -294,35 +329,40 @@ contract MerkleDistributor is AccessControl, ReentrancyGuard {
     }
 
     /**
-     * @notice Notify reward with token transfer from staking contract
-     * @dev SECURITY FIX: Now requires actual token transfer to prevent unbacked balance
-     * @dev Called by staking contract when it wants to fund provider balance
+     * @notice Notify reward with token transfer from staking contract (Option B: burns tokens)
      * @param provider Provider address
-     * @param amount Amount to transfer and add to balance
+     * @param amount Amount to transfer, burn, and add to balance
+     * @dev OPTION B ARCHITECTURE:
+     *      - Receives tokens from staking contract
+     *      - Burns tokens to reserve supply for spoke mints
+     *      - Updates accounting balance for provider
      */
     function notifyRewardWithTransfer(address provider, uint256 amount) external {
         require(msg.sender == stakingContract, "unauthorised notifier");
         require(amount > 0, "zero amount");
         require(provider != address(0), "invalid provider");
         
-        // SECURITY FIX: Require actual token transfer to back the balance
+        // Transfer tokens from staking contract
         token.safeTransferFrom(msg.sender, address(this), amount);
         
+        // OPTION B: Burn tokens to reserve supply for spoke mints
+        token.burn(amount);
+        
+        // Update accounting balance
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
     
     /**
      * @notice Notify reward - DEPRECATED, use notifyRewardWithTransfer
-     * @dev SECURITY WARNING: This function only updates accounting without token transfer
+     * @dev WARNING: Only updates accounting, requires tokens to be sent AND burned separately
      * @dev Kept for backwards compatibility but should be avoided
-     * @dev Only call this if tokens were ALREADY transferred to this contract
      */
     function notifyReward(address provider, uint256 amount) external {
         require(msg.sender == stakingContract, "unauthorised notifier");
         require(amount > 0, "zero amount");
         
-        // WARNING: No token transfer - assumes staking contract pre-transferred tokens
+        // WARNING: Only updates accounting - caller must ensure tokens were burned
         providerBalance[provider] += amount;
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
     }
