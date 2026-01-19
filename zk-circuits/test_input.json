@@ -1,0 +1,14 @@
+{
+  "merkleRoot": "1000",
+  "totalAmount": "100000000000000000000",
+  "batchHash": "2613098031594660982089674406055689978452064737071968002476234760706582826793",
+  "numUsers": "1",
+  "minScore": "75",
+  "maxScore": "75",
+  "avgScore": "75",
+  "minMultiplier": "1000",
+  "maxMultiplier": "1000",
+  "avgMultiplier": "1000",
+  "sumAmounts": "100000000000000000000",
+  "dataCommitment": "3000"
+}
