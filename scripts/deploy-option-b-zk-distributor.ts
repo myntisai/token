@@ -18,15 +18,41 @@ async function main() {
     console.log(`Network: ${network.name} (chainId: ${network.chainId})`);
     
     // Configuration
-    const TOKEN_ADDRESS = process.env.MYNTIS_TOKEN_ADDRESS || "0x5242925C716225C58459f557E5B4Be51373aB767";
-    const VERIFIER_ADDRESS = process.env.REWARD_CLAIM_VERIFIER_ADDRESS || "0x67Ae52ee859c552CAfabFC08D00bb68D3a2e57bB";
+    const TOKEN_ADDRESS = process.env.MYNTIS_TOKEN_ADDRESS;
+    if (!TOKEN_ADDRESS) {
+        throw new Error("MYNTIS_TOKEN_ADDRESS environment variable not set");
+    }
+    
+    // Check if Groth16Verifier is already deployed or needs deployment
+    let VERIFIER_ADDRESS = process.env.GROTH16_VERIFIER_ADDRESS;
+    
+    if (!VERIFIER_ADDRESS) {
+        // Deploy Groth16Verifier from generated contract
+        console.log("\n📝 Step 1: Deploying Groth16Verifier...");
+        const generatedVerifierPath = path.join(__dirname, "../contracts/Groth16Verifier.sol");
+        
+        if (!fs.existsSync(generatedVerifierPath)) {
+            throw new Error(
+                "Groth16Verifier.sol not found. " +
+                "Run: cd token/zk-circuits && ./generate-provider-batch-keys.sh"
+            );
+        }
+        
+        const Groth16Verifier = await ethers.getContractFactory("Groth16Verifier");
+        const verifier = await Groth16Verifier.deploy();
+        await verifier.waitForDeployment();
+        VERIFIER_ADDRESS = await verifier.getAddress();
+        console.log(`✅ Groth16Verifier deployed to: ${VERIFIER_ADDRESS}`);
+    } else {
+        console.log(`\n📝 Using existing Groth16Verifier: ${VERIFIER_ADDRESS}`);
+    }
     
     console.log(`\nToken: ${TOKEN_ADDRESS}`);
     console.log(`Verifier: ${VERIFIER_ADDRESS}`);
     console.log(`Admin: ${deployer.address}`);
     
     // Deploy ZKMerkleDistributor
-    console.log("\n📝 Deploying ZKMerkleDistributor...");
+    console.log("\n📝 Step 2: Deploying ZKMerkleDistributor...");
     const ZKMerkleDistributor = await ethers.getContractFactory("ZKMerkleDistributor");
     const distributor = await ZKMerkleDistributor.deploy(
         TOKEN_ADDRESS,
@@ -38,12 +64,33 @@ async function main() {
     
     console.log(`✅ ZKMerkleDistributor deployed to: ${distributorAddress}`);
     
+    // Step 3: Grant PROVIDER_ROLE (if provider address is set)
+    const PROVIDER_ADDRESS = process.env.PROVIDER_ADDRESS;
+    if (PROVIDER_ADDRESS) {
+        console.log(`\n📝 Step 3: Granting PROVIDER_ROLE to ${PROVIDER_ADDRESS}...`);
+        const providerRole = await distributor.PROVIDER_ROLE();
+        const tx = await distributor.grantRole(providerRole, PROVIDER_ADDRESS);
+        await tx.wait();
+        console.log(`✅ PROVIDER_ROLE granted`);
+    }
+    
+    // Step 4: Set staking contract (if DualPoolStaking address is set)
+    const STAKING_CONTRACT = process.env.STAKING_CONTRACT_ADDRESS;
+    if (STAKING_CONTRACT) {
+        console.log(`\n📝 Step 4: Setting staking contract to ${STAKING_CONTRACT}...`);
+        const tx = await distributor.setStakingContract(STAKING_CONTRACT);
+        await tx.wait();
+        console.log(`✅ Staking contract set`);
+    }
+    
     // Save deployment
     const result = {
+        groth16Verifier: VERIFIER_ADDRESS,
         zkMerkleDistributor: distributorAddress,
         token: TOKEN_ADDRESS,
-        verifier: VERIFIER_ADDRESS,
         admin: deployer.address,
+        provider: PROVIDER_ADDRESS || null,
+        stakingContract: STAKING_CONTRACT || null,
         network: network.name,
         chainId: network.chainId.toString(),
         timestamp: new Date().toISOString()
@@ -59,7 +106,9 @@ async function main() {
     
     console.log("\n✅ Deployment complete!");
     console.log(`\nUpdate .env.prod:`);
+    console.log(`  GROTH16_VERIFIER_ADDRESS=${VERIFIER_ADDRESS}`);
     console.log(`  ZK_MERKLE_DISTRIBUTOR_ADDRESS=${distributorAddress}`);
+    console.log(`\nNext: Call DualPoolStaking.setZkMerkleDistributor(${distributorAddress})`);
 }
 
 main()

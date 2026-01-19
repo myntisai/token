@@ -1,0 +1,11 @@
+{
+  "groth16Verifier": "0x725bC5d5C75Dc6afB4e61A43fbC35909866e4C8e",
+  "zkMerkleDistributor": "0xebd5dd492DB4ec069698ACfCCa34FC9dc400737D",
+  "token": "0x5242925C716225C58459f557E5B4Be51373aB767",
+  "admin": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+  "provider": null,
+  "stakingContract": "0x8D7817B77692Ad0B1D0D399F889A3158104291a5",
+  "network": "base-sepolia",
+  "chainId": "84532",
+  "timestamp": "2026-01-06T19:37:47.700Z"
+}

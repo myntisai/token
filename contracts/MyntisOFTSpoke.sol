@@ -4,6 +4,7 @@ pragma solidity ^0.8.22;
 import { OFT } from "@layerzerolabs/oft-evm/contracts/OFT.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
 
 /**
  * @title MyntisOFTSpoke
@@ -12,11 +13,14 @@ import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
  * @dev Compatible with MyntisOFT hub on Base
  * 
  * Key differences from Hub:
- * - No external minting (only through OFT cross-chain)
- * - Simpler access control (owner only)
+ * - MINTER_ROLE allows SpokeDistributor to mint tokens for claims
+ * - AccessControl for role-based permissions
  * - Same OFT standard = full compatibility
  */
-contract MyntisOFTSpoke is OFT, Pausable {
+contract MyntisOFTSpoke is OFT, Pausable, AccessControl {
+    
+    // ============ Roles ============
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     
     // ============ State ============
     uint32 public immutable hubChainEid;  // LayerZero EID of hub chain (Base)
@@ -54,6 +58,23 @@ contract MyntisOFTSpoke is OFT, Pausable {
         if (_lzEndpoint == address(0)) revert InvalidEndpoint();
         if (_delegate == address(0)) revert ZeroAddress();
         hubChainEid = _hubChainEid;
+        
+        // Grant admin role to delegate for role management
+        _grantRole(DEFAULT_ADMIN_ROLE, _delegate);
+    }
+    
+    // ============ Minting (MINTER_ROLE) ============
+    
+    /**
+     * @notice Mint tokens - used by SpokeDistributor for reward claims
+     * @dev Requires MINTER_ROLE (granted to SpokeDistributor)
+     * @param _to Recipient address
+     * @param _amount Amount to mint
+     */
+    function mint(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        _mint(_to, _amount);
     }
     
     // ============ Emergency Functions (Admin Only) ============
@@ -190,6 +211,15 @@ contract MyntisOFTSpoke is OFT, Pausable {
         uint32 _srcEid
     ) internal virtual override whenNotPaused returns (uint256 amountReceivedLD) {
         return super._credit(_to, _amountLD, _srcEid);
+    }
+    
+    // ============ Override for AccessControl ============
+    
+    /**
+     * @notice Override supportsInterface to support AccessControl
+     */
+    function supportsInterface(bytes4 interfaceId) public view virtual override(AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
     }
 }
 

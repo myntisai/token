@@ -119,26 +119,14 @@ const config: HardhatUserConfig = {
     timeout: 100000
   },
   etherscan: {
-    apiKey: {
-      mainnet: process.env.ETHERSCAN_API_KEY || "",
-      sepolia: process.env.ETHERSCAN_API_KEY || "",
-      base: process.env.BASESCAN_API_KEY || "",
-      baseSepolia: process.env.BASESCAN_API_KEY || "",
-      arbitrumOne: process.env.ARBISCAN_API_KEY || "",
-      arbitrumSepolia: process.env.ARBISCAN_API_KEY || "",
-      polygon: process.env.POLYGONSCAN_API_KEY || "",
-      polygonMumbai: process.env.POLYGONSCAN_API_KEY || "",
-      optimisticEthereum: process.env.OPTIMISM_API_KEY || "",
-      optimisticSepolia: process.env.OPTIMISM_API_KEY || "",
-      bsc: process.env.BSCSCAN_API_KEY || "",
-      bscTestnet: process.env.BSCSCAN_API_KEY || "",
-    },
+    // V2 API - use Etherscan.io API key for ALL chains
+    apiKey: process.env.ETHERSCAN_API_KEY || "",
     customChains: [
       {
         network: "base-sepolia",
         chainId: 84532,
         urls: {
-          apiURL: "https://api-sepolia.basescan.org/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=84532",
           browserURL: "https://sepolia.basescan.org"
         }
       },
@@ -146,7 +134,7 @@ const config: HardhatUserConfig = {
         network: "base-mainnet",
         chainId: 8453,
         urls: {
-          apiURL: "https://api.basescan.org/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=8453",
           browserURL: "https://basescan.org"
         }
       },
@@ -154,47 +142,47 @@ const config: HardhatUserConfig = {
         network: "arbitrum-sepolia",
         chainId: 421614,
         urls: {
-          apiURL: "https://api-sepolia.arbiscan.io/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=421614",
           browserURL: "https://sepolia.arbiscan.io"
         }
       },
       {
-        network: "polygon-mumbai",
-        chainId: 80001,
+        network: "ethereum-sepolia",
+        chainId: 11155111,
         urls: {
-          apiURL: "https://api-testnet.polygonscan.com/api",
-          browserURL: "https://mumbai.polygonscan.com"
+          apiURL: "https://api.etherscan.io/v2/api?chainid=11155111",
+          browserURL: "https://sepolia.etherscan.io"
         }
       },
       {
         network: "optimism-sepolia",
         chainId: 11155420,
         urls: {
-          apiURL: "https://api-sepolia-optimistic.etherscan.io/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=11155420",
           browserURL: "https://sepolia-optimism.etherscan.io"
-        }
-      },
-      {
-        network: "bsc-testnet",
-        chainId: 97,
-        urls: {
-          apiURL: "https://api-testnet.bscscan.com/api",
-          browserURL: "https://testnet.bscscan.com"
         }
       },
       {
         network: "polygon-amoy",
         chainId: 80002,
         urls: {
-          apiURL: "https://api-amoy.polygonscan.com/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=80002",
           browserURL: "https://amoy.polygonscan.com"
+        }
+      },
+      {
+        network: "bsc-testnet",
+        chainId: 97,
+        urls: {
+          apiURL: "https://api.etherscan.io/v2/api?chainid=97",
+          browserURL: "https://testnet.bscscan.com"
         }
       },
       {
         network: "linea-sepolia",
         chainId: 59141,
         urls: {
-          apiURL: "https://api-sepolia.lineascan.build/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=59141",
           browserURL: "https://sepolia.lineascan.build"
         }
       },
@@ -202,11 +190,14 @@ const config: HardhatUserConfig = {
         network: "scroll-sepolia",
         chainId: 534351,
         urls: {
-          apiURL: "https://api-sepolia.scrollscan.com/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=534351",
           browserURL: "https://sepolia.scrollscan.com"
         }
       }
     ]
+  },
+  sourcify: {
+    enabled: true
   }
 };
 

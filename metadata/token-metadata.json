@@ -1,0 +1,14 @@
+{
+  "name": "Myntis",
+  "symbol": "MYNT",
+  "description": "Myntis is an AI-to-earn platform that rewards users for their AI interactions. The MYNT token powers the ecosystem with staking, liquid staking (lsMYNT), and cross-chain functionality via LayerZero.",
+  "image": "https://gateway.pinata.cloud/ipfs/QmZC5gVHds6FqVL8V1PF9ayEJJBWMbiMzpAUXmHpC5zMcV",
+  "external_link": "https://myntis.com",
+  "decimals": 18,
+  "properties": {
+    "category": "utility",
+    "platform": "AI-to-earn",
+    "crossChain": true,
+    "standardsSupported": ["ERC-20", "OFT", "ERC-7572"]
+  }
+}
