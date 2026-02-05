@@ -347,6 +347,11 @@ contract Myntis is OFT, Pausable {
             
             if (totalSupply() + amounts[i] > MAX_SUPPLY) revert ExceedsMaxSupply();
             if (totalMintedEmissions + amounts[i] > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
+
+            if (address(globalSupplyRegistry) != address(0)) {
+                if (!globalSupplyRegistry.canMint(amounts[i])) revert GlobalCapExceeded();
+                globalSupplyRegistry.recordMint(amounts[i]);
+            }
             
             totalMintedEmissions += amounts[i];
             _mint(recipients[i], amounts[i]);
@@ -418,6 +423,8 @@ contract Myntis is OFT, Pausable {
     }
     
     function setGlobalSupplyRegistry(address _registry) external onlyOwner {
+        if (_registry == address(0)) revert ZeroAddress();
+        require(_registry.code.length > 0, "Registry must be a contract");
         address previous = address(globalSupplyRegistry);
         globalSupplyRegistry = IGlobalSupplyRegistry(_registry);
         emit GlobalSupplyRegistryUpdated(previous, _registry);

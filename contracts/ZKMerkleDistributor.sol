@@ -43,7 +43,7 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     IERC20 public immutable token;
     
     // ZK verifier contract (for provider batch proofs)
-    IGroth16Verifier public immutable batchVerifier;
+    IGroth16Verifier public batchVerifier;
     
     // Provider balances and locked amounts
     // providerBalance: tokens available for new epochs
@@ -76,6 +76,11 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     uint256 public constant EPOCH_GRACE_PERIOD = 2 days;
     uint256 public constant CLOSE_DELAY = 1 hours;
     uint256 public constant MAX_BATCH_SIZE = 50; // Batch claim limit
+
+    // Verifier update timelock (governance hardening)
+    uint256 public verifierUpdateDelay;
+    address public pendingBatchVerifier;
+    uint256 public pendingBatchVerifierEta;
     
     // Events
     event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
@@ -97,6 +102,9 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     event ProviderSlashed(address indexed provider, uint256 amount);
     event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
     event StakingContractUpdated(address indexed stakingContract);
+    event BatchVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+    event BatchVerifierUpdateScheduled(address indexed newVerifier, uint256 eta);
+    event VerifierUpdateDelayUpdated(uint256 oldDelay, uint256 newDelay);
     
     constructor(address _token, address _batchVerifier, address admin) {
         require(_token != address(0), "Invalid token address");
@@ -106,6 +114,49 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         token = IERC20(_token);
         batchVerifier = IGroth16Verifier(_batchVerifier);
         _grantRole(ADMIN_ROLE, admin);
+        verifierUpdateDelay = 1 days;
+    }
+
+    /**
+     * @notice Update the ZK verifier contract (admin only)
+     * @param _batchVerifier New verifier address
+     */
+    function setBatchVerifier(address _batchVerifier) external onlyRole(ADMIN_ROLE) {
+        require(_batchVerifier != address(0), "Invalid verifier address");
+        if (verifierUpdateDelay == 0) {
+            _applyBatchVerifier(_batchVerifier);
+            return;
+        }
+
+        pendingBatchVerifier = _batchVerifier;
+        pendingBatchVerifierEta = block.timestamp + verifierUpdateDelay;
+        emit BatchVerifierUpdateScheduled(_batchVerifier, pendingBatchVerifierEta);
+    }
+
+    /**
+     * @notice Schedule or execute verifier updates with a delay
+     */
+    function executeBatchVerifierUpdate() external onlyRole(ADMIN_ROLE) {
+        require(pendingBatchVerifier != address(0), "No pending verifier");
+        require(block.timestamp >= pendingBatchVerifierEta, "Verifier update not ready");
+        _applyBatchVerifier(pendingBatchVerifier);
+        pendingBatchVerifier = address(0);
+        pendingBatchVerifierEta = 0;
+    }
+
+    /**
+     * @notice Update verifier delay (0 = immediate)
+     */
+    function setVerifierUpdateDelay(uint256 newDelay) external onlyRole(ADMIN_ROLE) {
+        uint256 oldDelay = verifierUpdateDelay;
+        verifierUpdateDelay = newDelay;
+        emit VerifierUpdateDelayUpdated(oldDelay, newDelay);
+    }
+
+    function _applyBatchVerifier(address _batchVerifier) internal {
+        address oldVerifier = address(batchVerifier);
+        batchVerifier = IGroth16Verifier(_batchVerifier);
+        emit BatchVerifierUpdated(oldVerifier, _batchVerifier);
     }
     
     /**
@@ -251,46 +302,6 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
             expiry, 
             totalClaimableAmount,
             bytes32(publicInputs[2])
-        );
-    }
-    
-    /**
-     * @notice Submit Merkle root without ZK proof (for legacy/testing)
-     * @param root Merkle root
-     * @param expiry Expiry timestamp
-     * @param totalClaimableAmount Total claimable amount
-     * @dev Only for testing or migration, should be disabled in production
-     */
-    function submitMerkleRootWithoutProof(
-        bytes32 root,
-        uint256 expiry,
-        uint256 totalClaimableAmount
-    ) external nonReentrant onlyRole(ADMIN_ROLE) {
-        require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
-        require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
-        require(totalClaimableAmount > 0, "zero claimable");
-        
-        // Lock the balance for this epoch
-        providerBalance[msg.sender] -= totalClaimableAmount;
-        lockedBalance[msg.sender] += totalClaimableAmount;
-        
-        providerMerkleRoots[msg.sender].push(EpochMerkleRoot({
-            root: root,
-            expiry: expiry,
-            closed: false,
-            totalClaimable: totalClaimableAmount,
-            claimedAmount: 0,
-            providerProofVerified: false, // Not ZK verified
-            batchHash: bytes32(0)
-        }));
-        
-        emit MerkleRootSubmitted(
-            msg.sender, 
-            providerMerkleRoots[msg.sender].length - 1, 
-            root, 
-            expiry, 
-            totalClaimableAmount,
-            bytes32(0)
         );
     }
     

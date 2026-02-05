@@ -14,6 +14,7 @@ interface IStakingPool {
     function getProviderPoolStaked() external view returns (uint256);
     function getProviderInfo(address provider) external view returns (uint256 stake, uint256 rewardDebt);
     function notifyReward(address provider, uint256 amount) external;
+    function syncEmissions() external returns (uint256 totalRewards_);
 }
 
 /**
@@ -39,6 +40,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     
     /// @notice Precision multiplier for reward per share calculations
     uint256 public constant PRECISION = 1e12;
+    uint256 public constant MAX_MIGRATION_BATCH = 200;
 
     uint256 public immutable startTime;
     uint256 public lastRewardTime;
@@ -78,11 +80,15 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         address _admin
     ) {
         if (_token == address(0)) revert ZeroAddress();
+        require(_token.code.length > 0, "Token must be a contract");
         if (_admin == address(0)) revert ZeroAddress();
         // NOTE: _stakingContract can be address(0) initially for deployment order flexibility
         // It will be set via setStakingContract() after DualPoolStaking is deployed
         
         token = IMyntisToken(_token);
+        if (_stakingContract != address(0)) {
+            require(_stakingContract.code.length > 0, "Staking must be a contract");
+        }
         stakingContract = IStakingPool(_stakingContract);
         _grantRole(ADMIN_ROLE, _admin);
 
@@ -102,6 +108,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      */
     function setStakingContract(address _stakingContract) external onlyRole(ADMIN_ROLE) {
         if (_stakingContract == address(0)) revert ZeroAddress();
+        require(_stakingContract.code.length > 0, "Staking must be a contract");
         address oldContract = address(stakingContract);
         stakingContract = IStakingPool(_stakingContract);
         emit StakingContractUpdated(oldContract, _stakingContract);
@@ -127,6 +134,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     ) external onlyRole(ADMIN_ROLE) {
         if (migrationInitialized) revert MigrationAlreadyInitialized();
         require(_providers.length == _debts.length, "Length mismatch");
+        require(_providers.length <= MAX_MIGRATION_BATCH, "Batch too large");
         require(_mintedEmissions <= TOTAL_EMISSIONS, "Exceeds emissions cap");
         require(_accountedEmissions <= TOTAL_EMISSIONS, "Exceeds emissions cap");
         require(_accountedEmissions >= _mintedEmissions, "Accounted must be >= minted");
@@ -172,6 +180,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      * @dev SECURITY FIX: Efficient batch initialization for migrations
      */
     function batchInitializeProviderDebt(address[] calldata providers) external onlyRole(ADMIN_ROLE) {
+        require(providers.length <= MAX_MIGRATION_BATCH, "Batch too large");
         for (uint256 i = 0; i < providers.length; i++) {
             address provider = providers[i];
             if (provider == address(0)) continue;
@@ -344,6 +353,9 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         // Interactions - external calls last
         // OPTION B: Mint to staking contract (not provider EOA) so staking can fund distributor
         token.mint(address(stakingContract), pending);
+
+        // Sync minted rewards into staking pool accounting
+        stakingContract.syncEmissions();
 
         emit ProviderRewardsHarvested(provider, pending);
         return pending;

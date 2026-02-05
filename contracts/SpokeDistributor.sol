@@ -145,6 +145,8 @@ contract SpokeDistributor is AccessControl, ReentrancyGuard {
         require(rootIndex < providerMerkleRoots[provider].length, "bad index");
         require(amount > 0, "zero amount");
         require(!claimed[provider][rootIndex][claimant], "already claimed");
+        bytes32 expectedNullifier = keccak256(abi.encode(claimant, amount, block.chainid, provider, rootIndex));
+        require(nullifier == expectedNullifier, "invalid nullifier");
         require(!nullifiers[nullifier], "nullifier already used");
 
         SpokeMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
