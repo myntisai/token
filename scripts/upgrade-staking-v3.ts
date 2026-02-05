@@ -5,11 +5,10 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 async function main() {
   // DualPoolStaking proxy address on Base Sepolia (December 28, 2025 deployment)
-  // IMPORTANT: Use the CURRENT production proxy, NOT the old one in .env
   const STAKING_PROXY = "0xe66e51C61a0D89831e9B41f8dE28fbFf18C5E1f8";
 
   console.log("=".repeat(60));
-  console.log("🔄 UPGRADING DualPoolStaking PROXY");
+  console.log("🔄 UPGRADING DualPoolStaking PROXY (V3)");
   console.log("=".repeat(60));
   console.log("\n📍 Proxy Address:", STAKING_PROXY);
   
@@ -24,43 +23,45 @@ async function main() {
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log("💰 Balance:", ethers.formatEther(balance), "ETH\n");
 
+  // Check deployer has UPGRADER_ROLE
+  const proxyContract = await ethers.getContractAt("DualPoolStaking", STAKING_PROXY);
+  const UPGRADER_ROLE = await proxyContract.UPGRADER_ROLE();
+  const hasRole = await proxyContract.hasRole(UPGRADER_ROLE, deployer.address);
+  console.log("🔑 Has UPGRADER_ROLE:", hasRole);
+  
+  if (!hasRole) {
+    console.error("❌ Deployer does not have UPGRADER_ROLE!");
+    process.exit(1);
+  }
+
   // Compile and get factory for DualPoolStaking
-  console.log("📦 Compiling DualPoolStaking...");
+  console.log("\n📦 Getting DualPoolStaking factory...");
   const DualPoolStakingFactory = await ethers.getContractFactory("DualPoolStaking");
   
-  // Force import the proxy if not already registered
-  console.log("📥 Force importing proxy (if needed)...");
-  try {
-    await upgrades.forceImport(STAKING_PROXY, DualPoolStakingFactory, {
-      kind: "uups"
-    });
-    console.log("   ✅ Proxy imported successfully");
-  } catch (e: any) {
-    if (e.message?.includes("already registered") || e.message?.includes("already imported")) {
-      console.log("   ℹ️ Proxy already registered");
-    } else {
-      console.log("   ℹ️ Import note:", e.message?.substring(0, 100));
-    }
-  }
+  // Deploy new implementation directly
+  console.log("🏗️  Deploying new implementation...");
+  const newImplContract = await DualPoolStakingFactory.deploy();
+  await newImplContract.waitForDeployment();
+  const newImplAddress = await newImplContract.getAddress();
+  console.log("📍 New Implementation deployed:", newImplAddress);
   
-  // Perform the upgrade
-  console.log("\n🚀 Executing proxy upgrade...");
-  const upgraded = await upgrades.upgradeProxy(STAKING_PROXY, DualPoolStakingFactory, {
-    unsafeAllowRenames: true, // Allow storage layout changes if needed
-  });
-  await upgraded.waitForDeployment();
-
-  // Get new implementation address
-  const newImpl = await upgrades.erc1967.getImplementationAddress(STAKING_PROXY);
+  // Upgrade proxy to new implementation using UUPS upgradeToAndCall
+  console.log("\n🚀 Upgrading proxy to new implementation...");
+  const tx = await proxyContract.upgradeToAndCall(newImplAddress, "0x");
+  console.log("📝 Transaction hash:", tx.hash);
+  await tx.wait();
+  
+  // Verify the upgrade
+  const finalImpl = await upgrades.erc1967.getImplementationAddress(STAKING_PROXY);
   
   console.log("\n" + "=".repeat(60));
   console.log("✅ UPGRADE COMPLETE!");
   console.log("=".repeat(60));
   console.log("📍 Proxy Address:", STAKING_PROXY);
   console.log("📍 Old Implementation:", currentImpl);
-  console.log("📍 New Implementation:", newImpl);
+  console.log("📍 New Implementation:", finalImpl);
   console.log("\n🔗 Verify new implementation:");
-  console.log(`   npx hardhat verify --network base-sepolia ${newImpl}`);
+  console.log(`   npx hardhat verify --network base-sepolia ${finalImpl}`);
   console.log("=".repeat(60));
 }
 
