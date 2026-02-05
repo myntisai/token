@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { GlobalSupplyRegistry, Myntis } from "../typechain-types";
 import { LayerZeroEndpointMock } from "../typechain-types";
 
@@ -21,32 +21,13 @@ describe("GlobalSupplyRegistry - Global Supply Tracking", function () {
     );
     await registry.waitForDeployment();
 
-    // Deploy Myntis (upgradeable)
-    const Myntis = await ethers.getContractFactory("Myntis");
-    const myntisImpl = await Myntis.deploy();
-    await myntisImpl.waitForDeployment();
-    
-    // Deploy proxy
-    const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
-    const proxyAdmin = await ProxyAdmin.deploy();
-    await proxyAdmin.waitForDeployment();
-    
-    const cap = ethers.parseEther("1000000000");
-    const initData = Myntis.interface.encodeFunctionData("initialize", [
-      deployer.address,
-      cap,
-      cap,
-      await mockEndpoint.getAddress()
-    ]);
-    
-    const TransparentUpgradeableProxy = await ethers.getContractFactory("TransparentUpgradeableProxy");
-    const myntisProxy = await TransparentUpgradeableProxy.deploy(
-      await myntisImpl.getAddress(),
-      await proxyAdmin.getAddress(),
-      initData
+    // Deploy Myntis
+    const MyntisFactory = await ethers.getContractFactory("Myntis");
+    const myntis = await MyntisFactory.deploy(
+      await mockEndpoint.getAddress(),
+      deployer.address
     );
-    await myntisProxy.waitForDeployment();
-    const myntis = Myntis.attach(await myntisProxy.getAddress());
+    await myntis.waitForDeployment();
 
     return { registry, myntis, mockEndpoint, deployer, user1 };
   }

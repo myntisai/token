@@ -8,11 +8,23 @@ describe("AI Reward Weighting System", function () {
 
     // Deploy RewardWeightingRegistry
     const RewardWeightingRegistry = await ethers.getContractFactory("RewardWeightingRegistry");
-    const registry = await RewardWeightingRegistry.deploy();
-    await registry.waitForDeployment();
-    
-    // Initialize registry
-    await registry.initialize(admin.address);
+    const registryImpl = await RewardWeightingRegistry.deploy();
+    await registryImpl.waitForDeployment();
+
+    const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
+    const proxyAdmin = await ProxyAdmin.deploy(admin.address);
+    await proxyAdmin.waitForDeployment();
+
+    const initData = RewardWeightingRegistry.interface.encodeFunctionData("initialize", [admin.address]);
+    const TransparentUpgradeableProxy = await ethers.getContractFactory("TransparentUpgradeableProxy");
+    const proxy = await TransparentUpgradeableProxy.deploy(
+      await registryImpl.getAddress(),
+      await proxyAdmin.getAddress(),
+      initData
+    );
+    await proxy.waitForDeployment();
+
+    const registry = RewardWeightingRegistry.attach(await proxy.getAddress());
 
     // Grant provider roles
     await registry.grantProviderRole(provider1.address);
@@ -191,16 +203,16 @@ describe("AI Reward Weighting System", function () {
 
   describe("Access Control", function () {
     it("Should only allow providers to set their strategy", async function () {
-      const { registry, provider1, provider2 } = await loadFixture(deployRewardWeightingRegistryFixture);
+      const { registry, admin } = await loadFixture(deployRewardWeightingRegistryFixture);
 
       const strategyName = "myntis_default";
       const version = "1.0.0";
       const endpointUrl = "";
       const configHash = ethers.keccak256(ethers.toUtf8Bytes("config"));
 
-      // Provider2 cannot set strategy for provider1
+      // Non-provider cannot set strategy
       await expect(
-        registry.connect(provider2).setProviderStrategy(
+        registry.connect(admin).setProviderStrategy(
           strategyName,
           version,
           endpointUrl,

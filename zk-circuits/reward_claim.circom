@@ -23,24 +23,24 @@ template RewardClaim() {
     signal input merklePathIndices[8];
     
     // Verify AI legitimacy score is within valid range (0-100)
-    component legitimacyCheck = LessEqThan(8);
+    component legitimacyCheck = LessEqThan(32);
     legitimacyCheck.in[0] <== aiLegitimacyScore;
     legitimacyCheck.in[1] <== 100;
     legitimacyCheck.out === 1;
     
     // Verify AI legitimacy score is non-negative
-    component legitimacyMinCheck = GreaterEqThan(8);
+    component legitimacyMinCheck = GreaterEqThan(32);
     legitimacyMinCheck.in[0] <== aiLegitimacyScore;
     legitimacyMinCheck.in[1] <== 0;
     legitimacyMinCheck.out === 1;
     
     // Verify reward multiplier is within valid bounds (10-10000)
-    component multiplierLowCheck = GreaterEqThan(16);
+    component multiplierLowCheck = GreaterEqThan(32);
     multiplierLowCheck.in[0] <== aiRewardMultiplier;
     multiplierLowCheck.in[1] <== 10; // 0.1x minimum
     multiplierLowCheck.out === 1;
     
-    component multiplierHighCheck = LessEqThan(16);
+    component multiplierHighCheck = LessEqThan(32);
     multiplierHighCheck.in[0] <== aiRewardMultiplier;
     multiplierHighCheck.in[1] <== 10000; // 10x maximum
     multiplierHighCheck.out === 1;
@@ -71,7 +71,7 @@ template RewardClaim() {
     // Verify AI score consistency with reward multiplier
     // Higher legitimacy score should generally lead to higher multiplier
     // This is a basic consistency check
-    component scoreMultiplierCheck = LessEqThan(16);
+    component scoreMultiplierCheck = LessEqThan(32);
     scoreMultiplierCheck.in[0] <== aiLegitimacyScore * 100; // Scale to 0-10000
     scoreMultiplierCheck.in[1] <== aiRewardMultiplier;
     scoreMultiplierCheck.out === 1;

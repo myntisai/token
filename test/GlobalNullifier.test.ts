@@ -121,7 +121,7 @@ describe("GlobalNullifier", function () {
 
             await expect(
                 globalNullifier.connect(spoke1).burnNullifier(nullifier1, CHAIN_ID_ETHEREUM, user.address)
-            ).to.be.revertedWith("Chain nullifier already burned");
+            ).to.be.revertedWith("Nullifier already burned");
         });
 
         it("Should track nullifiers per chain correctly", async function () {

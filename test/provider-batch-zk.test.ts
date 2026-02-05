@@ -24,20 +24,18 @@ describe("Provider Batch ZK Proof Integration", function () {
         [admin, provider, user] = await ethers.getSigners();
 
         // Deploy token
+        const LayerZeroEndpointMockFactory = await ethers.getContractFactory("LayerZeroEndpointMock");
+        const mockEndpoint = await LayerZeroEndpointMockFactory.deploy(1);
+        await mockEndpoint.waitForDeployment();
+
         const Token = await ethers.getContractFactory("Myntis");
-        token = await Token.deploy();
+        token = await Token.deploy(await mockEndpoint.getAddress(), admin.address);
         await token.waitForDeployment();
 
-        // Deploy Groth16Verifier (from generated contract)
-        // Note: In real tests, this would be deployed from the generated contract
-        // For now, we'll skip if not available
-        try {
-            const Verifier = await ethers.getContractFactory("Groth16Verifier");
-            verifier = await Verifier.deploy();
-            await verifier.waitForDeployment();
-        } catch (e) {
-            this.skip(); // Skip if verifier not compiled
-        }
+        // Deploy mock Groth16 verifier
+        const Verifier = await ethers.getContractFactory("MockGroth16Verifier");
+        verifier = await Verifier.deploy();
+        await verifier.waitForDeployment();
 
         // Deploy ZKMerkleDistributor
         const Distributor = await ethers.getContractFactory("ZKMerkleDistributor");
@@ -51,21 +49,39 @@ describe("Provider Batch ZK Proof Integration", function () {
         // Grant PROVIDER_ROLE
         const providerRole = await distributor.PROVIDER_ROLE();
         await distributor.grantRole(providerRole, provider.address);
+
+        // Fund provider balance
+        const fundingAmount = ethers.parseEther("10000");
+        await token.mint(admin.address, fundingAmount);
+        await token.approve(await distributor.getAddress(), fundingAmount);
+        await distributor.addProviderBalance(provider.address, fundingAmount);
     });
 
     it("Should accept valid ZK proof for batch submission", async function () {
-        // This test requires:
-        // 1. Compiled circuit (provider_batch.wasm)
-        // 2. Proving key (provider_batch_final.zkey)
-        // 3. Actual proof generation (would need backend service)
-        
-        // For now, this is a placeholder test structure
-        // Real implementation would:
-        // - Generate proof using backend service
-        // - Submit with submitMerkleRoot()
-        // - Verify proof was accepted
-        
-        expect(true).to.be.true; // Placeholder
+        const root = ethers.keccak256(ethers.toUtf8Bytes("test"));
+        const expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+        const totalAmount = ethers.parseEther("1000");
+
+        const proofA: [bigint, bigint] = [0n, 0n];
+        const proofB: [[bigint, bigint], [bigint, bigint]] = [[0n, 0n], [0n, 0n]];
+        const proofC: [bigint, bigint] = [0n, 0n];
+        const publicInputs: [bigint, bigint, bigint] = [
+            BigInt(root),
+            totalAmount,
+            0n
+        ];
+
+        await expect(
+            distributor.connect(provider).submitMerkleRoot(
+                root,
+                expiry,
+                totalAmount,
+                proofA,
+                proofB,
+                proofC,
+                publicInputs
+            )
+        ).to.emit(distributor, "MerkleRootSubmitted");
     });
 
     it("Should reject invalid ZK proof", async function () {
@@ -74,7 +90,9 @@ describe("Provider Batch ZK Proof Integration", function () {
         const expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
         const totalAmount = ethers.parseEther("1000");
 
-        // Invalid proof (all zeros)
+        await verifier.setShouldVerify(false);
+
+        // Invalid proof (mock verifier rejects)
         const invalidProofA = [0, 0];
         const invalidProofB = [[0, 0], [0, 0]];
         const invalidProofC = [0, 0];

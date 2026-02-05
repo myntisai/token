@@ -21,7 +21,11 @@ describe("Security Fixes", function () {
       it("should not double-count rewards in totalRewards", async function () {
         // Deploy mock token
         const Token = await ethers.getContractFactory("Myntis");
-        const token = await Token.deploy();
+        const LayerZeroEndpointMockFactory = await ethers.getContractFactory("LayerZeroEndpointMock");
+        const mockEndpoint = await LayerZeroEndpointMockFactory.deploy(1);
+        await mockEndpoint.waitForDeployment();
+        const token = await Token.deploy(await mockEndpoint.getAddress(), owner.address);
+        await token.waitForDeployment();
         
         // This test verifies that totalRewards is only incremented in _updatePools
         // and not again in _harvestRewards
