@@ -45,9 +45,22 @@ contract MyntisSpokeOFT is
         uint256 newTotalSupply;
         uint256 nonce;
     }
+
+    struct QuotaRequest {
+        uint32 chainId;
+        uint256 requestedQuota;
+        uint256 newTotalSupply;
+        uint256 nonce;
+        uint256 consumedQuota;
+    }
     
     // SECURITY FIX: Track nonce for supply updates to prevent replay attacks
     uint256 public supplyUpdateNonce;
+    uint256 public mintQuota;
+    address public quotaReceiver;
+    uint256 public quotaConsumedSinceLastRequest;
+    uint256 public pendingQuotaRequestNonce;
+    uint256 public pendingQuotaConsumed;
 
     ILayerZeroEndpointV2 public endpoint;
     mapping(uint32 => bytes32) public peers; // chainId => peer address
@@ -55,6 +68,11 @@ contract MyntisSpokeOFT is
     address public hubToken; // Hub token address (for reference)
     bytes32 public registryPeer; // Registry peer address on hub chain (for supply reporting)
     mapping(bytes32 guid => bool) public consumedGuids;
+
+    // Optional auto-reporting of supply updates (if contract is pre-funded)
+    bool public autoReportSupply;
+    bytes public supplyUpdateOptions;
+    address public supplyUpdateRefundAddress;
 
     // SECURITY: Emergency mint limit per call (prevents massive inflation)
     uint256 public constant EMERGENCY_MINT_LIMIT = 100_000 * 1e18; // 100k tokens max per emergency
@@ -65,13 +83,24 @@ contract MyntisSpokeOFT is
     event BridgeReceived(bytes32 indexed guid, uint32 indexed srcChainId, address indexed recipient, uint256 amount);
     event TokensBridgedIn(address indexed to, uint256 amount);
     event TokensBridgedOut(address indexed from, uint256 amount);
+    event SupplyUpdateSkipped(uint32 indexed chainId, uint256 totalSupply, uint256 requiredFee, uint256 availableBalance);
+    event SupplyUpdateOptionsSet(bytes options, address refundAddress);
+    event AutoReportSupplyUpdated(bool enabled);
     event SupplyChangeRequiresReporting(uint256 newTotalSupply, uint32 chainId);
     event EmergencyMint(address indexed to, uint256 amount, string reason);
+    event MintQuotaIncreased(uint256 amount, uint256 newQuota);
+    event MintQuotaUsed(uint256 amount, uint256 remainingQuota);
+    event QuotaReceiverUpdated(address indexed oldReceiver, address indexed newReceiver);
 
     error UnknownPeer(uint32 eid);
     error InvalidEndpoint();
     error InvalidPeer();
     error GuidConsumed(bytes32 guid);
+    error QuotaExceeded(uint256 requested, uint256 available);
+    error PendingQuotaRequest(uint256 nonce);
+
+    uint8 public constant MSG_SUPPLY_UPDATE = 1;
+    uint8 public constant MSG_QUOTA_REQUEST = 2;
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -137,6 +166,32 @@ contract MyntisSpokeOFT is
      */
     function setRegistryPeer(bytes32 _registryPeer) external onlyRole(ADMIN_ROLE) {
         registryPeer = _registryPeer;
+    }
+
+    /**
+     * @notice Configure auto-reporting options for supply updates
+     */
+    function setSupplyUpdateOptions(bytes calldata options, address refundAddress) external onlyRole(ADMIN_ROLE) {
+        require(refundAddress != address(0), "MyntisSpokeOFT: zero refund");
+        supplyUpdateOptions = options;
+        supplyUpdateRefundAddress = refundAddress;
+        emit SupplyUpdateOptionsSet(options, refundAddress);
+    }
+
+    /**
+     * @notice Enable/disable auto-reporting of supply updates
+     */
+    function setAutoReportSupply(bool enabled) external onlyRole(ADMIN_ROLE) {
+        autoReportSupply = enabled;
+        emit AutoReportSupplyUpdated(enabled);
+    }
+
+    function setQuotaReceiver(address _quotaReceiver) external onlyRole(ADMIN_ROLE) {
+        require(_quotaReceiver != address(0), "MyntisSpokeOFT: zero quota receiver");
+        require(_quotaReceiver.code.length > 0, "MyntisSpokeOFT: invalid quota receiver");
+        address oldReceiver = quotaReceiver;
+        quotaReceiver = _quotaReceiver;
+        emit QuotaReceiverUpdated(oldReceiver, _quotaReceiver);
     }
 
     /**
@@ -234,6 +289,7 @@ contract MyntisSpokeOFT is
         // Emit event to trigger supply reporting (keeper should call reportSupplyUpdate)
         if (registryPeer != bytes32(0)) {
             emit SupplyChangeRequiresReporting(totalSupply(), uint32(block.chainid));
+            _maybeAutoReportSupply();
         }
     }
 
@@ -251,7 +307,7 @@ contract MyntisSpokeOFT is
     ) external onlyRole(MINTER_ROLE) whenNotPaused {
         require(_to != address(0), "MyntisSpokeOFT: zero recipient");
         require(_amount > 0, "MyntisSpokeOFT: zero amount");
-        
+        _consumeQuota(_amount);
         _mint(_to, _amount);
         emit BridgeReceived(bytes32(0), _srcChainId, _to, _amount);
     }
@@ -288,6 +344,7 @@ contract MyntisSpokeOFT is
         // Emit event to trigger supply reporting (keeper should call reportSupplyUpdate)
         if (registryPeer != bytes32(0)) {
             emit SupplyChangeRequiresReporting(totalSupply(), uint32(block.chainid));
+            _maybeAutoReportSupply();
         }
     }
 
@@ -318,10 +375,12 @@ contract MyntisSpokeOFT is
             nonce: supplyUpdateNonce
         });
         
+        bytes memory payload = abi.encode(MSG_SUPPLY_UPDATE, update);
+        
         MessagingParams memory params = MessagingParams({
             dstEid: hubChainId,
             receiver: registryPeer,
-            message: abi.encode(update),
+            message: payload,
             options: options,
             payInLzToken: false
         });
@@ -330,6 +389,86 @@ contract MyntisSpokeOFT is
         require(msg.value >= nativeFee, "MyntisSpokeOFT: insufficient fee");
         
         receipt = endpoint.send{value: msg.value}(params, refundAddress);
+    }
+
+    function _maybeAutoReportSupply() internal {
+        if (!autoReportSupply) return;
+        if (registryPeer == bytes32(0) || hubChainId == 0) return;
+        if (supplyUpdateRefundAddress == address(0)) return;
+
+        uint32 currentChainId = uint32(block.chainid);
+        uint256 currentSupply = totalSupply();
+
+        supplyUpdateNonce++;
+
+        SupplyUpdate memory update = SupplyUpdate({
+            chainId: currentChainId,
+            supplyDelta: 0,
+            newTotalSupply: currentSupply,
+            nonce: supplyUpdateNonce
+        });
+
+        bytes memory payload = abi.encode(MSG_SUPPLY_UPDATE, update);
+        MessagingParams memory params = MessagingParams({
+            dstEid: hubChainId,
+            receiver: registryPeer,
+            message: payload,
+            options: supplyUpdateOptions,
+            payInLzToken: false
+        });
+
+        uint256 nativeFee = endpoint.quote(params, address(this)).nativeFee;
+        if (address(this).balance < nativeFee) {
+            emit SupplyUpdateSkipped(currentChainId, currentSupply, nativeFee, address(this).balance);
+            return;
+        }
+
+        endpoint.send{value: nativeFee}(params, supplyUpdateRefundAddress);
+    }
+
+    /**
+     * @notice Request additional mint quota from the hub registry
+     */
+    function requestMintQuota(
+        uint256 requestedQuota,
+        bytes calldata options,
+        address refundAddress
+    ) external payable returns (MessagingReceipt memory receipt) {
+        require(registryPeer != bytes32(0), "MyntisSpokeOFT: registry not set");
+        require(hubChainId != 0, "MyntisSpokeOFT: hub chain not set");
+        require(requestedQuota > 0, "MyntisSpokeOFT: zero quota");
+        require(refundAddress != address(0), "MyntisSpokeOFT: zero refund");
+        if (pendingQuotaRequestNonce != 0) revert PendingQuotaRequest(pendingQuotaRequestNonce);
+        
+        uint32 currentChainId = uint32(block.chainid);
+        uint256 currentSupply = totalSupply();
+        
+        supplyUpdateNonce++;
+        
+        QuotaRequest memory request = QuotaRequest({
+            chainId: currentChainId,
+            requestedQuota: requestedQuota,
+            newTotalSupply: currentSupply,
+            nonce: supplyUpdateNonce,
+            consumedQuota: quotaConsumedSinceLastRequest
+        });
+        
+        bytes memory payload = abi.encode(MSG_QUOTA_REQUEST, request);
+        
+        MessagingParams memory params = MessagingParams({
+            dstEid: hubChainId,
+            receiver: registryPeer,
+            message: payload,
+            options: options,
+            payInLzToken: false
+        });
+        
+        uint256 nativeFee = endpoint.quote(params, msg.sender).nativeFee;
+        require(msg.value >= nativeFee, "MyntisSpokeOFT: insufficient fee");
+        
+        receipt = endpoint.send{value: msg.value}(params, refundAddress);
+        pendingQuotaRequestNonce = supplyUpdateNonce;
+        pendingQuotaConsumed = quotaConsumedSinceLastRequest;
     }
 
     /**
@@ -342,12 +481,13 @@ contract MyntisSpokeOFT is
     function mint(address to, uint256 amount) external onlyRole(MINTER_ROLE) whenNotPaused {
         require(to != address(0), "MyntisSpokeOFT: zero recipient");
         require(amount > 0, "MyntisSpokeOFT: zero amount");
-        
+        _consumeQuota(amount);
         _mint(to, amount);
         
         // Emit event to trigger supply reporting
         if (registryPeer != bytes32(0)) {
             emit SupplyChangeRequiresReporting(totalSupply(), uint32(block.chainid));
+            _maybeAutoReportSupply();
         }
     }
 
@@ -359,13 +499,14 @@ contract MyntisSpokeOFT is
     function bridgeIn(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) {
         require(_to != address(0), "MyntisSpokeOFT: zero recipient");
         require(_amount > 0, "MyntisSpokeOFT: zero amount");
-        
+        _consumeQuota(_amount);
         _mint(_to, _amount);
         emit TokensBridgedIn(_to, _amount);
         
         // Emit event to trigger supply reporting
         if (registryPeer != bytes32(0)) {
             emit SupplyChangeRequiresReporting(totalSupply(), uint32(block.chainid));
+            _maybeAutoReportSupply();
         }
     }
 
@@ -383,6 +524,7 @@ contract MyntisSpokeOFT is
         // Emit event to trigger supply reporting
         if (registryPeer != bytes32(0)) {
             emit SupplyChangeRequiresReporting(totalSupply(), uint32(block.chainid));
+            _maybeAutoReportSupply();
         }
     }
 
@@ -404,7 +546,7 @@ contract MyntisSpokeOFT is
         require(_amount > 0, "MyntisSpokeOFT: zero amount");
         require(_amount <= EMERGENCY_MINT_LIMIT, "MyntisSpokeOFT: exceeds emergency limit");
         require(bytes(_reason).length > 0, "MyntisSpokeOFT: reason required");
-        
+        _consumeQuota(_amount);
         _mint(_to, _amount);
         
         emit EmergencyMint(_to, _amount, _reason);
@@ -412,6 +554,7 @@ contract MyntisSpokeOFT is
         // SECURITY FIX: Always emit supply change for registry sync
         // This ensures the GlobalSupplyRegistry can be updated even though we bypass cap check
         emit SupplyChangeRequiresReporting(totalSupply(), uint32(block.chainid));
+        _maybeAutoReportSupply();
     }
     
     /**
@@ -426,6 +569,33 @@ contract MyntisSpokeOFT is
      */
     function unpause() external onlyRole(ADMIN_ROLE) {
         _unpause();
+    }
+
+    function increaseMintQuota(uint256 amount) external {
+        require(msg.sender == quotaReceiver, "MyntisSpokeOFT: unauthorized quota");
+        mintQuota += amount;
+        emit MintQuotaIncreased(amount, mintQuota);
+    }
+
+    function confirmQuotaRequest(uint256 nonce) external {
+        require(msg.sender == quotaReceiver, "MyntisSpokeOFT: unauthorized quota");
+        require(nonce == pendingQuotaRequestNonce, "MyntisSpokeOFT: invalid nonce");
+        if (pendingQuotaConsumed > 0 && quotaConsumedSinceLastRequest >= pendingQuotaConsumed) {
+            quotaConsumedSinceLastRequest -= pendingQuotaConsumed;
+        } else {
+            quotaConsumedSinceLastRequest = 0;
+        }
+        pendingQuotaRequestNonce = 0;
+        pendingQuotaConsumed = 0;
+    }
+
+    function _consumeQuota(uint256 amount) internal {
+        if (amount > mintQuota) {
+            revert QuotaExceeded(amount, mintQuota);
+        }
+        mintQuota -= amount;
+        quotaConsumedSinceLastRequest += amount;
+        emit MintQuotaUsed(amount, mintQuota);
     }
 
     /**
