@@ -1,18 +1,19 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
-import { SpokeDistributor, MyntisSpokeOFT } from "../typechain-types";
+import { SpokeDistributor, MyntisOFTSpoke } from "../typechain-types";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("SpokeDistributor - Cross-Chain Claims", function () {
     let spokeDistributor: SpokeDistributor;
-    let spokeToken: MyntisSpokeOFT;
+    let spokeToken: MyntisOFTSpoke;
     let admin: SignerWithAddress;
     let provider: SignerWithAddress;
     let user1: SignerWithAddress;
     let user2: SignerWithAddress;
 
-    const HUB_CHAIN_ID = 8453;
+    const HUB_EID = 40245;
+    const LOCAL_EID = 1;
     let chainId: bigint;
 
     beforeEach(async function () {
@@ -25,37 +26,20 @@ describe("SpokeDistributor - Cross-Chain Claims", function () {
         const mockEndpoint = await LayerZeroEndpointMockFactory.deploy(Number(chainId));
         await mockEndpoint.waitForDeployment();
 
-        const MyntisSpokeOFTFactory = await ethers.getContractFactory("MyntisSpokeOFT");
-        const spokeTokenImpl = await MyntisSpokeOFTFactory.deploy();
-        await spokeTokenImpl.waitForDeployment();
-
-        const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
-        const proxyAdmin = await ProxyAdmin.deploy(admin.address);
-        await proxyAdmin.waitForDeployment();
-
-        const initData = MyntisSpokeOFTFactory.interface.encodeFunctionData("initialize", [
-            "Myntis Spoke",
-            "MYNT",
+        const MyntisOFTSpokeFactory = await ethers.getContractFactory("MyntisOFTSpoke");
+        spokeToken = await MyntisOFTSpokeFactory.deploy(
+            await mockEndpoint.getAddress(),
             admin.address,
-            HUB_CHAIN_ID,
-            admin.address,
-            await mockEndpoint.getAddress()
-        ]);
-
-        const TransparentUpgradeableProxy = await ethers.getContractFactory("TransparentUpgradeableProxy");
-        const spokeProxy = await TransparentUpgradeableProxy.deploy(
-            await spokeTokenImpl.getAddress(),
-            await proxyAdmin.getAddress(),
-            initData
+            HUB_EID,
+            LOCAL_EID
         );
-        await spokeProxy.waitForDeployment();
-        spokeToken = MyntisSpokeOFTFactory.attach(await spokeProxy.getAddress());
+        await spokeToken.waitForDeployment();
 
         const QuotaReceiverMock = await ethers.getContractFactory("QuotaReceiverMock");
         const quotaReceiver = await QuotaReceiverMock.deploy();
         await quotaReceiver.waitForDeployment();
         await spokeToken.connect(admin).setQuotaReceiver(await quotaReceiver.getAddress());
-        await quotaReceiver.connect(admin).increaseQuota(await spokeToken.getAddress(), ethers.parseEther("1000000"));
+        await quotaReceiver.increaseQuota(await spokeToken.getAddress(), ethers.parseEther("1000000"));
 
         const SpokeDistributorFactory = await ethers.getContractFactory("SpokeDistributor");
         spokeDistributor = await SpokeDistributorFactory.deploy(

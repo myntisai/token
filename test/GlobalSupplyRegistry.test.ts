@@ -1,8 +1,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { GlobalSupplyRegistry, Myntis } from "../typechain-types";
-import { LayerZeroEndpointMock } from "../typechain-types";
+import { GlobalSupplyRegistry } from "../typechain-types";
 
 describe("GlobalSupplyRegistry - Global Supply Tracking", function () {
   async function deployContractsFixture() {
@@ -21,15 +20,11 @@ describe("GlobalSupplyRegistry - Global Supply Tracking", function () {
     );
     await registry.waitForDeployment();
 
-    // Deploy Myntis
-    const MyntisFactory = await ethers.getContractFactory("Myntis");
-    const myntis = await MyntisFactory.deploy(
-      await mockEndpoint.getAddress(),
-      deployer.address
-    );
-    await myntis.waitForDeployment();
+    const Token = await ethers.getContractFactory("MockERC20");
+    const token = await Token.deploy("Mock", "MOCK");
+    await token.waitForDeployment();
 
-    return { registry, myntis, mockEndpoint, deployer, user1 };
+    return { registry, mockEndpoint, deployer, user1, token };
   }
 
   describe("Global Supply Tracking", function () {
@@ -136,9 +131,70 @@ describe("GlobalSupplyRegistry - Global Supply Tracking", function () {
       if (currentSupply > 0) {
         await expect(
           registry.updateCap(currentSupply - ethers.parseEther("1"))
-        ).to.be.revertedWith("GlobalSupplyRegistry: cap < current supply");
+        ).to.be.revertedWith("GlobalSupplyRegistry: cap < allocated supply");
       }
     });
   });
-});
 
+  describe("Reserved Quota Accounting", function () {
+    it("should treat reserved quotas as allocated supply in canMint", async function () {
+      const { registry } = await loadFixture(deployContractsFixture);
+      const globalCap = await registry.globalCap();
+      const reserved = ethers.parseEther("100");
+
+      await registry.setChainQuota(2, reserved);
+
+      expect(await registry.canMint(globalCap)).to.equal(false);
+      expect(await registry.canMint(globalCap - reserved)).to.equal(true);
+    });
+
+    it("should prevent hub minting that exceeds cap after reserved quotas", async function () {
+      const { registry, token } = await loadFixture(deployContractsFixture);
+      const globalCap = await registry.globalCap();
+      const reserved = ethers.parseEther("100");
+
+      await registry.setChainQuota(2, reserved);
+      const tokenAddress = await token.getAddress();
+      await registry.registerToken(tokenAddress);
+      await ethers.provider.send("hardhat_setBalance", [tokenAddress, "0x1000000000000000000"]);
+      const tokenSigner = await ethers.getImpersonatedSigner(tokenAddress);
+      const registryAsToken = registry.connect(tokenSigner);
+
+      await expect(
+        registryAsToken.recordMint(globalCap - reserved + 1n)
+      ).to.be.revertedWithCustomError(registry, "CapExceeded");
+    });
+
+    it("should block quota increases that exceed cap", async function () {
+      const { registry } = await loadFixture(deployContractsFixture);
+      const globalCap = await registry.globalCap();
+
+      await expect(
+        registry.setChainQuota(2, globalCap + 1n)
+      ).to.be.revertedWith("GlobalSupplyRegistry: would exceed cap");
+    });
+
+    it("should block cap reductions below allocated supply", async function () {
+      const { registry } = await loadFixture(deployContractsFixture);
+      const reserved = ethers.parseEther("100");
+
+      await registry.setChainQuota(2, reserved);
+
+      await expect(
+        registry.updateCap(reserved - 1n)
+      ).to.be.revertedWith("GlobalSupplyRegistry: cap < allocated supply");
+    });
+
+    it("should prevent seeding supply that exceeds cap after reserved quotas", async function () {
+      const { registry } = await loadFixture(deployContractsFixture);
+      const globalCap = await registry.globalCap();
+      const reserved = ethers.parseEther("100");
+
+      await registry.setChainQuota(2, reserved);
+
+      await expect(
+        registry.seedChainSupply(3, globalCap - reserved + 1n)
+      ).to.be.revertedWith("GlobalSupplyRegistry: would exceed cap");
+    });
+  });
+});

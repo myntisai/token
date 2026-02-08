@@ -11,6 +11,7 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
 import { SignerWithAddress } from "@nomicfoundation/hardhat-ethers/signers";
+import { time } from "@nomicfoundation/hardhat-network-helpers";
 
 describe("Provider Batch ZK Proof Integration", function () {
     let token: any;
@@ -59,7 +60,7 @@ describe("Provider Batch ZK Proof Integration", function () {
 
     it("Should accept valid ZK proof for batch submission", async function () {
         const root = ethers.keccak256(ethers.toUtf8Bytes("test"));
-        const expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+        const expiry = (await time.latest()) + 7 * 24 * 60 * 60;
         const totalAmount = ethers.parseEther("1000");
 
         const proofA: [bigint, bigint] = [0n, 0n];
@@ -87,7 +88,7 @@ describe("Provider Batch ZK Proof Integration", function () {
     it("Should reject invalid ZK proof", async function () {
         // Test that invalid proofs are rejected
         const root = ethers.keccak256(ethers.toUtf8Bytes("test"));
-        const expiry = Math.floor(Date.now() / 1000) + 7 * 24 * 60 * 60;
+        const expiry = (await time.latest()) + 7 * 24 * 60 * 60;
         const totalAmount = ethers.parseEther("1000");
 
         await verifier.setShouldVerify(false);
