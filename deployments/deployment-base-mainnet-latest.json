@@ -1,0 +1,18 @@
+{
+  "myntis": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+  "myntisImplementation": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+  "emissionsContract": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+  "dualPoolStaking": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+  "dualPoolStakingImplementation": "0xa101ff8C9fb5c0143b19dBb37e6689eb25FE9863",
+  "groth16Verifier": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
+  "zkMerkleDistributor": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+  "zkMerkleDistributorImplementation": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+  "globalSupplyRegistry": "0xdFb3b8107B33d54BAe402a76BbA1432668B2D896",
+  "liquidStakingVault": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+  "liquidStakingVaultImplementation": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "deployer": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+  "timestamp": "2026-02-08T04:32:48.860Z",
+  "gasUsed": "0"
+}

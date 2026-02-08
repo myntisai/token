@@ -1,0 +1,11 @@
+{
+  "network": "optimism-sepolia",
+  "chainId": 11155420,
+  "layerZeroEid": 40232,
+  "hubChainEid": 40245,
+  "contracts": {
+    "myntisOFTSpoke": "0x944de5c174c606967C6B9F6158CD597ac1Cd879A"
+  },
+  "deployer": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+  "timestamp": "2026-02-06T21:06:38.971Z"
+}

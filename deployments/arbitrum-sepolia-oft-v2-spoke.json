@@ -1,0 +1,11 @@
+{
+  "network": "arbitrum-sepolia",
+  "chainId": 421614,
+  "layerZeroEid": 40231,
+  "hubChainEid": 40245,
+  "contracts": {
+    "myntisOFTSpoke": "0x6Ec7b9508e131D08B9d680e1A857fb53215E9c50"
+  },
+  "deployer": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+  "timestamp": "2026-02-07T20:35:21.013Z"
+}

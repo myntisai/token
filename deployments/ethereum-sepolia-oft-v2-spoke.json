@@ -4,8 +4,8 @@
   "layerZeroEid": 40161,
   "hubChainEid": 40245,
   "contracts": {
-    "myntisOFTSpoke": "0x6d059168ae5250c8637b7EFc3343F5509BB0118B"
+    "myntisOFTSpoke": "0xa0124FfFe64267B04C13dB330F9452Abaf7Ad6f0"
   },
-  "deployer": "0x0904192498effF59e0502aE1700ecAa9B1708543",
-  "timestamp": "2025-11-28T03:32:02.405Z"
+  "deployer": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+  "timestamp": "2026-02-06T13:34:02.169Z"
 }
