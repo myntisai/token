@@ -580,6 +580,12 @@ contract DualPoolStaking is
         // This handles the edge case where provider unstakes before rewards are harvested
         require(wasEverProvider[provider], "Never was a provider");
         
+        // SECURITY FIX: Track provider accrued emissions for funding/distribution
+        // These tokens are minted to staking and can be moved to distributor or withdrawn by provider
+        providerAccruedEmissions[provider] += amount;
+        totalProviderAccruedEmissions += amount;
+        emit ProviderEmissionsAccrued(provider, amount, providerAccruedEmissions[provider]);
+
         // SECURITY FIX: Don't update rewardDebt here - let harvest handle it
         // This function is just a notification that rewards were minted
         // The actual reward debt update happens in _harvestRewards
@@ -739,10 +745,76 @@ contract DualPoolStaking is
         }
         
         if (pending > 0) {
+            if (userInfo_.poolType == PoolType.Provider) {
+                // Keep providerAccruedEmissions in sync when provider withdraws rewards
+                uint256 accrued = providerAccruedEmissions[user];
+                if (accrued >= pending) {
+                    providerAccruedEmissions[user] = accrued - pending;
+                    totalProviderAccruedEmissions -= pending;
+                } else {
+                    // Clamp to zero if accounting drifted; prevents underflow
+                    totalProviderAccruedEmissions -= accrued;
+                    providerAccruedEmissions[user] = 0;
+                }
+            }
             // Transfer rewards to user
             token.safeTransfer(user, pending);
             emit RewardsHarvested(user, pending, userInfo_.poolType);
         }
+    }
+
+    /**
+     * @notice Move provider accrued emissions from staking to ZK distributor
+     * @dev Provider calls this to fund their distributor balance (Option B)
+     * @param provider Provider address
+     * @param amount Amount to fund
+     */
+    function fundProviderBalance(address provider, uint256 amount) external nonReentrant {
+        require(provider != address(0), "Invalid provider");
+        require(amount > 0, "Zero amount");
+        require(zkMerkleDistributor != address(0), "ZK distributor not set");
+        require(wasEverProvider[provider], "Never was a provider");
+        require(providerAccruedEmissions[provider] >= amount, "Insufficient accrued emissions");
+
+        uint256 balance = token.balanceOf(address(this));
+        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
+        require(balance >= accounted, "DualPoolStaking: accounted exceeds balance");
+        uint256 available = balance - accounted;
+        require(available >= amount, "Insufficient available balance in staking");
+
+        providerAccruedEmissions[provider] -= amount;
+        totalProviderAccruedEmissions -= amount;
+
+        token.safeIncreaseAllowance(zkMerkleDistributor, amount);
+        IZKMerkleDistributor(zkMerkleDistributor).notifyRewardWithTransfer(provider, amount);
+
+        emit ProviderBalanceFunded(provider, amount, zkMerkleDistributor);
+    }
+
+    /**
+     * @notice Withdraw provider's accrued emissions directly to their wallet
+     * @param provider Provider address (must match msg.sender unless admin)
+     * @param amount Amount to withdraw
+     */
+    function withdrawProviderEmissions(address provider, uint256 amount) external nonReentrant {
+        require(provider != address(0), "Invalid provider");
+        require(amount > 0, "Zero amount");
+        require(msg.sender == provider || hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not authorized");
+        require(providerAccruedEmissions[provider] >= amount, "Insufficient accrued emissions");
+
+        uint256 balance = token.balanceOf(address(this));
+        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
+        require(balance >= accounted, "DualPoolStaking: accounted exceeds balance");
+        uint256 available = balance - accounted;
+        require(available >= amount, "Insufficient available balance in staking");
+
+        providerAccruedEmissions[provider] -= amount;
+        totalProviderAccruedEmissions -= amount;
+
+        token.safeTransfer(provider, amount);
+        emit ProviderEmissionsWithdrawn(provider, amount);
     }
     
     function _pendingProviderRewards(UserInfo memory user) internal view returns (uint256) {
