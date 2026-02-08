@@ -41,7 +41,7 @@ async function main() {
     
     // Grant MINTER_ROLE to distributor
     console.log("\n📝 Granting MINTER_ROLE to SpokeDistributor...");
-    const SpokeToken = await ethers.getContractAt("MyntisSpokeOFT", SPOKE_TOKEN);
+    const SpokeToken = await ethers.getContractAt("MyntisOFTSpoke", SPOKE_TOKEN);
     const MINTER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("MINTER_ROLE"));
     
     const hasMinterRole = await SpokeToken.hasRole(MINTER_ROLE, distributorAddress);

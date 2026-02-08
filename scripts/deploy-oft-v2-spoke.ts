@@ -1,7 +1,8 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 import * as dotenv from "dotenv";
+import { assertEndpointMatchesNetwork, getLzEndpointV2 } from "./layerzero";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -14,8 +15,8 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
  * - Compatible with MyntisOFT Hub on Base
  */
 
-// LayerZero V2 Endpoint (same address across all testnets)
-const LZ_ENDPOINT_V2 = "0x6EDCE65403992e310A62460808c4b910D972f10f";
+// LayerZero V2 Endpoint (selected by network; can be overridden with LZ_ENDPOINT env var)
+const LZ_ENDPOINT_V2 = getLzEndpointV2(network.name);
 
 // LayerZero V2 Endpoint IDs
 const CHAIN_EIDS: { [key: string]: number } = {
@@ -81,6 +82,7 @@ async function main() {
   console.log(`🔗 LayerZero EID: ${layerZeroEid}`);
   console.log(`🏠 Hub Chain EID: ${HUB_CHAIN_EID} (Base Sepolia)`);
   console.log(`📡 LayerZero Endpoint: ${LZ_ENDPOINT_V2}\n`);
+  assertEndpointMatchesNetwork(networkName, LZ_ENDPOINT_V2);
 
   // Deploy MyntisOFTSpoke
   console.log("📝 Deploying MyntisOFTSpoke...");
@@ -89,7 +91,8 @@ async function main() {
   const myntisOFTSpoke = await MyntisOFTSpoke.deploy(
     LZ_ENDPOINT_V2,
     deployer.address,  // delegate (admin)
-    HUB_CHAIN_EID      // hub chain EID
+    HUB_CHAIN_EID,     // hub chain EID
+    layerZeroEid       // local chain EID
   );
   
   await myntisOFTSpoke.waitForDeployment();
@@ -98,12 +101,17 @@ async function main() {
 
   // Get contract info
   console.log("📊 Contract Info:");
-  const info = await myntisOFTSpoke.getContractInfo();
-  console.log(`   Name: ${info.name_}`);
-  console.log(`   Symbol: ${info.symbol_}`);
-  console.log(`   Total Supply: ${ethers.formatEther(info.totalSupply_)} MYNT`);
-  console.log(`   Hub Chain EID: ${info.hubEid_}`);
-  console.log(`   Paused: ${info.paused_}\n`);
+  try {
+    const info = await myntisOFTSpoke.getContractInfo();
+    console.log(`   Name: ${info.name_}`);
+    console.log(`   Symbol: ${info.symbol_}`);
+    console.log(`   Total Supply: ${ethers.formatEther(info.totalSupply_)} MYNT`);
+    console.log(`   Hub Chain EID: ${info.hubEid_}`);
+    console.log(`   Local Chain EID: ${info.localEid_}`);
+    console.log(`   Paused: ${info.paused_}\n`);
+  } catch (error: any) {
+    console.log("   ⚠️  getContractInfo failed:", error?.shortMessage || error?.message || error);
+  }
 
   // Save deployment info
   const deploymentDir = path.join(__dirname, "../deployments");
@@ -146,7 +154,7 @@ async function main() {
   console.log("\n2. After all deployments, configure peers from hub:");
   console.log("   npx hardhat run scripts/configure-oft-v2-peers.ts --network base-sepolia");
   console.log("\n3. Verify contract:");
-  console.log(`   npx hardhat verify --network ${networkName} ${spokeAddress} ${LZ_ENDPOINT_V2} ${deployer.address} ${HUB_CHAIN_EID}`);
+  console.log(`   npx hardhat verify --network ${networkName} ${spokeAddress} ${LZ_ENDPOINT_V2} ${deployer.address} ${HUB_CHAIN_EID} ${layerZeroEid}`);
   
   return deploymentResult;
 }
@@ -157,4 +165,3 @@ main()
     console.error("❌ Deployment failed:", error);
     process.exit(1);
   });
-

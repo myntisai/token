@@ -11,9 +11,7 @@ import * as path from "path";
 
 // Configuration
 const CONFIG = {
-    hubChainEid: 40245, // Base Sepolia LayerZero EID
-    hubGlobalNullifier: "0x0000000000000000000000000000000000000001", // Placeholder - no GlobalNullifier deployed on hub yet
-    spokeToken: "0xdB59bb54c01aBe6DF427a7994AeDD986083D18D4", // MyntisSpokeOFT on ETH Sepolia
+    spokeToken: "0xdB59bb54c01aBe6DF427a7994AeDD986083D18D4", // MyntisOFTSpoke on ETH Sepolia
 };
 
 async function main() {
@@ -42,20 +40,12 @@ async function main() {
 
     const SpokeDistributorFactory = await ethers.getContractFactory("SpokeDistributor");
     const distributor = await SpokeDistributorFactory.deploy(
-        CONFIG.hubChainEid,           // _hubChainId (LayerZero EID)
-        CONFIG.hubGlobalNullifier,    // _hubGlobalNullifier (placeholder)
         CONFIG.spokeToken,            // _spokeToken
         deployer.address              // admin
     );
     await distributor.waitForDeployment();
     const distributorAddress = await distributor.getAddress();
     console.log(`  SpokeDistributor: ${distributorAddress}`);
-
-    // Verify deployment
-    const [hubChainId, hubNullifier] = await distributor.getHubInfo();
-    console.log(`\n  Verification:`);
-    console.log(`    Hub Chain EID: ${hubChainId}`);
-    console.log(`    Hub Nullifier: ${hubNullifier}`);
 
     // ============================================================
     // STEP 2: Grant MINTER_ROLE to SpokeDistributor on SpokeToken
@@ -64,7 +54,7 @@ async function main() {
     console.log("STEP 2: Granting MINTER_ROLE to SpokeDistributor");
     console.log("=".repeat(80));
 
-    const SpokeToken = await ethers.getContractFactory("MyntisSpokeOFT");
+    const SpokeToken = await ethers.getContractFactory("MyntisOFTSpoke");
     const spokeToken = SpokeToken.attach(CONFIG.spokeToken);
 
     const MINTER_ROLE = ethers.keccak256(ethers.toUtf8Bytes("MINTER_ROLE"));
@@ -94,8 +84,6 @@ async function main() {
     const result = {
         spokeDistributor: distributorAddress,
         spokeToken: CONFIG.spokeToken,
-        hubChainEid: CONFIG.hubChainEid,
-        hubGlobalNullifier: CONFIG.hubGlobalNullifier,
         network: "ethereum-sepolia",
         chainId,
         deployer: deployer.address,
@@ -123,7 +111,7 @@ async function main() {
     console.log("=".repeat(80));
     console.log(`
 Deployed on Ethereum Sepolia:
-  - MyntisSpokeOFT:    ${CONFIG.spokeToken}
+  - MyntisOFTSpoke:    ${CONFIG.spokeToken}
   - SpokeDistributor:  ${distributorAddress}
 
 Add to .env.prod:

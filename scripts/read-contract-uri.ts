@@ -1,13 +1,33 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
+import * as fs from "fs";
+import * as path from "path";
 
 async function main() {
-  const proxyAddr = "0x5242925C716225C58459f557E5B4Be51373aB767";
+  const envAddr = process.env.TOKEN_ADDRESS;
+  let tokenAddr: string | undefined = envAddr && ethers.isAddress(envAddr) ? envAddr : undefined;
+
+  if (!tokenAddr) {
+    const fname = `deployment-${network.name}-latest.json`;
+    const p = path.join(__dirname, "..", "deployments", fname);
+    if (fs.existsSync(p)) {
+      const deployment = JSON.parse(fs.readFileSync(p, "utf8"));
+      if (deployment.myntis && ethers.isAddress(deployment.myntis)) tokenAddr = deployment.myntis;
+    }
+  }
+
+  if (!tokenAddr) {
+    throw new Error(
+      "Missing TOKEN_ADDRESS and no deployments/deployment-<network>-latest.json with { myntis } found"
+    );
+  }
   
   console.log("Reading contractURI from Myntis token...\n");
+  console.log("Network:", network.name);
+  console.log("Token:", tokenAddr);
   
   // Load the contract ABI (we only need the contractURI function)
   const Myntis = await ethers.getContractFactory("Myntis");
-  const token = Myntis.attach(proxyAddr);
+  const token = Myntis.attach(tokenAddr);
   
   try {
     const contractURI = await token.contractURI();
@@ -42,11 +62,11 @@ async function main() {
     // Try to get implementation address
     console.log("\nAttempting to get implementation address...");
     const IMPLEMENTATION_SLOT = "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc";
-    const storage = await ethers.provider.getStorage(proxyAddr, IMPLEMENTATION_SLOT);
+    const storage = await ethers.provider.getStorage(tokenAddr, IMPLEMENTATION_SLOT);
     const implAddr = "0x" + storage.slice(-40);
     console.log("Implementation address:", implAddr);
     console.log("\nTo verify the implementation, run:");
-    console.log(`npx hardhat verify --network base-sepolia ${implAddr}`);
+    console.log(`npx hardhat verify --network ${network.name} ${implAddr}`);
   }
 }
 

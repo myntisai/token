@@ -1,5 +1,5 @@
 // Cross-chain peer configuration for Myntis OFT tokens
-// Uses Myntis.sol (hub) and MyntisSpokeOFT.sol (spokes)
+// Uses Myntis.sol (hub) and MyntisOFTSpoke.sol (spokes)
 import { ethers } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
@@ -28,40 +28,34 @@ interface DeploymentInfo {
   chainId: number;
   layerZeroEid: number;
   contracts: {
-    myntisOFT: string;
+    myntis: string;
   };
 }
 
-async function loadDeployment(networkName: string): Promise<DeploymentInfo | null> {
-  // Try multiple possible file names
-  const possibleFiles = [
-    `${networkName}-oft-standard.json`,
-    `${networkName}-full-stack.json`
-  ];
-  
-  for (const fileName of possibleFiles) {
-    const deploymentFile = path.join(__dirname, `../deployments/${fileName}`);
-    if (fs.existsSync(deploymentFile)) {
-      const data = JSON.parse(fs.readFileSync(deploymentFile, "utf-8"));
-      // Handle both formats
-      if (data.contracts && data.contracts.myntisOFT) {
-        return {
-          network: data.network,
-          chainId: data.chainId,
-          layerZeroEid: data.layerZeroEid,
-          contracts: { myntisOFT: data.contracts.myntisOFT }
-        };
-      } else if (data.myntisOFT) {
-        return {
-          network: data.network,
-          chainId: data.chainId,
-          layerZeroEid: data.layerZeroEid || LAYERZERO_EIDS[networkName],
-          contracts: { myntisOFT: data.myntisOFT }
-        };
-      }
-    }
+async function loadHubDeployment(): Promise<DeploymentInfo> {
+  const deploymentFile = path.join(__dirname, "../deployments/deployment-base-sepolia-latest.json");
+  if (!fs.existsSync(deploymentFile)) {
+    throw new Error("Hub deployment not found: deployment-base-sepolia-latest.json");
   }
-  return null;
+  const data = JSON.parse(fs.readFileSync(deploymentFile, "utf-8"));
+  return {
+    network: data.network || "base-sepolia",
+    chainId: Number(data.chainId || 84532),
+    layerZeroEid: LAYERZERO_EIDS["base-sepolia"],
+    contracts: { myntis: data.myntis }
+  };
+}
+
+async function loadSpokeDeployment(networkName: string): Promise<DeploymentInfo | null> {
+  const deploymentFile = path.join(__dirname, `../deployments/${networkName}-oft-v2-spoke.json`);
+  if (!fs.existsSync(deploymentFile)) return null;
+  const data = JSON.parse(fs.readFileSync(deploymentFile, "utf-8"));
+  return {
+    network: data.network,
+    chainId: Number(data.chainId),
+    layerZeroEid: data.layerZeroEid || LAYERZERO_EIDS[networkName],
+    contracts: { myntis: data.contracts.myntisOFTSpoke }
+  };
 }
 
 async function configurePeers() {
@@ -72,23 +66,20 @@ async function configurePeers() {
   const spokeNetworks = ["ethereum-sepolia", "arbitrum-sepolia", "optimism-sepolia"];
 
   // Load hub deployment
-  const hubDeployment = await loadDeployment(hubNetwork);
-  if (!hubDeployment) {
-    throw new Error(`Hub deployment not found for ${hubNetwork}. Deploy hub first.`);
-  }
+  const hubDeployment = await loadHubDeployment();
 
   console.log(`Hub: ${hubNetwork}`);
-  console.log(`Hub MyntisOFT: ${hubDeployment.contracts.myntisOFT}`);
+  console.log(`Hub Myntis: ${hubDeployment.contracts.myntis}`);
   console.log(`Hub EID: ${hubDeployment.layerZeroEid}\n`);
 
   // Load spoke deployments
   const spokeDeployments: { [key: string]: DeploymentInfo } = {};
   for (const network of spokeNetworks) {
-    const deployment = await loadDeployment(network);
+    const deployment = await loadSpokeDeployment(network);
     if (deployment) {
       spokeDeployments[network] = deployment;
       console.log(`Spoke: ${network}`);
-      console.log(`  MyntisOFT: ${deployment.contracts.myntisOFT}`);
+      console.log(`  MyntisOFTSpoke: ${deployment.contracts.myntis}`);
       console.log(`  EID: ${deployment.layerZeroEid}`);
     } else {
       console.log(`⚠️  Spoke deployment not found for ${network}`);
@@ -102,12 +93,12 @@ async function configurePeers() {
   // Use Myntis.sol for hub (not deprecated MyntisOFT.sol)
   const hubContract = await ethers.getContractAt(
     "Myntis",
-    hubDeployment.contracts.myntisOFT
+    hubDeployment.contracts.myntis
   );
 
   for (const [network, deployment] of Object.entries(spokeDeployments)) {
     const spokeEid = deployment.layerZeroEid;
-    const spokeAddress = deployment.contracts.myntisOFT;
+    const spokeAddress = deployment.contracts.myntis;
     const spokeAddressBytes32 = ethers.zeroPadValue(spokeAddress, 32);
 
     try {
@@ -122,14 +113,14 @@ async function configurePeers() {
   // Configure spokes to know about hub
   console.log("\nConfiguring spoke peers...");
   const hubEid = hubDeployment.layerZeroEid;
-  const hubAddress = hubDeployment.contracts.myntisOFT;
+  const hubAddress = hubDeployment.contracts.myntis;
   const hubAddressBytes32 = ethers.zeroPadValue(hubAddress, 32);
 
   for (const [network, deployment] of Object.entries(spokeDeployments)) {
     try {
       const spokeContract = await ethers.getContractAt(
-        "contracts/MyntisOFT.sol:MyntisOFT",
-        deployment.contracts.myntisOFT
+        "MyntisOFTSpoke",
+        deployment.contracts.myntis
       );
 
       const tx = await spokeContract.setPeer(hubEid, hubAddressBytes32);
@@ -158,4 +149,3 @@ main()
     console.error(error);
     process.exit(1);
   });
-

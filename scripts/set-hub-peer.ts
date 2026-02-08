@@ -19,8 +19,9 @@ const LZ_CONFIG = {
 };
 
 // Deployed contracts
-const HUB_MYNTIS = "0x8BEceC0fFbc93bBd94DEcaa9Bbf7b2CfDd286d55";
-const SPOKE_ETH_SEPOLIA = "0xdB59bb54c01aBe6DF427a7994AeDD986083D18D4";
+// NOTE: Keep in sync with deployments/*-latest.json files
+const HUB_MYNTIS = "0x599016bF00eE23d531223c6285C92aa0cAC278EF";
+const SPOKE_ETH_SEPOLIA = "0xa0124FfFe64267B04C13dB330F9452Abaf7Ad6f0";
 
 async function main() {
     console.log("=".repeat(80));

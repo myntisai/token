@@ -1,7 +1,8 @@
-import { ethers, run } from "hardhat";
+import { ethers, network, run } from "hardhat";
 import * as fs from "fs";
 import * as dotenv from "dotenv";
 dotenv.config();
+import { assertEndpointMatchesNetwork, getLzEndpointV2 } from "./layerzero";
 
 /**
  * Deploy and Verify Hub Contracts
@@ -21,8 +22,8 @@ dotenv.config();
  * 9. RewardWeightingRegistry (UUPS proxy)
  */
 
-// LayerZero V2 Endpoint on Base Sepolia
-const LZ_ENDPOINT = "0x6EDCE65403992e310A62460808c4b910D972f10f";
+// LayerZero V2 Endpoint (selected by network; can be overridden with LZ_ENDPOINT env var)
+const LZ_ENDPOINT = getLzEndpointV2(network.name);
 
 // Delay for block confirmations before verification
 const CONFIRMATION_DELAY_MS = 30000;
@@ -81,6 +82,7 @@ async function main() {
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
   console.log(`LZ Endpoint: ${LZ_ENDPOINT}`);
+  assertEndpointMatchesNetwork(network.name, LZ_ENDPOINT);
 
   const deployed: Partial<DeployedContracts> = {};
 

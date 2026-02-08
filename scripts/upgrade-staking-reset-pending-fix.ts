@@ -81,12 +81,7 @@ async function main() {
     console.log("\nAfter reset:");
     console.log("  Available:", ethers.formatEther(available), "MYNT");
     
-    const providerAccrued = await proxy.providerAccruedEmissions(PROVIDER);
-    console.log("  Provider accrued:", ethers.formatEther(providerAccrued), "MYNT");
-    
-    if (available >= providerAccrued) {
-      console.log("\n✅ Provider can now withdraw full accrued amount!");
-    }
+    console.log("\n✅ Pending rewards reset complete.");
   } else {
     console.log("No userPendingRewards to reset");
   }

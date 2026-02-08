@@ -41,8 +41,10 @@ async function main() {
   console.log("Unaccounted:", ethers.formatEther(unaccounted), "MYNT");
   
   console.log("\n=== NEXT STEP ===");
-  console.log("When the staking cron runs harvestFromEmissions(), the new _syncUnaccountedTokens()");
-  console.log("function will automatically move these ~466K MYNT into providerPendingRewards/userPendingRewards");
+  console.log("When harvestFromEmissions() runs, EmissionsContract mints to staking and");
+  console.log("syncEmissions() splits rewards into provider/user pending buckets.");
+  console.log("If any extra tokens are sitting in the staking contract, _syncUnaccountedTokens()");
+  console.log("can sweep them into pending rewards.");
 }
 
 main().catch(console.error);

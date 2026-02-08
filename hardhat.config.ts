@@ -47,7 +47,8 @@ const config: HardhatUserConfig = {
     hardhat: { chainId: 1337 },
     localhost: { url: "http://127.0.0.1:8545" },
     "base-sepolia": {
-      url: "https://sepolia.base.org",
+      // Public endpoint can intermittently fail; allow override via token/.env.
+      url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
       accounts: getPrivateKey(),
       timeout: 60000,
     },
@@ -212,4 +213,3 @@ const config: HardhatUserConfig = {
 };
 
 export default config;
-

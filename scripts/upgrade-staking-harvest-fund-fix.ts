@@ -1,11 +1,5 @@
 /**
- * Upgrade DualPoolStaking: fix harvest -> fundProviderBalance
- *
- * Bug: After harvestFromEmissions(), _syncUnaccountedTokens() was adding the
- * same tokens to pending rewards, so "available" became 0 and fundProviderBalance reverted.
- * Fix: Only call _syncUnaccountedTokens() when harvest amount is 0.
- *
- * Run: npx hardhat run scripts/upgrade-staking-harvest-fund-fix.ts --network base-sepolia
+ * Deprecated: fundProviderBalance flow removed under pool-split emissions.
  */
 
 import { ethers, upgrades } from "hardhat";
@@ -13,6 +7,9 @@ import { ethers, upgrades } from "hardhat";
 const STAKING_PROXY = "0x43495fBcd33235D9FcD4c2c7f8cB2444E463C9b3";
 
 async function main() {
+  console.log("NOTE: This upgrade script is deprecated under the pool-split emissions flow.");
+  console.log("fundProviderBalance is no longer used. Skipping.");
+  return;
   console.log("==============================================================================");
   console.log("UPGRADE DualPoolStaking - harvest/fundProviderBalance fix");
   console.log("==============================================================================\n");

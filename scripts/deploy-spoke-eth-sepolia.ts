@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 
 /**
- * Deploy MyntisSpokeOFT on Ethereum Sepolia
+ * Deploy MyntisOFTSpoke on Ethereum Sepolia
  * 
  * Hub: Base Sepolia (chainId: 84532, LZ EID: 40245)
  * Spoke: Ethereum Sepolia (chainId: 11155111, LZ EID: 40161)
@@ -24,7 +24,8 @@ const LZ_CONFIG = {
 };
 
 // Hub contract (Base Sepolia)
-const HUB_MYNTIS = "0x8BEceC0fFbc93bBd94DEcaa9Bbf7b2CfDd286d55";
+// NOTE: Keep in sync with deployments/deployment-base-sepolia-latest.json
+const HUB_MYNTIS = "0x599016bF00eE23d531223c6285C92aa0cAC278EF";
 
 async function main() {
     console.log("=".repeat(80));
@@ -44,53 +45,25 @@ async function main() {
     }
 
     // ============================================================
-    // STEP 1: Deploy MyntisSpokeOFT Implementation
+    // STEP 1: Deploy MyntisOFTSpoke
     // ============================================================
     console.log(`\n${"=".repeat(80)}`);
-    console.log("STEP 1: Deploying MyntisSpokeOFT Implementation");
+    console.log("STEP 1: Deploying MyntisOFTSpoke");
     console.log("=".repeat(80));
 
-    const SpokeFactory = await ethers.getContractFactory("MyntisSpokeOFT");
-    const spokeImpl = await SpokeFactory.deploy();
-    await spokeImpl.waitForDeployment();
-    const spokeImplAddress = await spokeImpl.getAddress();
-    console.log(`  Implementation: ${spokeImplAddress}`);
+    const SpokeFactory = await ethers.getContractFactory("MyntisOFTSpoke");
+    const spoke = await SpokeFactory.deploy(
+        LZ_CONFIG.ethSepolia.endpoint,
+        deployer.address,
+        LZ_CONFIG.baseSepolia.eid,
+        LZ_CONFIG.ethSepolia.eid
+    );
+    await spoke.waitForDeployment();
+    const spokeAddress = await spoke.getAddress();
+    console.log(`  Spoke: ${spokeAddress}`);
 
     // ============================================================
-    // STEP 2: Deploy Proxy with Initialize
-    // ============================================================
-    console.log(`\n${"=".repeat(80)}`);
-    console.log("STEP 2: Deploying Proxy");
-    console.log("=".repeat(80));
-
-    // Encode initialize call
-    const initData = SpokeFactory.interface.encodeFunctionData("initialize", [
-        "Myntis",               // _name
-        "MYNT",                 // _symbol
-        deployer.address,       // _delegate
-        LZ_CONFIG.baseSepolia.eid, // _hubChainId (LayerZero EID, not chain ID)
-        HUB_MYNTIS,             // _hubToken
-        LZ_CONFIG.ethSepolia.endpoint  // _endpoint
-    ]);
-
-    const SimpleProxyFactory = await ethers.getContractFactory("SimpleProxy");
-    const proxy = await SimpleProxyFactory.deploy(spokeImplAddress, initData);
-    await proxy.waitForDeployment();
-    const spokeAddress = await proxy.getAddress();
-    console.log(`  Proxy: ${spokeAddress}`);
-
-    // Attach spoke interface
-    const spoke = SpokeFactory.attach(spokeAddress);
-
-    // Verify initialization
-    const [hubChainId, hubToken, currentChainId] = await spoke.getCrossChainInfo();
-    console.log(`\n  Verification:`);
-    console.log(`    Hub Chain EID: ${hubChainId}`);
-    console.log(`    Hub Token: ${hubToken}`);
-    console.log(`    Current Chain ID: ${currentChainId}`);
-
-    // ============================================================
-    // STEP 3: Set Peer (Hub -> Spoke)
+    // STEP 2: Set Peer (Hub -> Spoke)
     // ============================================================
     console.log(`\n${"=".repeat(80)}`);
     console.log("STEP 3: Setting Peer to Hub (Base Sepolia)");
@@ -115,20 +88,20 @@ async function main() {
     console.log("=".repeat(80));
 
     const result = {
-        spoke: spokeAddress,
-        spokeImpl: spokeImplAddress,
-        hub: HUB_MYNTIS,
-        hubEid: LZ_CONFIG.baseSepolia.eid,
-        spokeEid: LZ_CONFIG.ethSepolia.eid,
         network: "ethereum-sepolia",
         chainId,
+        layerZeroEid: LZ_CONFIG.ethSepolia.eid,
+        hubChainEid: LZ_CONFIG.baseSepolia.eid,
+        contracts: {
+            myntisOFTSpoke: spokeAddress
+        },
+        hub: HUB_MYNTIS,
         endpoint: LZ_CONFIG.ethSepolia.endpoint,
         deployer: deployer.address,
         timestamp: new Date().toISOString()
     };
 
     console.log(`\nSpoke Contract: ${result.spoke}`);
-    console.log(`Implementation: ${result.spokeImpl}`);
     console.log(`Hub Contract:   ${result.hub}`);
 
     // Save deployment
@@ -137,12 +110,9 @@ async function main() {
         fs.mkdirSync(deploymentDir, { recursive: true });
     }
 
-    const deploymentFile = path.join(deploymentDir, `ethereum-sepolia-spoke-${Date.now()}.json`);
+    const deploymentFile = path.join(deploymentDir, `ethereum-sepolia-oft-v2-spoke.json`);
     fs.writeFileSync(deploymentFile, JSON.stringify(result, null, 2));
     console.log(`\nSaved to: ${deploymentFile}`);
-
-    const latestFile = path.join(deploymentDir, `ethereum-sepolia-spoke-latest.json`);
-    fs.writeFileSync(latestFile, JSON.stringify(result, null, 2));
 
     console.log(`\n${"=".repeat(80)}`);
     console.log("NEXT STEPS:");
@@ -159,7 +129,7 @@ async function main() {
    - Bridge from Spoke to Hub
 
 3. Add to .env.prod:
-   MYNTIS_SPOKE_ETH_SEPOLIA=${result.spoke}
+   MYNTIS_SPOKE_ETH_SEPOLIA=${result.contracts.myntisOFTSpoke}
 `);
 }
 

@@ -3,7 +3,13 @@ import * as dotenv from "dotenv";
 import * as path from "path";
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
+/**
+ * Deprecated: withdrawProviderEmissions is not used under pool-split emissions.
+ */
 async function main() {
+  console.log("NOTE: withdrawProviderEmissions is deprecated under pool-split emissions.");
+  console.log("Skipping upgrade script.");
+  return;
   // DualPoolStaking proxy address on Base Sepolia (December 28, 2025 deployment)
   const STAKING_PROXY = "0xe66e51C61a0D89831e9B41f8dE28fbFf18C5E1f8";
 

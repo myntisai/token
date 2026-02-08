@@ -1,7 +1,8 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 import * as dotenv from "dotenv";
+import { assertEndpointMatchesNetwork, getLzEndpointV2 } from "./layerzero";
 
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
@@ -14,8 +15,8 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
  * - LayerZero V2 OFT standard
  */
 
-// LayerZero V2 Endpoint (same address across all testnets)
-const LZ_ENDPOINT_V2 = "0x6EDCE65403992e310A62460808c4b910D972f10f";
+// LayerZero V2 Endpoint (selected by network; can be overridden with LZ_ENDPOINT env var)
+const LZ_ENDPOINT_V2 = getLzEndpointV2(network.name);
 
 // LayerZero V2 Endpoint IDs
 const CHAIN_EIDS: { [key: string]: number } = {
@@ -62,6 +63,7 @@ async function main() {
   console.log(`🌐 Network: ${networkName} (Chain ID: ${chainId})`);
   console.log(`🔗 LayerZero EID: ${layerZeroEid}`);
   console.log(`📡 LayerZero Endpoint: ${LZ_ENDPOINT_V2}\n`);
+  assertEndpointMatchesNetwork(networkName, LZ_ENDPOINT_V2);
 
   // Deploy MyntisOFT
   console.log("📝 Deploying MyntisOFT...");
@@ -153,4 +155,3 @@ main()
     console.error("❌ Deployment failed:", error);
     process.exit(1);
   });
-

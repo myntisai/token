@@ -1,8 +1,8 @@
 import { ethers } from "hardhat";
 
-const HUB_ADDRESS = "0xc2300D4edD794E5a61431AE0cC4922dE0771eD6E";
-const LZ_ENDPOINT = "0x6EDCE65403992e310A62460808c4b910D972f10f";
-const ETH_SEPOLIA_EID = 40161;
+const HUB_ADDRESS = process.env.HUB_ADDRESS || "0x599016bF00eE23d531223c6285C92aa0cAC278EF";
+const LZ_ENDPOINT = process.env.LZ_ENDPOINT || "0x6EDCE65403992e310A62460808c4b910D972f10f";
+const DST_EID = process.env.DST_EID ? Number(process.env.DST_EID) : 40161;
 
 const ENDPOINT_ABI = [
   "function delegates(address) view returns (address)",
@@ -21,10 +21,10 @@ async function main() {
   // Check send library
   console.log("1. Send Library:");
   try {
-    const sendLib = await endpoint.getSendLibrary(HUB_ADDRESS, ETH_SEPOLIA_EID);
+    const sendLib = await endpoint.getSendLibrary(HUB_ADDRESS, DST_EID);
     console.log("   Library:", sendLib);
     
-    const isDefault = await endpoint.isDefaultSendLibrary(HUB_ADDRESS, ETH_SEPOLIA_EID);
+    const isDefault = await endpoint.isDefaultSendLibrary(HUB_ADDRESS, DST_EID);
     console.log("   Using default:", isDefault);
   } catch (e: any) {
     console.log("   Error:", e.message);
@@ -33,7 +33,7 @@ async function main() {
   // Check receive library
   console.log("\n2. Receive Library:");
   try {
-    const [recvLib, isDefault] = await endpoint.getReceiveLibrary(HUB_ADDRESS, ETH_SEPOLIA_EID);
+    const [recvLib, isDefault] = await endpoint.getReceiveLibrary(HUB_ADDRESS, DST_EID);
     console.log("   Library:", recvLib);
     console.log("   Using default:", isDefault);
   } catch (e: any) {
@@ -51,10 +51,10 @@ async function main() {
   
   // Now let's try calling quote directly on the endpoint with simpler params
   console.log("\n4. Testing endpoint quote...");
-  const hub = await ethers.getContractAt("MyntisOFT", HUB_ADDRESS);
+  const hub = await ethers.getContractAt("Myntis", HUB_ADDRESS);
   
   // Get the peer
-  const peer = await hub.peers(ETH_SEPOLIA_EID);
+  const peer = await hub.peers(DST_EID);
   console.log("   Peer:", peer);
   
   // Try building a minimal message

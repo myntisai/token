@@ -1,7 +1,8 @@
-import { ethers, upgrades, run } from "hardhat";
+import { ethers, network, run } from "hardhat";
 import * as fs from "fs";
 import * as path from "path";
 import * as dotenv from "dotenv";
+import { assertEndpointMatchesNetwork, getLzEndpointV2 } from "./layerzero";
 
 /**
  * Comprehensive Final Testnet Deployment Script
@@ -42,10 +43,10 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 // Configuration
 const CONFIG = {
     // Network
-    NETWORK: process.env.HARDHAT_NETWORK || "base-sepolia",
+    NETWORK: network.name,
     
-    // LayerZero V2 Endpoint (Base Sepolia)
-    LZ_ENDPOINT: process.env.LZ_ENDPOINT || "0x6EDCE65403992e310A62460808c4b910D972f10f",
+    // LayerZero V2 Endpoint (selected by network; can be overridden with LZ_ENDPOINT env var)
+    LZ_ENDPOINT: getLzEndpointV2(network.name),
     
     // Token Configuration
     TOKEN_CAP: ethers.parseEther("1000000000"), // 1B cap
@@ -58,6 +59,9 @@ const CONFIG = {
     
     // Verification
     VERIFY_CONTRACTS: process.env.VERIFY_CONTRACTS !== "false", // Default true
+
+    // Treasury (recommended to be multisig on mainnet)
+    TREASURY_ADDRESS: process.env.TREASURY_ADDRESS || "",
     
     // Batch size for migration
     MIGRATION_BATCH_SIZE: 100,
@@ -190,7 +194,7 @@ async function verifyContract(address: string, constructorArguments: any[] = [])
 }
 
 // Phase 1: Deploy Core Contracts
-async function deployCore(deployer: any): Promise<Partial<DeploymentResult>> {
+async function deployCore(deployer: any, deployerAddress: string): Promise<Partial<DeploymentResult>> {
     console.log("\n" + "=".repeat(80));
     console.log("PHASE 1: DEPLOYING CORE CONTRACTS");
     console.log("=".repeat(80));
@@ -200,10 +204,10 @@ async function deployCore(deployer: any): Promise<Partial<DeploymentResult>> {
     
     // 1. Deploy Myntis (Standard OFT with constructor)
     console.log("\n📦 1/7: Deploying Myntis (Hub Token - OFT)...");
-    const MyntisFactory = await ethers.getContractFactory("Myntis");
+    const MyntisFactory = await ethers.getContractFactory("Myntis", deployer);
     const myntis = await MyntisFactory.deploy(
         CONFIG.LZ_ENDPOINT,     // lzEndpoint
-        deployer.address        // delegate (admin/owner)
+        deployerAddress         // delegate (admin/owner)
     );
     await myntis.waitForDeployment();
     const deployTx = myntis.deploymentTransaction();
@@ -216,11 +220,11 @@ async function deployCore(deployer: any): Promise<Partial<DeploymentResult>> {
     
     // 2. Deploy EmissionsContract (non-upgradeable)
     console.log("\n📦 2/7: Deploying EmissionsContract...");
-    const EmissionsFactory = await ethers.getContractFactory("EmissionsContract");
+    const EmissionsFactory = await ethers.getContractFactory("EmissionsContract", deployer);
     const emissions = await EmissionsFactory.deploy(
         result.myntis,          // token
         ethers.ZeroAddress,     // staking (will be set later)
-        deployer.address        // admin
+        deployerAddress         // admin
     );
     await emissions.waitForDeployment();
     const emissionsTx = emissions.deploymentTransaction();
@@ -232,32 +236,37 @@ async function deployCore(deployer: any): Promise<Partial<DeploymentResult>> {
     
     // 3. Deploy DualPoolStaking (UUPS Proxy)
     console.log("\n📦 3/7: Deploying DualPoolStaking (UUPS)...");
-    const StakingFactory = await ethers.getContractFactory("DualPoolStaking");
-    const staking = await upgrades.deployProxy(
-        StakingFactory,
-        [
-            result.myntis,              // token
-            result.emissionsContract,   // emissions
-            deployer.address            // admin
-        ],
-        { 
-            initializer: "initialize"
-            // kind auto-detected from contract
-        }
-    );
-    await staking.waitForDeployment();
-    const stakingTx = staking.deploymentTransaction();
-    if (stakingTx) {
-        await stakingTx.wait(1); // Wait for 1 confirmation
+    const StakingFactory = await ethers.getContractFactory("DualPoolStaking", deployer);
+    const stakingImpl = await StakingFactory.deploy();
+    await stakingImpl.waitForDeployment();
+    const stakingImplTx = stakingImpl.deploymentTransaction();
+    if (stakingImplTx) {
+        await stakingImplTx.wait(1);
     }
-    result.dualPoolStaking = await staking.getAddress();
-    result.dualPoolStakingImplementation = await upgrades.erc1967.getImplementationAddress(result.dualPoolStaking);
+    const stakingImplAddress = await stakingImpl.getAddress();
+
+    const initData = StakingFactory.interface.encodeFunctionData("initialize", [
+        result.myntis,              // token
+        result.emissionsContract,   // emissions
+        deployerAddress             // admin
+    ]);
+
+    const ProxyFactory = await ethers.getContractFactory("ERC1967Proxy", deployer);
+    const stakingProxy = await ProxyFactory.deploy(stakingImplAddress, initData);
+    await stakingProxy.waitForDeployment();
+    const stakingProxyTx = stakingProxy.deploymentTransaction();
+    if (stakingProxyTx) {
+        await stakingProxyTx.wait(1);
+    }
+
+    result.dualPoolStaking = await stakingProxy.getAddress();
+    result.dualPoolStakingImplementation = stakingImplAddress;
     console.log(`  ✅ Proxy: ${result.dualPoolStaking}`);
     console.log(`  ✅ Implementation: ${result.dualPoolStakingImplementation}`);
     
     // 4. Deploy Groth16Verifier
     console.log("\n📦 4/7: Deploying Groth16Verifier...");
-    const VerifierFactory = await ethers.getContractFactory("Groth16Verifier");
+    const VerifierFactory = await ethers.getContractFactory("Groth16Verifier", deployer);
     const verifier = await VerifierFactory.deploy();
     await verifier.waitForDeployment();
     result.groth16Verifier = await verifier.getAddress();
@@ -265,11 +274,11 @@ async function deployCore(deployer: any): Promise<Partial<DeploymentResult>> {
     
     // 5. Deploy ZKMerkleDistributor (Standard contract with constructor)
     console.log("\n📦 5/7: Deploying ZKMerkleDistributor...");
-    const DistributorFactory = await ethers.getContractFactory("ZKMerkleDistributor");
+    const DistributorFactory = await ethers.getContractFactory("ZKMerkleDistributor", deployer);
     const distributor = await DistributorFactory.deploy(
         result.myntis,              // token
         result.groth16Verifier,     // batchVerifier
-        deployer.address            // admin
+        deployerAddress             // admin
     );
     await distributor.waitForDeployment();
     result.zkMerkleDistributor = await distributor.getAddress();
@@ -278,10 +287,10 @@ async function deployCore(deployer: any): Promise<Partial<DeploymentResult>> {
     
     // 6. Deploy GlobalSupplyRegistry
     console.log("\n📦 6/7: Deploying GlobalSupplyRegistry...");
-    const RegistryFactory = await ethers.getContractFactory("GlobalSupplyRegistry");
+    const RegistryFactory = await ethers.getContractFactory("GlobalSupplyRegistry", deployer);
     const registry = await RegistryFactory.deploy(
         CONFIG.LZ_ENDPOINT,         // endpoint
-        deployer.address            // admin
+        deployerAddress             // admin
     );
     await registry.waitForDeployment();
     result.globalSupplyRegistry = await registry.getAddress();
@@ -289,11 +298,11 @@ async function deployCore(deployer: any): Promise<Partial<DeploymentResult>> {
     
     // 7. Deploy LiquidStakingVault (Standard contract with constructor)
     console.log("\n📦 7/7: Deploying LiquidStakingVault...");
-    const VaultFactory = await ethers.getContractFactory("LiquidStakingVault");
+    const VaultFactory = await ethers.getContractFactory("LiquidStakingVault", deployer);
     const vault = await VaultFactory.deploy(
         result.myntis,              // asset
         result.dualPoolStaking,     // dualPoolStaking
-        deployer.address            // admin
+        deployerAddress             // admin
     );
     await vault.waitForDeployment();
     result.liquidStakingVault = await vault.getAddress();
@@ -304,17 +313,18 @@ async function deployCore(deployer: any): Promise<Partial<DeploymentResult>> {
 }
 
 // Phase 2: Configure & Wire Contracts
-async function configureContracts(deployer: any, contracts: Partial<DeploymentResult>) {
+async function configureContracts(deployer: any, deployerAddress: string, contracts: Partial<DeploymentResult>) {
     console.log("\n" + "=".repeat(80));
     console.log("PHASE 2: CONFIGURING & WIRING CONTRACTS");
     console.log("=".repeat(80));
     
     // Attach to deployed contracts
-    const myntis = await ethers.getContractAt("Myntis", contracts.myntis!);
-    const emissions = await ethers.getContractAt("EmissionsContract", contracts.emissionsContract!);
-    const staking = await ethers.getContractAt("DualPoolStaking", contracts.dualPoolStaking!);
-    const distributor = await ethers.getContractAt("ZKMerkleDistributor", contracts.zkMerkleDistributor!);
-    const vault = await ethers.getContractAt("LiquidStakingVault", contracts.liquidStakingVault!);
+    const myntis = await ethers.getContractAt("Myntis", contracts.myntis!, deployer);
+    const emissions = await ethers.getContractAt("EmissionsContract", contracts.emissionsContract!, deployer);
+    const staking = await ethers.getContractAt("DualPoolStaking", contracts.dualPoolStaking!, deployer);
+    const distributor = await ethers.getContractAt("ZKMerkleDistributor", contracts.zkMerkleDistributor!, deployer);
+    const vault = await ethers.getContractAt("LiquidStakingVault", contracts.liquidStakingVault!, deployer);
+    const registry = await ethers.getContractAt("GlobalSupplyRegistry", contracts.globalSupplyRegistry!, deployer);
     
     // 1. Configure EmissionsContract → Staking
     console.log("\n⚙️  1/8: Configuring EmissionsContract...");
@@ -326,6 +336,8 @@ async function configureContracts(deployer: any, contracts: Partial<DeploymentRe
     console.log("\n⚙️  2/8: Configuring DualPoolStaking...");
     console.log("  Setting ZK distributor...");
     await (await staking.setZkMerkleDistributor(contracts.zkMerkleDistributor!)).wait();
+    console.log("  Setting liquid staking vault...");
+    await (await staking.setLiquidStakingVault(contracts.liquidStakingVault!)).wait();
     console.log("  ✅ Done!");
     
     // 2b. Configure ZKMerkleDistributor → Staking
@@ -345,14 +357,26 @@ async function configureContracts(deployer: any, contracts: Partial<DeploymentRe
     console.log("\n⚙️  4/8: Granting ZKMerkleDistributor roles...");
     const PROVIDER_ROLE = await distributor.PROVIDER_ROLE();
     console.log("  Granting PROVIDER_ROLE to deployer...");
-    await (await distributor.grantRole(PROVIDER_ROLE, deployer.address)).wait();
+    await (await distributor.grantRole(PROVIDER_ROLE, deployerAddress)).wait();
     console.log("  ✅ Done!");
     
     // 5. Configure GlobalSupplyRegistry in Myntis
     console.log("\n⚙️  5/8: Configuring GlobalSupplyRegistry...");
     console.log("  Setting registry in Myntis...");
     await (await myntis.setGlobalSupplyRegistry(contracts.globalSupplyRegistry!)).wait();
+    console.log("  Registering Myntis token in GlobalSupplyRegistry...");
+    await (await registry.registerToken(contracts.myntis!)).wait();
     console.log("  ✅ Done!");
+
+    // 5b. Set treasury on DualPoolStaking (prevents unclaimed-rewards edge cases)
+    if (CONFIG.TREASURY_ADDRESS && ethers.isAddress(CONFIG.TREASURY_ADDRESS) && CONFIG.TREASURY_ADDRESS !== ethers.ZeroAddress) {
+        console.log("\n⚙️  5b/8: Setting treasury on DualPoolStaking...");
+        await (await staking.setTreasury(CONFIG.TREASURY_ADDRESS)).wait();
+        console.log(`  ✅ Treasury set: ${CONFIG.TREASURY_ADDRESS}`);
+    } else {
+        console.log("\n⚠️  Treasury not set (TREASURY_ADDRESS missing/invalid).");
+        console.log("   This is OK for testnets, but you should set treasury before mainnet emissions go live.");
+    }
     
     // 6. Configure Vault Roles
     console.log("\n⚙️  6/8: Configuring LiquidStakingVault roles...");
@@ -403,7 +427,7 @@ async function migrateBalances(deployer: any, contracts: Partial<DeploymentResul
 }
 
 // Phase 4: Verify Contracts
-async function verifyContracts(contracts: Partial<DeploymentResult>) {
+async function verifyContracts(contracts: Partial<DeploymentResult>, deployerAddress: string) {
     console.log("\n" + "=".repeat(80));
     console.log("PHASE 4: VERIFYING CONTRACTS ON BASESCAN");
     console.log("=".repeat(80));
@@ -412,13 +436,11 @@ async function verifyContracts(contracts: Partial<DeploymentResult>) {
     console.log("\n⏳ Waiting 30 seconds for Basescan to index...");
     await new Promise(resolve => setTimeout(resolve, 30000));
     
-    const deployer = (await ethers.getSigners())[0];
-    
     // Verify Myntis
     console.log("\n🔍 1/7: Verifying Myntis...");
     await verifyContract(contracts.myntis!, [
         CONFIG.LZ_ENDPOINT,
-        deployer.address
+        deployerAddress
     ]);
     
     // Verify EmissionsContract
@@ -426,7 +448,7 @@ async function verifyContracts(contracts: Partial<DeploymentResult>) {
     await verifyContract(contracts.emissionsContract!, [
         contracts.myntis,
         ethers.ZeroAddress,
-        deployer.address
+        deployerAddress
     ]);
     
     // Verify DualPoolStaking Implementation
@@ -442,14 +464,14 @@ async function verifyContracts(contracts: Partial<DeploymentResult>) {
     await verifyContract(contracts.zkMerkleDistributor!, [
         contracts.myntis,
         contracts.groth16Verifier,
-        deployer.address
+        deployerAddress
     ]);
     
     // Verify GlobalSupplyRegistry
     console.log("\n🔍 6/7: Verifying GlobalSupplyRegistry...");
     await verifyContract(contracts.globalSupplyRegistry!, [
         CONFIG.LZ_ENDPOINT,
-        deployer.address
+        deployerAddress
     ]);
     
     // Verify LiquidStakingVault
@@ -457,11 +479,11 @@ async function verifyContracts(contracts: Partial<DeploymentResult>) {
     await verifyContract(contracts.liquidStakingVault!, [
         contracts.myntis,
         contracts.dualPoolStaking,
-        deployer.address
+        deployerAddress
     ]);
     
-    // Note: DualPoolStaking proxy is automatically verified by Hardhat upgrades plugin
-    console.log("\n✅ DualPoolStaking Proxy (auto-verified by Hardhat):");
+    // Note: DualPoolStaking proxy is deployed via ERC1967Proxy (manual)
+    console.log("\n✅ DualPoolStaking Proxy (manual ERC1967):");
     console.log(`  Proxy: ${contracts.dualPoolStaking}`);
     console.log(`  Implementation: ${contracts.dualPoolStakingImplementation}`);
     
@@ -474,33 +496,46 @@ async function main() {
     console.log("MYNTIS FINAL TESTNET DEPLOYMENT - FRESH START WITH SECURITY FIXES");
     console.log("=".repeat(80));
     
-    const [deployer] = await ethers.getSigners();
+    const [rawDeployer] = await ethers.getSigners();
+    const deployer = new ethers.NonceManager(rawDeployer);
+    const deployerAddress = await rawDeployer.getAddress();
     const network = await ethers.provider.getNetwork();
     const chainId = Number(network.chainId);
     
-    console.log(`\n📍 Deployer: ${deployer.address}`);
-    console.log(`💰 Balance: ${ethers.formatEther(await ethers.provider.getBalance(deployer.address))} ETH`);
+    console.log(`\n📍 Deployer: ${deployerAddress}`);
+    console.log(`💰 Balance: ${ethers.formatEther(await ethers.provider.getBalance(deployerAddress))} ETH`);
     console.log(`🌐 Network: ${CONFIG.NETWORK}`);
     console.log(`🔗 Chain ID: ${chainId}`);
     console.log(`📡 LayerZero Endpoint: ${CONFIG.LZ_ENDPOINT}`);
     console.log(`💎 Token Cap: ${ethers.formatEther(CONFIG.TOKEN_CAP)} MYNT`);
     console.log(`🔄 Migrate Balances: ${CONFIG.MIGRATE_BALANCES}`);
     console.log(`✅ Verify Contracts: ${CONFIG.VERIFY_CONTRACTS}`);
+    if (CONFIG.NETWORK === "base-mainnet") {
+        if (!CONFIG.TREASURY_ADDRESS || !ethers.isAddress(CONFIG.TREASURY_ADDRESS) || CONFIG.TREASURY_ADDRESS === ethers.ZeroAddress) {
+            throw new Error("TREASURY_ADDRESS must be set to a valid non-zero address for base-mainnet deployment.");
+        }
+        console.log(`🏦 Treasury (required on mainnet): ${CONFIG.TREASURY_ADDRESS}`);
+    } else if (CONFIG.TREASURY_ADDRESS) {
+        console.log(`🏦 Treasury (optional): ${CONFIG.TREASURY_ADDRESS}`);
+    }
     
+    // Hard safety check: never deploy mainnet pointing at the testnet endpoint.
+    assertEndpointMatchesNetwork(CONFIG.NETWORK, CONFIG.LZ_ENDPOINT);
+
     const startTime = Date.now();
     
     try {
         // Phase 1: Deploy Core Contracts
-        const contracts = await deployCore(deployer);
+        const contracts = await deployCore(deployer, deployerAddress);
         
         // Phase 2: Configure & Wire Contracts
-        await configureContracts(deployer, contracts);
+        await configureContracts(deployer, deployerAddress, contracts);
         
         // Phase 3: Balance Migration (Optional)
         const migrationStats = await migrateBalances(deployer, contracts);
         
         // Phase 4: Verify Contracts
-        await verifyContracts(contracts);
+        await verifyContracts(contracts, deployerAddress);
         
         // Prepare final result
         const endTime = Date.now();
@@ -510,7 +545,7 @@ async function main() {
             ...contracts as Required<typeof contracts>,
             network: CONFIG.NETWORK,
             chainId: chainId,
-            deployer: deployer.address,
+            deployer: deployerAddress,
             timestamp: new Date().toISOString(),
             gasUsed: "0", // TODO: Track actual gas used
             migrationStats: migrationStats || undefined,

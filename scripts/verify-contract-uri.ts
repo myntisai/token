@@ -1,10 +1,30 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
+import * as fs from "fs";
+import * as path from "path";
 
 async function main() {
-  const tokenAddr = "0x5242925C716225C58459f557E5B4Be51373aB767";
+  const envAddr = process.env.TOKEN_ADDRESS;
+  let tokenAddr: string | undefined = envAddr && ethers.isAddress(envAddr) ? envAddr : undefined;
+
+  if (!tokenAddr) {
+    const fname = `deployment-${network.name}-latest.json`;
+    const p = path.join(__dirname, "..", "deployments", fname);
+    if (fs.existsSync(p)) {
+      const deployment = JSON.parse(fs.readFileSync(p, "utf8"));
+      if (deployment.myntis && ethers.isAddress(deployment.myntis)) tokenAddr = deployment.myntis;
+    }
+  }
+
+  if (!tokenAddr) {
+    throw new Error(
+      "Missing TOKEN_ADDRESS and no deployments/deployment-<network>-latest.json with { myntis } found"
+    );
+  }
   
   const [signer] = await ethers.getSigners();
   console.log("Checking contractURI with signer:", signer.address);
+  console.log("Network:", network.name);
+  console.log("Token:", tokenAddr);
   
   const Myntis = await ethers.getContractFactory("Myntis");
   const token = Myntis.attach(tokenAddr);
@@ -24,7 +44,13 @@ async function main() {
     console.log("IPFS.io Gateway: https://ipfs.io/ipfs/" + hash);
     
     console.log("\n=== View on Block Explorer ===");
-    console.log("BaseScan: https://sepolia.basescan.org/address/" + tokenAddr + "#readContract");
+    if (network.name === "base-sepolia") {
+      console.log("BaseScan: https://sepolia.basescan.org/address/" + tokenAddr + "#readContract");
+    } else if (network.name === "base-mainnet") {
+      console.log("BaseScan: https://basescan.org/address/" + tokenAddr + "#readContract");
+    } else {
+      console.log("Explorer: (unknown network) address " + tokenAddr);
+    }
     console.log("  → Call contractURI() function to see the URI");
     
     console.log("\n=== Verify on OpenSea Testnet ===");

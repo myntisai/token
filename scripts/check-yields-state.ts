@@ -19,14 +19,12 @@ const STAKING_ABI = [
   "function getTotalStaked() view returns (uint256)",
   "function getProviderInfo(address) view returns (uint256 stake, uint256 rewardDebt)",
   "function pendingRewards(address) view returns (uint256)",
-  "function providerAccruedEmissions(address) view returns (uint256)",
   "function providerPendingRewards() view returns (uint256)",
   "function userPendingRewards() view returns (uint256)",
   "function emissionsContract() view returns (address)",
   "function token() view returns (address)",
   "function zkMerkleDistributor() view returns (address)",
   "function liquidStakingVault() view returns (address)",
-  "event ProviderEmissionsAccrued(address indexed provider, uint256 amount, uint256 totalAccrued)",
 ];
 
 const DISTRIBUTOR_ABI = [
@@ -88,31 +86,6 @@ async function main() {
     staking.pendingRewards(providerAddress),
   ]);
 
-  let providerAccrued: bigint | null = null;
-  try {
-    providerAccrued = await staking.providerAccruedEmissions(providerAddress);
-  } catch {
-    // Fallback to event scan if the deployed proxy doesn't expose providerAccruedEmissions
-    const latestBlock = await ethers.provider.getBlockNumber();
-    const startBlockEnv = process.env.EVENT_START_BLOCK;
-    const startBlock = startBlockEnv ? Number(startBlockEnv) : Math.max(0, latestBlock - 300_000);
-    const chunkSize = 20_000;
-    let lastTotalAccrued: bigint | null = null;
-
-    for (let from = startBlock; from <= latestBlock; from += chunkSize) {
-      const to = Math.min(from + chunkSize - 1, latestBlock);
-      const filter = staking.filters.ProviderEmissionsAccrued(providerAddress);
-      const logs = await staking.queryFilter(filter, from, to);
-      if (logs.length > 0) {
-        const last = logs[logs.length - 1];
-        const totalAccrued = (last.args?.totalAccrued ?? 0n) as bigint;
-        lastTotalAccrued = totalAccrued;
-      }
-    }
-
-    providerAccrued = lastTotalAccrued ?? 0n;
-  }
-
   const [providerPending, userPending] = await Promise.all([
     staking.providerPendingRewards(),
     staking.userPendingRewards(),
@@ -123,7 +96,6 @@ async function main() {
   console.log(`Provider Stake:      ${format(providerStake)} ${symbol}`);
   console.log(`Provider RewardDebt: ${format(providerRewardDebt)} ${symbol}`);
   console.log(`Provider Pending:    ${format(pendingRewards)} ${symbol}`);
-  console.log(`Provider Accrued:    ${format(providerAccrued)} ${symbol}`);
   console.log(`Pool Pending (Prov): ${format(providerPending)} ${symbol}`);
   console.log(`Pool Pending (User): ${format(userPending)} ${symbol}`);
 

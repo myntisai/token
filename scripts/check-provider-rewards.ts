@@ -11,8 +11,6 @@ const ERC20_ABI = [
 
 const STAKING_ABI = [
   "function pendingRewards(address) view returns (uint256)",
-  "function providerAccruedEmissions(address) view returns (uint256)",
-  "event ProviderEmissionsAccrued(address indexed provider, uint256 amount, uint256 totalAccrued)",
 ];
 
 const DISTRIBUTOR_ABI = [
@@ -44,29 +42,6 @@ async function main() {
   const format = (value: bigint) => ethers.formatUnits(value, decimals);
 
   const pending = await staking.pendingRewards(providerAddress);
-  let accrued: bigint | null = null;
-  try {
-    accrued = await staking.providerAccruedEmissions(providerAddress);
-  } catch {
-    const latestBlock = await provider.getBlockNumber();
-    const startBlockEnv = process.env.EVENT_START_BLOCK;
-    const startBlock = startBlockEnv ? Number(startBlockEnv) : Math.max(0, latestBlock - 300_000);
-    const chunkSize = 20_000;
-    let lastTotalAccrued: bigint | null = null;
-
-    for (let from = startBlock; from <= latestBlock; from += chunkSize) {
-      const to = Math.min(from + chunkSize - 1, latestBlock);
-      const filter = staking.filters.ProviderEmissionsAccrued(providerAddress);
-      const logs = await staking.queryFilter(filter, from, to);
-      if (logs.length > 0) {
-        const last = logs[logs.length - 1];
-        const totalAccrued = (last.args?.totalAccrued ?? 0n) as bigint;
-        lastTotalAccrued = totalAccrued;
-      }
-    }
-    accrued = lastTotalAccrued ?? 0n;
-  }
-
   const [available, locked] = await Promise.all([
     distributor.providerBalance(providerAddress),
     distributor.lockedBalance(providerAddress),
@@ -74,7 +49,6 @@ async function main() {
 
   console.log("Provider:", providerAddress);
   console.log("Pending (staking):", format(pending), symbol);
-  console.log("Accrued (staking):", format(accrued), symbol);
   console.log("Distributor available:", format(available), symbol);
   console.log("Distributor locked:", format(locked), symbol);
   console.log("Distributor total:", format(available + locked), symbol);
