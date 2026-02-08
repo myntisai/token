@@ -81,6 +81,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 shares) 
     {
+        _harvestPendingRewards();
         shares = super.deposit(assets, receiver);
         
         // SECURITY FIX: Stake to vault address (address(this)), not individual user
@@ -103,6 +104,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 assets) 
     {
+        _harvestPendingRewards();
         assets = super.mint(shares, receiver);
         
         // SECURITY FIX: Stake to vault address (address(this)), not individual user
@@ -125,6 +127,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 shares) 
     {
+        _harvestPendingRewards();
         // SECURITY FIX: Unstake from vault's position (not individual owner)
         _unstakeFromUserPool(assets);
         
@@ -147,6 +150,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 assets) 
     {
+        _harvestPendingRewards();
         // Calculate assets first
         assets = previewRedeem(shares);
         
@@ -316,7 +320,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         totalVaultDeposits += amount;
         emit VaultDeposit(address(this), amount);
     }
-    
+
     /**
      * @notice Unstake assets from vault's user pool position
      * @param amount Amount to unstake
@@ -329,5 +333,13 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         // Track vault withdrawals
         totalVaultDeposits -= amount;
         emit VaultWithdraw(address(this), amount);
+    }
+
+    /**
+     * @notice Harvest pending rewards before share price calculations
+     * @dev Keeps share pricing fair for deposits/withdrawals without a keeper
+     */
+    function _harvestPendingRewards() internal {
+        IDualPoolStaking(dualPoolStaking).harvestRewards(address(this));
     }
 }

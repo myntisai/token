@@ -110,6 +110,7 @@ contract DualPoolStaking is
     event ProviderBalanceFunded(address indexed provider, uint256 amount, address indexed distributor);
     event ProviderEmissionsAccrued(address indexed provider, uint256 amount, uint256 totalAccrued);
     event ProviderEmissionsWithdrawn(address indexed provider, uint256 amount);
+    event PendingRewardsReset(PoolType poolType, uint256 amount, uint256 newPendingTreasury);
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -404,8 +405,7 @@ contract DualPoolStaking is
      * @notice Harvest emission rewards for a provider from EmissionsContract
      * @dev SECURITY FIX: Allows providers to trigger harvest from emissions
      * @dev OPTION B: After harvest, minted tokens are held in this contract (staking).
-     * @dev Harvested amount is recorded in providerAccruedEmissions and must stay "available"
-     * @dev for fundProviderBalance/withdrawProviderEmissions; we do NOT sync it into pending rewards.
+     * @dev Harvested amount is synced into pending rewards (provider/user split) via EmissionsContract.
      * @dev When amount==0 we call _syncUnaccountedTokens() to pick up any other stuck tokens.
      * @param provider Provider address to harvest for
      * @return amount Amount of tokens harvested
@@ -420,16 +420,12 @@ contract DualPoolStaking is
         // Call EmissionsContract.harvest() which mints tokens to THIS contract (staking)
         // Emissions were updated to mint to staking for OPTION B architecture
         amount = IEmissionsContract(emissionsContract).harvest(provider);
-        if (amount > 0) {
-            providerAccruedEmissions[provider] += amount;
-            emit ProviderEmissionsAccrued(provider, amount, providerAccruedEmissions[provider]);
-            // Do NOT call _syncUnaccountedTokens() here: the harvested amount is already
-            // accounted in providerAccruedEmissions and must remain "available" for
-            // fundProviderBalance() / withdrawProviderEmissions(). Syncing would add it to
-            // providerPendingRewards+userPendingRewards, making available=0 and breaking funding.
-        } else {
-            // No harvest this call; sync any other unaccounted (e.g. stuck) tokens
-            _syncUnaccountedTokens();
+        if (amount == 0) {
+            // No harvest this call. Only sweep unaccounted tokens when there are no stakers,
+            // otherwise outstanding rewards would be double-counted.
+            if (providerPool.totalStaked == 0 && userPool.totalStaked == 0) {
+                _syncUnaccountedTokens();
+            }
         }
         
         return amount;
@@ -449,6 +445,23 @@ contract DualPoolStaking is
             uint256 rewards = balance - accounted;
             uint256 providerShare = (rewards * providerPool.emissionShare) / 1000;
             uint256 userShare = rewards - providerShare;
+
+            if (providerPool.totalStaked == 0 && providerShare > 0) {
+                pendingTreasuryWithdrawal += providerShare;
+                if (treasury != address(0)) {
+                    emit TreasuryRewardsQueued(providerShare, pendingTreasuryWithdrawal);
+                    emit UnclaimedRewardsSentToTreasury(providerShare, 0);
+                }
+                providerShare = 0;
+            }
+            if (userPool.totalStaked == 0 && userShare > 0) {
+                pendingTreasuryWithdrawal += userShare;
+                if (treasury != address(0)) {
+                    emit TreasuryRewardsQueued(userShare, pendingTreasuryWithdrawal);
+                    emit UnclaimedRewardsSentToTreasury(0, userShare);
+                }
+                userShare = 0;
+            }
             
             providerPendingRewards += providerShare;
             userPendingRewards += userShare;
@@ -458,81 +471,6 @@ contract DualPoolStaking is
         }
     }
     
-    /**
-     * @notice Fund provider balance on ZK Merkle Distributor
-     * @param provider Provider address to fund
-     * @param amount Amount to fund
-     * @dev OPTION B: Transfers harvested tokens from staking to distributor providerBalance
-     * @dev Can be called by provider or admin after harvest
-     */
-    function fundProviderBalance(address provider, uint256 amount) external nonReentrant {
-        require(zkMerkleDistributor != address(0), "Distributor not set");
-        require(provider != address(0), "Invalid provider");
-        require(amount > 0, "Amount must be positive");
-        
-        // Only provider themselves or admin can fund
-        require(
-            msg.sender == provider || hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
-            "Only provider or admin"
-        );
-        
-        // Check staking contract has sufficient balance
-        uint256 stakingBalance = token.balanceOf(address(this));
-        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
-        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
-        uint256 available = stakingBalance > accounted ? stakingBalance - accounted : 0;
-        
-        require(available >= amount, "Insufficient available balance in staking");
-        require(amount <= providerAccruedEmissions[provider], "Amount exceeds provider accrued emissions");
-        
-        // Approve distributor to pull tokens (safe pattern for non-standard ERC20s)
-        uint256 currentAllowance = token.allowance(address(this), zkMerkleDistributor);
-        if (currentAllowance < amount) {
-            if (currentAllowance > 0) {
-                token.safeDecreaseAllowance(zkMerkleDistributor, currentAllowance);
-            }
-            token.safeIncreaseAllowance(zkMerkleDistributor, amount);
-        }
-        
-        // Call distributor to fund provider balance via typed interface
-        IZKMerkleDistributor(zkMerkleDistributor).notifyRewardWithTransfer(provider, amount);
-        providerAccruedEmissions[provider] -= amount;
-        
-        emit ProviderBalanceFunded(provider, amount, zkMerkleDistributor);
-    }
-    
-    /**
-     * @notice Withdraw provider accrued emissions (their share) to their wallet
-     * @param provider Provider address to withdraw for
-     * @param amount Amount to withdraw
-     * @dev Allows provider to withdraw their share (e.g., 20%) that wasn't funded to distributor
-     * @dev Can be called by provider themselves or admin
-     */
-    function withdrawProviderEmissions(address provider, uint256 amount) external nonReentrant {
-        require(provider != address(0), "Invalid provider");
-        require(amount > 0, "Amount must be positive");
-        require(amount <= providerAccruedEmissions[provider], "Amount exceeds accrued emissions");
-        
-        // Only provider themselves or admin can withdraw
-        require(
-            msg.sender == provider || hasRole(DEFAULT_ADMIN_ROLE, msg.sender),
-            "Only provider or admin"
-        );
-        
-        // Check staking contract has sufficient balance
-        uint256 stakingBalance = token.balanceOf(address(this));
-        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
-        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
-        uint256 available = stakingBalance > accounted ? stakingBalance - accounted : 0;
-        
-        require(available >= amount, "Insufficient available balance in staking");
-        
-        // Update accounting and transfer tokens
-        providerAccruedEmissions[provider] -= amount;
-        token.safeTransfer(provider, amount);
-        
-        emit ProviderEmissionsWithdrawn(provider, amount);
-    }
     
     /**
      * @notice Get pending emission rewards for a provider
@@ -558,15 +496,21 @@ contract DualPoolStaking is
      * @param targetPool Pool to reset (0=Provider, 1=User)
      */
     function resetPendingRewards(PoolType targetPool) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 amount;
         if (targetPool == PoolType.Provider) {
-            uint256 old = providerPendingRewards;
+            amount = providerPendingRewards;
             providerPendingRewards = 0;
-            emit RewardsQueued(0, 0); // Log the reset
         } else {
-            uint256 old = userPendingRewards;
+            amount = userPendingRewards;
             userPendingRewards = 0;
-            emit RewardsQueued(0, 0); // Log the reset
         }
+
+        if (amount > 0) {
+            // Preserve accounting by moving to treasury withdrawal bucket
+            pendingTreasuryWithdrawal += amount;
+        }
+
+        emit PendingRewardsReset(targetPool, amount, pendingTreasuryWithdrawal);
     }
 
     /**
@@ -577,16 +521,39 @@ contract DualPoolStaking is
      */
     function syncEmissions() external onlyRole(EMISSIONS_ROLE) returns (uint256 totalRewards_) {
         // SECURITY FIX: Treasury is optional at launch; if unset, rewards will remain pending
+        // SECURITY FIX: If no stakers in a pool, that pool's share is queued for treasury to prevent first-staker capture
         
         uint256 balance = token.balanceOf(address(this));
         uint256 principal = providerPool.totalStaked + userPool.totalStaked;
         // SECURITY FIX: Include pendingTreasuryWithdrawal to prevent double-counting
         uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
-        require(balance > accounted, "DualPoolStaking: no new rewards");
+        if (balance <= accounted) {
+            require(balance == accounted, "DualPoolStaking: accounted exceeds balance");
+            return 0;
+        }
 
         uint256 rewards = balance - accounted;
         uint256 providerShare = (rewards * providerPool.emissionShare) / 1000;
         uint256 userShare = rewards - providerShare;
+
+        // If there are no providers staked, queue provider share for treasury to avoid windfall on first provider
+        if (providerPool.totalStaked == 0 && providerShare > 0) {
+            pendingTreasuryWithdrawal += providerShare;
+            if (treasury != address(0)) {
+                emit TreasuryRewardsQueued(providerShare, pendingTreasuryWithdrawal);
+                emit UnclaimedRewardsSentToTreasury(providerShare, 0);
+            }
+            providerShare = 0;
+        }
+        // If there are no users staked, queue user share for treasury to avoid windfall on first user
+        if (userPool.totalStaked == 0 && userShare > 0) {
+            pendingTreasuryWithdrawal += userShare;
+            if (treasury != address(0)) {
+                emit TreasuryRewardsQueued(userShare, pendingTreasuryWithdrawal);
+                emit UnclaimedRewardsSentToTreasury(0, userShare);
+            }
+            userShare = 0;
+        }
 
         providerPendingRewards += providerShare;
         userPendingRewards += userShare;
@@ -807,7 +774,8 @@ contract DualPoolStaking is
     // UPGRADE STORAGE: New variables added at the end to preserve layout compatibility
     // Track provider accrued emissions for fundProviderBalance
     mapping(address => uint256) public providerAccruedEmissions;
+    uint256 public totalProviderAccruedEmissions;
 
-    // SECURITY FIX: Reduced from 44 to 43 to account for providerAccruedEmissions
-    uint256[43] private __gap;
+    // SECURITY FIX: Reduced from 44 to 42 to account for providerAccruedEmissions + totalProviderAccruedEmissions
+    uint256[42] private __gap;
 }

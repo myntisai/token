@@ -29,6 +29,11 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     IMyntisToken public immutable token;
     IStakingPool public stakingContract;
 
+    // Emission split (matches DualPoolStaking emissionShare)
+    uint256 public constant PROVIDER_SHARE = 875; // 87.5% -> 700M of 800M
+    uint256 public constant USER_SHARE = 125;     // 12.5% -> 100M of 800M
+    uint256 public constant SHARE_DENOMINATOR = 1000;
+
     // Emission parameters
     uint256 public constant HALVING_PERIOD = 4 * 365 days; // 4 years per halving
     uint256 public constant TOTAL_EMISSIONS = 800_000_000 * 1e18; // 800M total emissions
@@ -73,6 +78,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     error ExceedsEmissionsCap(uint256 requested, uint256 remaining);
     error ExceedsMaxSupply(uint256 newSupply, uint256 maxSupply);
     error MigrationAlreadyInitialized();
+    error StakingContractNotSet();
 
     constructor(
         address _token,
@@ -163,6 +169,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      */
     function initializeProviderDebt(address provider) external onlyRole(ADMIN_ROLE) {
         if (provider == address(0)) revert ZeroAddress();
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
         require(providerRewardDebt[provider] == 0, "Provider debt already initialized");
         
         (uint256 stake, ) = stakingContract.getProviderInfo(provider);
@@ -181,6 +188,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      */
     function batchInitializeProviderDebt(address[] calldata providers) external onlyRole(ADMIN_ROLE) {
         require(providers.length <= MAX_MIGRATION_BATCH, "Batch too large");
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
         for (uint256 i = 0; i < providers.length; i++) {
             address provider = providers[i];
             if (provider == address(0)) continue;
@@ -259,6 +267,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      * @dev SECURITY FIX: Uses provider pool stake only and tracks accountedEmissions
      */
     function updateEmissions() public {
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
         if (block.timestamp <= lastRewardTime) {
             return;
         }
@@ -269,13 +278,9 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
             return;
         }
 
-        // SECURITY FIX: Use provider pool stake only (not total stake including user pool)
-        // This ensures emissions are distributed only to providers who can harvest
-        uint256 providerStake = stakingContract.getProviderPoolStaked();
-        
-        // If no provider stakers, just update time and skip emission accounting
-        // This prevents first-staker-gets-all attack
-        if (providerStake == 0) {
+        uint256 totalStake = stakingContract.getTotalStaked();
+        // If no stakers in either pool, skip accrual to prevent first-staker windfall
+        if (totalStake == 0) {
             lastRewardTime = block.timestamp;
             return;
         }
@@ -291,10 +296,14 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         }
 
         if (tokensToAccount > 0) {
-            // SECURITY FIX: Track accounted emissions to prevent exceeding cap
+            // Track total emissions accounted (provider + user)
             accountedEmissions += tokensToAccount;
-            // Update accounting (does not mint yet - that happens in harvest)
-            accRewardPerShare += (tokensToAccount * PRECISION) / providerStake;
+            // Update provider-side accounting for informational pendingRewards
+            uint256 providerStake = stakingContract.getProviderPoolStaked();
+            if (providerStake > 0) {
+                uint256 providerPortion = (tokensToAccount * PROVIDER_SHARE) / SHARE_DENOMINATOR;
+                accRewardPerShare += (providerPortion * PRECISION) / providerStake;
+            }
             emit EmissionsUpdated(timeElapsed, tokensToAccount, accRewardPerShare);
         }
 
@@ -311,54 +320,47 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      */
     function harvest(address provider) external nonReentrant returns (uint256) {
         // Checks
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
         if (msg.sender != address(stakingContract)) revert OnlyStakingContract();
         if (provider == address(0)) revert ZeroAddress();
 
         // Update global emission state
         updateEmissions();
 
-        // CRITICAL FIX: Use internal providerRewardDebt instead of DualPoolStaking's rewardDebt
-        // This prevents double-claiming because emission rewards are tracked separately
-        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
-        uint256 accumulated = (stake * accRewardPerShare) / PRECISION;
-        uint256 rewardDebt = providerRewardDebt[provider];
-        uint256 pending = accumulated > rewardDebt ? accumulated - rewardDebt : 0;
-
-        if (pending == 0) return 0;
+        uint256 pendingTotal = accountedEmissions > mintedEmissions ? accountedEmissions - mintedEmissions : 0;
+        if (pendingTotal == 0) return 0;
 
         // Verify emission cap
-        if (mintedEmissions + pending > TOTAL_EMISSIONS) {
-            revert ExceedsEmissionsCap(pending, TOTAL_EMISSIONS - mintedEmissions);
+        if (mintedEmissions + pendingTotal > TOTAL_EMISSIONS) {
+            revert ExceedsEmissionsCap(pendingTotal, TOTAL_EMISSIONS - mintedEmissions);
         }
 
         // Verify max supply cap
         uint256 currentSupply = token.totalSupply();
-        if (currentSupply + pending > MAX_SUPPLY) {
-            revert ExceedsMaxSupply(currentSupply + pending, MAX_SUPPLY);
+        if (currentSupply + pendingTotal > MAX_SUPPLY) {
+            revert ExceedsMaxSupply(currentSupply + pendingTotal, MAX_SUPPLY);
         }
 
         // Effects - update state BEFORE external calls
-        mintedEmissions += pending;
+        mintedEmissions += pendingTotal;
         
-        // CRITICAL FIX: Update internal reward debt to prevent double-claiming
+        // Update provider reward debt for informational pendingRewards
+        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+        uint256 accumulated = (stake * accRewardPerShare) / PRECISION;
         uint256 oldDebt = providerRewardDebt[provider];
         providerRewardDebt[provider] = accumulated;
-        
-        // SECURITY FIX: Emit event for tracking reward debt changes
         emit ProviderRewardDebtUpdated(provider, oldDebt, accumulated);
-        
-        // Notify staking contract (informational only - debt is tracked internally now)
-        stakingContract.notifyReward(provider, pending);
+
+        // Notify staking contract (informational only)
+        uint256 providerPortion = (pendingTotal * PROVIDER_SHARE) / SHARE_DENOMINATOR;
+        stakingContract.notifyReward(provider, providerPortion);
 
         // Interactions - external calls last
-        // OPTION B: Mint to staking contract (not provider EOA) so staking can fund distributor
-        token.mint(address(stakingContract), pending);
-
-        // Sync minted rewards into staking pool accounting
+        token.mint(address(stakingContract), pendingTotal);
         stakingContract.syncEmissions();
 
-        emit ProviderRewardsHarvested(provider, pending);
-        return pending;
+        emit ProviderRewardsHarvested(provider, pendingTotal);
+        return pendingTotal;
     }
 
     /**
@@ -368,6 +370,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      * @dev CRITICAL FIX: Uses internal providerRewardDebt to prevent double-claiming
      */
     function pendingRewards(address provider) external view returns (uint256) {
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
         (uint256 stake, ) = stakingContract.getProviderInfo(provider);
         
         // Calculate what accRewardPerShare would be if updated now
@@ -386,8 +389,9 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
                 if (tokensToAccount > remainingAccountable) {
                     tokensToAccount = remainingAccountable;
                 }
-                
-                currentAccReward += (tokensToAccount * PRECISION) / providerStake;
+
+                uint256 providerPortion = (tokensToAccount * PROVIDER_SHARE) / SHARE_DENOMINATOR;
+                currentAccReward += (providerPortion * PRECISION) / providerStake;
             }
         }
         
@@ -425,6 +429,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     function correctAccountedEmissions(uint256 newAccountedEmissions) external onlyRole(ADMIN_ROLE) {
         require(newAccountedEmissions <= TOTAL_EMISSIONS, "Exceeds total emissions cap");
         require(newAccountedEmissions >= mintedEmissions, "Cannot be less than minted");
+        require(newAccountedEmissions >= accountedEmissions, "Can only increase");
         
         uint256 oldValue = accountedEmissions;
         accountedEmissions = newAccountedEmissions;

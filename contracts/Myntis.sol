@@ -36,6 +36,7 @@ contract Myntis is OFT, Pausable {
     uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18; // 1B tokens
     uint256 public constant EMISSIONS_ALLOCATION = 800_000_000 * 1e18; // 800M for emissions
     uint256 public constant IMMEDIATE_ALLOCATION = 200_000_000 * 1e18; // 200M immediate
+    uint256 public constant MAX_MIGRATION_AMOUNT = 30_000_000 * 1e18; // 30M cap
     
     // ============ State ============
     uint256 public totalMintedEmissions;
@@ -55,6 +56,7 @@ contract Myntis is OFT, Pausable {
     
     // Migration state
     bool public migrationComplete;
+    uint256 public totalMigrated;
     
     // Contract metadata URI (ERC-7572) - for token logo, description, etc.
     string public contractURI;
@@ -81,6 +83,8 @@ contract Myntis is OFT, Pausable {
     error FeeTooHigh();
     error Unauthorized();
     error MigrationAlreadyComplete();
+    error ExceedsMigrationCap();
+    error LengthMismatch();
     
     // ============ Modifiers ============
     
@@ -255,48 +259,14 @@ contract Myntis is OFT, Pausable {
      * @param _amount Amount to mint
      */
     function mint(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) whenNotPaused {
-        if (_to == address(0)) revert ZeroAddress();
-        if (_amount == 0) revert ZeroAmount();
-        if (totalMintedEmissions + _amount > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
-        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
-        
-        // Check global supply cap
-        if (address(globalSupplyRegistry) != address(0)) {
-            if (!globalSupplyRegistry.canMint(_amount)) revert GlobalCapExceeded();
-        }
-        
-        totalMintedEmissions += _amount;
-        _mint(_to, _amount);
-        
-        // Record in global registry
-        if (address(globalSupplyRegistry) != address(0)) {
-            globalSupplyRegistry.recordMint(_amount);
-        }
-        
-        emit EmissionsMinted(_to, _amount, totalMintedEmissions);
+        _mintEmissions(_to, _amount);
     }
     
     /**
      * @notice Mint tokens from emissions allocation (alias for compatibility)
      */
     function mintEmissions(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) whenNotPaused {
-        if (_to == address(0)) revert ZeroAddress();
-        if (_amount == 0) revert ZeroAmount();
-        if (totalMintedEmissions + _amount > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
-        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
-        
-        if (address(globalSupplyRegistry) != address(0)) {
-            if (!globalSupplyRegistry.canMint(_amount)) revert GlobalCapExceeded();
-        }
-        
-        totalMintedEmissions += _amount;
-        _mint(_to, _amount);
-        
-        if (address(globalSupplyRegistry) != address(0)) {
-            globalSupplyRegistry.recordMint(_amount);
-        }
-        
-        emit EmissionsMinted(_to, _amount, totalMintedEmissions);
+        _mintEmissions(_to, _amount);
     }
     
     /**
@@ -339,11 +309,14 @@ contract Myntis is OFT, Pausable {
         uint256[] calldata amounts
     ) external onlyOwner {
         if (migrationComplete) revert MigrationAlreadyComplete();
-        if (recipients.length != amounts.length) revert ZeroAmount(); // Length mismatch
+        if (recipients.length != amounts.length) revert LengthMismatch();
         
         for (uint256 i = 0; i < recipients.length; i++) {
             if (recipients[i] == address(0)) revert ZeroAddress();
             if (amounts[i] == 0) continue; // Skip zero amounts
+
+            totalMigrated += amounts[i];
+            if (totalMigrated > MAX_MIGRATION_AMOUNT) revert ExceedsMigrationCap();
             
             if (totalSupply() + amounts[i] > MAX_SUPPLY) revert ExceedsMaxSupply();
             if (totalMintedEmissions + amounts[i] > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
@@ -374,7 +347,7 @@ contract Myntis is OFT, Pausable {
      * @notice Burn tokens from sender's balance
      * @param _amount Amount to burn
      */
-    function burn(uint256 _amount) external {
+    function burn(uint256 _amount) external whenNotPaused {
         if (_amount == 0) revert ZeroAmount();
         _burn(msg.sender, _amount);
         
@@ -388,7 +361,7 @@ contract Myntis is OFT, Pausable {
      * @param _from Address to burn from
      * @param _amount Amount to burn
      */
-    function burnFrom(address _from, uint256 _amount) external {
+    function burnFrom(address _from, uint256 _amount) external whenNotPaused {
         if (_amount == 0) revert ZeroAmount();
         _spendAllowance(_from, msg.sender, _amount);
         _burn(_from, _amount);
@@ -474,5 +447,27 @@ contract Myntis is OFT, Pausable {
             totalMintedImmediate,
             paused()
         );
+    }
+
+    function _mintEmissions(address _to, uint256 _amount) internal {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (totalMintedEmissions + _amount > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
+        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        
+        // Check global supply cap
+        if (address(globalSupplyRegistry) != address(0)) {
+            if (!globalSupplyRegistry.canMint(_amount)) revert GlobalCapExceeded();
+        }
+        
+        totalMintedEmissions += _amount;
+        _mint(_to, _amount);
+        
+        // Record in global registry
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordMint(_amount);
+        }
+        
+        emit EmissionsMinted(_to, _amount, totalMintedEmissions);
     }
 }

@@ -102,6 +102,7 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
     event ProviderSlashed(address indexed provider, uint256 amount);
     event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
     event StakingContractUpdated(address indexed stakingContract);
+    event SlashRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
     event BatchVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
     event BatchVerifierUpdateScheduled(address indexed newVerifier, uint256 eta);
     event VerifierUpdateDelayUpdated(uint256 oldDelay, uint256 newDelay);
@@ -165,7 +166,9 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
      */
     function setSlashRecipient(address _slashRecipient) external onlyRole(ADMIN_ROLE) {
         require(_slashRecipient != address(0), "invalid slash recipient");
+        address oldRecipient = slashRecipient;
         slashRecipient = _slashRecipient;
+        emit SlashRecipientUpdated(oldRecipient, _slashRecipient);
     }
     
     /**
@@ -343,6 +346,7 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
         EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
         require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
         require(!e.closed, "epoch closed");
+        require(e.providerProofVerified, "provider proof not verified");
         
         // Verify Merkle proof with chainId in leaf
         // This prevents cross-chain double-claims - proof only valid on this chain
@@ -434,17 +438,42 @@ contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
      *      - Slashing transfers tokens from provider's balance to slash recipient
      */
     function slashProvider(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
-        require(amount <= providerBalance[provider], "insufficient balance");
         require(slashRecipient != address(0), "slash recipient not set");
-        
-        // Reduce provider's accounting balance
-        providerBalance[provider] -= amount;
-        
+        uint256 available = providerBalance[provider] + lockedBalance[provider];
+        require(amount <= available, "insufficient balance");
+
+        uint256 remaining = amount;
+
+        if (providerBalance[provider] >= remaining) {
+            providerBalance[provider] -= remaining;
+            remaining = 0;
+        } else {
+            remaining -= providerBalance[provider];
+            providerBalance[provider] = 0;
+        }
+
+        if (remaining > 0) {
+            EpochMerkleRoot[] storage epochs = providerMerkleRoots[provider];
+            for (uint256 i = epochs.length; i > 0 && remaining > 0; i--) {
+                EpochMerkleRoot storage e = epochs[i - 1];
+                if (e.closed) continue;
+                uint256 unclaimed = e.totalClaimable - e.claimedAmount;
+                if (unclaimed == 0) continue;
+                uint256 slashAmount = remaining < unclaimed ? remaining : unclaimed;
+                e.totalClaimable -= slashAmount;
+                lockedBalance[provider] -= slashAmount;
+                remaining -= slashAmount;
+            }
+        }
+
+        require(remaining == 0, "insufficient locked balance");
+
         // Transfer slashed tokens to recipient
         token.safeTransfer(slashRecipient, amount);
-        
+
         emit ProviderSlashed(provider, amount);
         emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
     }
     
     /**
