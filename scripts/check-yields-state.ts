@@ -1,12 +1,14 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
+import * as fs from "fs";
+import * as path from "path";
 
-const DEFAULTS = {
-  MYNTIS_TOKEN_ADDRESS: "0xEb4fD5Ef1Be46567f82FCc34C4c4EEeAd7e1A3A8",
-  STAKING_CONTRACT_ADDRESS: "0xe66e51C61a0D89831e9B41f8dE28fbFf18C5E1f8",
-  EMISSIONS_CONTRACT_ADDRESS: "0x31b816258ac3b72625169CD37F80ac12191e76ad",
-  ZK_MERKLE_DISTRIBUTOR_ADDRESS: "0x1C7eFdAC07C6fc7eb74565D557E2d98c4dACd095",
-  LIQUID_STAKING_VAULT_ADDRESS: "0xC3d6e556b9C7dCAE100777e10234944A09A8cEac",
-  PROVIDER_ADDRESS: "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+type Deployment = {
+  myntis?: string;
+  dualPoolStaking?: string;
+  emissions?: string;
+  zkMerkleDistributor?: string;
+  liquidStakingVault?: string;
+  deployer?: string;
 };
 
 const ERC20_ABI = [
@@ -35,17 +37,29 @@ const DISTRIBUTOR_ABI = [
 ];
 
 async function main() {
-  const network = await ethers.provider.getNetwork();
+  const n = await ethers.provider.getNetwork();
   console.log("\n🔎 Yields + Balances Check");
-  console.log(`Network: ${network.name} (chainId: ${network.chainId})`);
+  console.log(`Network: ${network.name} (chainId: ${n.chainId})`);
 
-  const tokenAddress = process.env.MYNTIS_TOKEN_ADDRESS || DEFAULTS.MYNTIS_TOKEN_ADDRESS;
-  const stakingAddress = process.env.STAKING_CONTRACT_ADDRESS || DEFAULTS.STAKING_CONTRACT_ADDRESS;
-  const emissionsAddress = process.env.EMISSIONS_CONTRACT_ADDRESS || DEFAULTS.EMISSIONS_CONTRACT_ADDRESS;
-  const distributorAddress =
-    process.env.ZK_MERKLE_DISTRIBUTOR_ADDRESS || DEFAULTS.ZK_MERKLE_DISTRIBUTOR_ADDRESS;
-  const vaultAddress = process.env.LIQUID_STAKING_VAULT_ADDRESS || DEFAULTS.LIQUID_STAKING_VAULT_ADDRESS;
-  const providerAddress = process.env.PROVIDER_ADDRESS || DEFAULTS.PROVIDER_ADDRESS;
+  const deploymentPath =
+    process.env.DEPLOYMENT_FILE || path.join(__dirname, "..", "deployments", "deployment-base-mainnet-latest.json");
+  const dep: Deployment = fs.existsSync(deploymentPath)
+    ? (JSON.parse(fs.readFileSync(deploymentPath, "utf8")) as Deployment)
+    : {};
+
+  const tokenAddress = process.env.MYNTIS_TOKEN_ADDRESS || dep.myntis;
+  const stakingAddress = process.env.STAKING_CONTRACT_ADDRESS || dep.dualPoolStaking;
+  const emissionsAddress = process.env.EMISSIONS_CONTRACT_ADDRESS || dep.emissions;
+  const distributorAddress = process.env.ZK_MERKLE_DISTRIBUTOR_ADDRESS || dep.zkMerkleDistributor;
+  const vaultAddress = process.env.LIQUID_STAKING_VAULT_ADDRESS || dep.liquidStakingVault;
+  const providerAddress = process.env.PROVIDER_ADDRESS || dep.deployer;
+
+  if (!tokenAddress || !ethers.isAddress(tokenAddress)) throw new Error("Missing/invalid token address");
+  if (!stakingAddress || !ethers.isAddress(stakingAddress)) throw new Error("Missing/invalid staking address");
+  if (!emissionsAddress || !ethers.isAddress(emissionsAddress)) throw new Error("Missing/invalid emissions address");
+  if (!distributorAddress || !ethers.isAddress(distributorAddress)) throw new Error("Missing/invalid distributor address");
+  if (!vaultAddress || !ethers.isAddress(vaultAddress)) throw new Error("Missing/invalid vault address");
+  if (!providerAddress || !ethers.isAddress(providerAddress)) throw new Error("Missing/invalid provider address (set PROVIDER_ADDRESS)");
 
   const token = new ethers.Contract(tokenAddress, ERC20_ABI, ethers.provider);
   const staking = new ethers.Contract(stakingAddress, STAKING_ABI, ethers.provider);
