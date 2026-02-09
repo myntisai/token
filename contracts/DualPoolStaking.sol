@@ -171,7 +171,34 @@ contract DualPoolStaking is
         // Fix minProviderStake (1000 MYNT)
         minProviderStake = 1000 * 1e18;
     }
-    
+
+    /**
+     * @notice Reinitialize V3: Fix double-counting in syncEmissions
+     * @dev Rebalances pendingTreasuryWithdrawal so that:
+     *   balance == principal + providerPendingRewards + userPendingRewards
+     *            + pendingTreasuryWithdrawal + totalProviderAccruedEmissions
+     * @dev Historical double-counting inflated treasury and accRewardPerShare.
+     *   This one-time correction absorbs the drift into treasury.
+     */
+    function reinitializeV3() public reinitializer(3) onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 balance = token.balanceOf(address(this));
+        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
+
+        // Fold any leftover providerPendingRewards into the rebalance
+        // (should be ~0 since _updatePools converts it, but be safe)
+        uint256 otherAccounted = principal + userPendingRewards + totalProviderAccruedEmissions;
+        providerPendingRewards = 0;
+
+        // Set treasury so accounting is perfectly balanced
+        if (balance > otherAccounted) {
+            pendingTreasuryWithdrawal = balance - otherAccounted;
+        } else {
+            pendingTreasuryWithdrawal = 0;
+        }
+
+        emit PendingRewardsReset(PoolType.Provider, 0, pendingTreasuryWithdrawal);
+    }
+
     /**
      * @notice Set the liquid staking vault address
      * @param _liquidStakingVault The ERC-4626 vault address
@@ -439,7 +466,9 @@ contract DualPoolStaking is
     function _syncUnaccountedTokens() internal {
         uint256 balance = token.balanceOf(address(this));
         uint256 principal = providerPool.totalStaked + userPool.totalStaked;
-        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
+        // V3 FIX: Include totalProviderAccruedEmissions to prevent double-counting
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards
+            + pendingTreasuryWithdrawal + totalProviderAccruedEmissions;
         
         if (balance > accounted) {
             uint256 rewards = balance - accounted;
@@ -520,32 +549,24 @@ contract DualPoolStaking is
      * @dev SECURITY FIX: Includes pendingTreasuryWithdrawal in accounting to prevent double-counting
      */
     function syncEmissions() external onlyRole(EMISSIONS_ROLE) returns (uint256 totalRewards_) {
-        // SECURITY FIX: Treasury is optional at launch; if unset, rewards will remain pending
-        // SECURITY FIX: If no stakers in a pool, that pool's share is queued for treasury to prevent first-staker capture
-        
         uint256 balance = token.balanceOf(address(this));
         uint256 principal = providerPool.totalStaked + userPool.totalStaked;
-        // SECURITY FIX: Include pendingTreasuryWithdrawal to prevent double-counting
-        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
+        // V3 FIX: Include totalProviderAccruedEmissions to prevent double-counting.
+        // Provider share is already tracked via notifyReward → providerAccruedEmissions.
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards
+            + pendingTreasuryWithdrawal + totalProviderAccruedEmissions;
         if (balance <= accounted) {
-            require(balance == accounted, "DualPoolStaking: accounted exceeds balance");
+            require(balance >= accounted, "DualPoolStaking: accounted exceeds balance");
             return 0;
         }
 
         uint256 rewards = balance - accounted;
-        uint256 providerShare = (rewards * providerPool.emissionShare) / 1000;
-        uint256 userShare = rewards - providerShare;
 
-        // If there are no providers staked, queue provider share for treasury to avoid windfall on first provider
-        if (providerPool.totalStaked == 0 && providerShare > 0) {
-            pendingTreasuryWithdrawal += providerShare;
-            if (treasury != address(0)) {
-                emit TreasuryRewardsQueued(providerShare, pendingTreasuryWithdrawal);
-                emit UnclaimedRewardsSentToTreasury(providerShare, 0);
-            }
-            providerShare = 0;
-        }
-        // If there are no users staked, queue user share for treasury to avoid windfall on first user
+        // V3 FIX: Provider share already handled by notifyReward → providerAccruedEmissions.
+        // Remaining unaccounted tokens are the user share only.
+        uint256 userShare = rewards;
+
+        // If there are no users staked, queue for treasury to avoid windfall on first user
         if (userPool.totalStaked == 0 && userShare > 0) {
             pendingTreasuryWithdrawal += userShare;
             if (treasury != address(0)) {
@@ -555,10 +576,9 @@ contract DualPoolStaking is
             userShare = 0;
         }
 
-        providerPendingRewards += providerShare;
         userPendingRewards += userShare;
 
-        emit RewardsQueued(providerShare, userShare);
+        emit RewardsQueued(0, userShare);
 
         _updatePools();
         return rewards;
@@ -632,9 +652,14 @@ contract DualPoolStaking is
      */
     function pendingRewards(address user) external view returns (uint256 pending) {
         UserInfo memory userInfo_ = userInfo[user];
-        
+
         if (userInfo_.poolType == PoolType.Provider) {
-            return _pendingProviderRewards(userInfo_);
+            uint256 masterchefPending = _pendingProviderRewards(userInfo_);
+            // V3 FIX: Cap to providerAccruedEmissions for accurate display.
+            // MasterChef pending is inflated from historical double-counting;
+            // providers receive rewards through providerAccruedEmissions pipeline.
+            uint256 accrued = providerAccruedEmissions[user];
+            return masterchefPending > accrued ? accrued : masterchefPending;
         } else {
             return _pendingUserRewards(userInfo_);
         }
@@ -745,21 +770,23 @@ contract DualPoolStaking is
         }
         
         if (pending > 0) {
+            uint256 transferAmount = pending;
             if (userInfo_.poolType == PoolType.Provider) {
-                // Keep providerAccruedEmissions in sync when provider withdraws rewards
+                // V3 FIX: Cap transfer to providerAccruedEmissions.
+                // MasterChef pending is inflated from historical double-counting.
+                // Providers receive the bulk of rewards through the
+                // providerAccruedEmissions → fundProviderBalance → ZK distributor pipeline.
                 uint256 accrued = providerAccruedEmissions[user];
-                if (accrued >= pending) {
-                    providerAccruedEmissions[user] = accrued - pending;
-                    totalProviderAccruedEmissions -= pending;
-                } else {
-                    // Clamp to zero if accounting drifted; prevents underflow
-                    totalProviderAccruedEmissions -= accrued;
-                    providerAccruedEmissions[user] = 0;
+                transferAmount = pending > accrued ? accrued : pending;
+                if (transferAmount > 0) {
+                    providerAccruedEmissions[user] -= transferAmount;
+                    totalProviderAccruedEmissions -= transferAmount;
                 }
             }
-            // Transfer rewards to user
-            token.safeTransfer(user, pending);
-            emit RewardsHarvested(user, pending, userInfo_.poolType);
+            if (transferAmount > 0) {
+                token.safeTransfer(user, transferAmount);
+            }
+            emit RewardsHarvested(user, transferAmount, userInfo_.poolType);
         }
     }
 
