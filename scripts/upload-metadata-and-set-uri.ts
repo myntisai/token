@@ -17,15 +17,18 @@ async function main() {
   
   // Upload to IPFS using Pinata API
   const PINATA_API_KEY = process.env.PINATA_API_KEY;
-  const PINATA_SECRET = process.env.PINATA_SECRET;
+  const PINATA_SECRET =
+    process.env.PINATA_SECRET_API_KEY ||
+    process.env.PINATA_SECRET_KEY ||
+    process.env.PINATA_SECRET;
   
   if (!PINATA_API_KEY || !PINATA_SECRET) {
     console.error("\n❌ PINATA_API_KEY and PINATA_SECRET must be set in .env");
     console.log("\nUsing existing metadata hash from deployment history...");
     console.log("Metadata hash: QmeCRTQUR4Dx1QymvcKymLEPmNyLWJ1oJ9UocpawJvDbkP");
     console.log("\nIf image doesn't work, the issue might be:");
-    console.log("1. Image URL in metadata should be: ipfs://QmZC5gVHds6FqVL8V1PF9ayEJJBWMbiMzpAUXmHpC5zMcV");
-    console.log("2. Or use gateway URL: https://gateway.pinata.cloud/ipfs/QmZC5gVHds6FqVL8V1PF9ayEJJBWMbiMzpAUXmHpC5zMcV");
+    console.log(`1. Image URL in metadata should be: ${metadata.image}`);
+    console.log(`2. Or use image_url: ${metadata.image_url}`);
     return;
   }
   
