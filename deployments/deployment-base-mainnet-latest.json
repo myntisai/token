@@ -3,7 +3,7 @@
   "myntisImplementation": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
   "emissionsContract": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
   "dualPoolStaking": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
-  "dualPoolStakingImplementation": "0xa101ff8C9fb5c0143b19dBb37e6689eb25FE9863",
+  "dualPoolStakingImplementation": "0xbebB59857bE6D1C05A0FB66a6E9721F1ba10c345",
   "groth16Verifier": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
   "zkMerkleDistributor": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
   "zkMerkleDistributorImplementation": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
