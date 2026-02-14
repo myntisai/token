@@ -1,0 +1,241 @@
+{
+  "generatedAt": "2026-02-14T04:54:59.339Z",
+  "sourceFiles": {
+    "forensic": "deployments/forensic-contract-history-latest.json",
+    "mainnetLatest": "deployments/deployment-base-mainnet-latest.json"
+  },
+  "chain": {
+    "network": "base-mainnet",
+    "chainId": 8453
+  },
+  "roles": {
+    "deployer": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6"
+  },
+  "deploymentTimestamp": "2026-02-08T04:32:48.860Z",
+  "contracts": [
+    {
+      "key": "myntis",
+      "address": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "normalizedAddress": "0x7629fd045e1462c9dcd580d0af31db6d46c5ab47",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "decimals",
+        "globalSupplyRegistry",
+        "name",
+        "symbol",
+        "token",
+        "totalSupply"
+      ]
+    },
+    {
+      "key": "myntisImplementation",
+      "address": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "normalizedAddress": "0x7629fd045e1462c9dcd580d0af31db6d46c5ab47",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "decimals",
+        "globalSupplyRegistry",
+        "name",
+        "symbol",
+        "token",
+        "totalSupply"
+      ]
+    },
+    {
+      "key": "emissionsContract",
+      "address": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+      "normalizedAddress": "0x803f9694be31d3ace5792c21ab9f72b69838c0e0",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "accRewardPerShare",
+        "accountedEmissions",
+        "lastRewardTime",
+        "mintedEmissions",
+        "stakingContract",
+        "startTime",
+        "token"
+      ]
+    },
+    {
+      "key": "dualPoolStaking",
+      "address": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "normalizedAddress": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "emissionsContract",
+        "getProviderPoolStaked",
+        "getTotalStaked",
+        "liquidStakingVault",
+        "token",
+        "treasury",
+        "zkMerkleDistributor"
+      ]
+    },
+    {
+      "key": "dualPoolStakingImplementation",
+      "address": "0xbebB59857bE6D1C05A0FB66a6E9721F1ba10c345",
+      "normalizedAddress": "0xbebb59857be6d1c05a0fb66a6e9721f1ba10c345",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "emissionsContract",
+        "getProviderPoolStaked",
+        "getTotalStaked",
+        "liquidStakingVault",
+        "token",
+        "treasury",
+        "zkMerkleDistributor"
+      ]
+    },
+    {
+      "key": "groth16Verifier",
+      "address": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
+      "normalizedAddress": "0x19559c2d4c7c50bf3d8852b6ecfc0185d3e9796c",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": []
+    },
+    {
+      "key": "zkMerkleDistributor",
+      "address": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+      "normalizedAddress": "0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "batchVerifier",
+        "slashRecipient",
+        "stakingContract",
+        "token",
+        "verifierUpdateDelay"
+      ]
+    },
+    {
+      "key": "zkMerkleDistributorImplementation",
+      "address": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+      "normalizedAddress": "0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "batchVerifier",
+        "slashRecipient",
+        "stakingContract",
+        "token",
+        "verifierUpdateDelay"
+      ]
+    },
+    {
+      "key": "globalSupplyRegistry",
+      "address": "0xdFb3b8107B33d54BAe402a76BbA1432668B2D896",
+      "normalizedAddress": "0xdfb3b8107b33d54bae402a76bba1432668b2d896",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": []
+    },
+    {
+      "key": "liquidStakingVault",
+      "address": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+      "normalizedAddress": "0x019cb2aa19465ca1e140abeadf13320414031c6b",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "decimals",
+        "name",
+        "symbol",
+        "totalSupply"
+      ]
+    },
+    {
+      "key": "liquidStakingVaultImplementation",
+      "address": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+      "normalizedAddress": "0x019cb2aa19465ca1e140abeadf13320414031c6b",
+      "foundInForensic": true,
+      "hasCode": true,
+      "firstSeenAt": "2026-02-08T04:32:48.860Z",
+      "creationTxHash": null,
+      "trackedStatus": "deployments_only",
+      "seenInFiles": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "liveStateKeys": [
+        "decimals",
+        "name",
+        "symbol",
+        "totalSupply"
+      ]
+    }
+  ]
+}

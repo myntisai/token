@@ -98,7 +98,11 @@ contract GlobalSupplyRegistry is OAppReceiver, AccessControl, ReentrancyGuard {
     function registerSpoke(uint32 eid, bytes32 peer) external onlyRole(ADMIN_ROLE) {
         require(peer != bytes32(0), "GlobalSupplyRegistry: zero peer");
         _setPeer(eid, peer);
-        _grantRole(SPOKE_ROLE, address(uint160(uint256(peer))));
+        // Only grant SPOKE_ROLE for peers that cleanly encode an EVM address
+        // (high 12 bytes must be zero in bytes32 representation).
+        if ((uint256(peer) >> 160) == 0) {
+            _grantRole(SPOKE_ROLE, address(uint160(uint256(peer))));
+        }
         emit PeerUpdated(eid, peer);
     }
 

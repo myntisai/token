@@ -1,0 +1,2126 @@
+{
+  "summary": {
+    "generatedAt": "2026-02-14T04:15:17.442Z",
+    "totalUniqueAddresses": 99,
+    "deploymentsOnly": 64,
+    "openzeppelinOnly": 33,
+    "inBoth": 2
+  },
+  "contracts": [
+    {
+      "address": "0x0000000000000000000000000000000000000001",
+      "normalizedAddress": "0x0000000000000000000000000000000000000001",
+      "networks": [
+        "ethereum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/ethereum-sepolia-distributor-1764759735509.json",
+        "deployments/ethereum-sepolia-distributor-latest.json"
+      ],
+      "keys": [
+        "hubGlobalNullifier"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x00f87F9eb968dF179038Fc0BFE6fE13C11fe3d53",
+      "normalizedAddress": "0x00f87f9eb968df179038fc0bfe6fe13c11fe3d53",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "groth16Verifier"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+      "normalizedAddress": "0x019cb2aa19465ca1e140abeadf13320414031c6b",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "liquidStakingVault",
+        "liquidStakingVaultImplementation"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x01AD9e797234026c61E523BC9BaB2293Ac140F6a",
+      "normalizedAddress": "0x01ad9e797234026c61e523bc9bab2293ac140f6a",
+      "networks": [
+        "base-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.zkMerkleDistributor",
+        "zkMerkleDistributor"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x01C18388635236c13F7D26B1D141f3A87E106035",
+      "normalizedAddress": "0x01c18388635236c13f7d26b1d141f3a87e106035",
+      "networks": [
+        "ethereum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/ethereum-sepolia-distributor-1764759735509.json",
+        "deployments/ethereum-sepolia-distributor-latest.json"
+      ],
+      "keys": [
+        "spokeDistributor"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+      "normalizedAddress": "0x0314e1274b9860e77d90e894d784cd24eecbe479",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json"
+      ],
+      "keys": [
+        "myntis",
+        "myntisImplementation"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x07D1599fc4D1693165Ff16052AA21A9D3E564772",
+      "normalizedAddress": "0x07d1599fc4d1693165ff16052aa21a9d3e564772",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.14.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x07D28cA0ccAE70e992A1a1Dd310443bb96C81979",
+      "normalizedAddress": "0x07d28ca0ccae70e992a1a1dd310443bb96c81979",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "emissionsContract"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "normalizedAddress": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "networks": [
+        "base-sepolia",
+        "ethereum-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/base-sepolia-oft-v2-hub.json",
+        "deployments/ethereum-sepolia-distributor-1764759735509.json",
+        "deployments/ethereum-sepolia-distributor-latest.json",
+        "deployments/ethereum-sepolia-spoke-1764759110560.json",
+        "deployments/reward-weighting-registry-84532-1764763269527.json",
+        "deployments/reward-weighting-registry-84532-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployer",
+        "deployment.deployer"
+      ],
+      "seenCount": 8,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
+      "normalizedAddress": "0x19559c2d4c7c50bf3d8852b6ecfc0185d3e9796c",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "groth16Verifier"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x198Bf984C5757947A0a88C901f12371A5ad3e000",
+      "normalizedAddress": "0x198bf984c5757947a0a88c901f12371a5ad3e000",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "zkMerkleDistributor",
+        "zkMerkleDistributorImplementation"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x1a48bf090b02da27c0e60cb6659d4450904A846F",
+      "normalizedAddress": "0x1a48bf090b02da27c0e60cb6659d4450904a846f",
+      "networks": [
+        "base-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.dualPoolStaking",
+        "dualPoolStaking",
+        "results.12.actual",
+        "results.12.expected",
+        "results.7.actual",
+        "results.7.expected"
+      ],
+      "seenCount": 6,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x22cD2e45f3462d44bAb4ab2427A491c5FE70f7d4",
+      "normalizedAddress": "0x22cd2e45f3462d44bab4ab2427a491c5fe70f7d4",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.3.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x234072cCE1289674d6eD21260A8522C427651ce1",
+      "normalizedAddress": "0x234072cce1289674d6ed21260a8522c427651ce1",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.ed4cc587896eae51da69331dad4f961baf5e3cee95bd8a027f2bda419976e7d6.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+      "normalizedAddress": "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json",
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "deployer"
+      ],
+      "seenCount": 3,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x2B5A6b209EE8B0b118dD76092420C9b45f4E99cb",
+      "normalizedAddress": "0x2b5a6b209ee8b0b118dd76092420c9b45f4e99cb",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "liquidStakingVault",
+        "liquidStakingVaultImplementation"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x2e10e419c550A9f4Cf350Cc0557Ae14d5fF097C1",
+      "normalizedAddress": "0x2e10e419c550a9f4cf350cc0557ae14d5ff097c1",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.22.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x38c7D759950625D99CE59507c63EE5bbb43E1128",
+      "normalizedAddress": "0x38c7d759950625d99ce59507c63ee5bbb43e1128",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json"
+      ],
+      "keys": [
+        "globalSupplyRegistry"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x39a211De877c74a9e181e2253EDe847bB4eC70cf",
+      "normalizedAddress": "0x39a211de877c74a9e181e2253ede847bb4ec70cf",
+      "networks": [
+        "base-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.emissionsContract",
+        "emissionsContract",
+        "results.9.actual",
+        "results.9.expected"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "normalizedAddress": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "dualPoolStaking"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x3dD196E73d712D708670B1B3cbbb06DA52CD9979",
+      "normalizedAddress": "0x3dd196e73d712d708670b1b3cbbb06da52cd9979",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json"
+      ],
+      "keys": [
+        "dualPoolStakingImplementation"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x425DA859900706E8E40eB09276BBDeB2eea4be21",
+      "normalizedAddress": "0x425da859900706e8e40eb09276bbdeb2eea4be21",
+      "networks": [
+        "base-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.dualPoolStakingImpl",
+        "dualPoolStakingImpl"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x43495fBcd33235D9FcD4c2c7f8cB2444E463C9b3",
+      "normalizedAddress": "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment",
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json",
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "dualPoolStaking",
+        "proxies.20.address"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": true,
+      "trackedStatus": "both"
+    },
+    {
+      "address": "0x47386e229d3D76962f339D5e93349724858F88Ac",
+      "normalizedAddress": "0x47386e229d3d76962f339d5e93349724858f88ac",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json"
+      ],
+      "keys": [
+        "emissionsContract"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x48bcD6177f958C26fCc8D8e4B8088936bd20541e",
+      "normalizedAddress": "0x48bcd6177f958c26fcc8d8e4b8088936bd20541e",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json"
+      ],
+      "keys": [
+        "dualPoolStaking"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x490F85f09979d552cc29Bd272D46ba70acd126F2",
+      "normalizedAddress": "0x490f85f09979d552cc29bd272d46ba70acd126f2",
+      "networks": [
+        "sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/sepolia.json"
+      ],
+      "keys": [
+        "impls.e386f0fbf59098cf4a7f418039ee4242841c14dac0e428e8e6c286144a364786.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x4CfE4D1958e9630B8675b27fdf71A981e5B7D4fb",
+      "normalizedAddress": "0x4cfe4d1958e9630b8675b27fdf71a981e5b7d4fb",
+      "networks": [
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/spoke-distributor-optionb-1766817121658.json",
+        "deployments/spoke-distributor-optionb-latest.json"
+      ],
+      "keys": [
+        "spokeDistributor"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x50F0B152DD8A9115B37A12F48524148f39E12C89",
+      "normalizedAddress": "0x50f0b152dd8a9115b37a12f48524148f39e12c89",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "groth16Verifier"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x5242925C716225C58459f557E5B4Be51373aB767",
+      "normalizedAddress": "0x5242925c716225c58459f557e5b4be51373ab767",
+      "networks": [
+        "ethereum-sepolia",
+        "unknown",
+        "zksync-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/emissions-optionb-1766817016180.json",
+        "deployments/ethereum-sepolia-spoke-1770381410089.json",
+        "deployments/ethereum-sepolia-spoke-latest.json",
+        "deployments/zk-distributor-optionb-1766817028733.json",
+        "deployments/zk-distributor-optionb-1767728267700.json"
+      ],
+      "keys": [
+        "spoke",
+        "token"
+      ],
+      "seenCount": 5,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x56Ad5c5285d036833828886108b733873345E86b",
+      "normalizedAddress": "0x56ad5c5285d036833828886108b733873345e86b",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.2.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x598F58bA70627AcC75FA19651AA5039E96cF993e",
+      "normalizedAddress": "0x598f58ba70627acc75fa19651aa5039e96cf993e",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.56091f0397cf9309eb549c09254582efc1a20ffb6badd66e2b06c22eede46e4f.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x599016bF00eE23d531223c6285C92aa0cAC278EF",
+      "normalizedAddress": "0x599016bf00ee23d531223c6285c92aa0cac278ef",
+      "networks": [
+        "base-sepolia",
+        "ethereum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json",
+        "deployments/ethereum-sepolia-spoke-1770381410089.json",
+        "deployments/ethereum-sepolia-spoke-latest.json"
+      ],
+      "keys": [
+        "hub",
+        "myntis",
+        "myntisImplementation"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x59F3d313638042327B6AF8019F93FD0F8e3F1490",
+      "normalizedAddress": "0x59f3d313638042327b6af8019f93fd0f8e3f1490",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.cb447f3b44802d1260319adf20ebfc88e3832183736843c61dd75e26fbe0f831.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x5D9dbF20BDD69B211DD15ec4Bb361122120c78f5",
+      "normalizedAddress": "0x5d9dbf20bdd69b211dd15ec4bb361122120c78f5",
+      "networks": [
+        "ethereum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/ethereum-sepolia-spoke-1770381410089.json",
+        "deployments/ethereum-sepolia-spoke-latest.json"
+      ],
+      "keys": [
+        "spokeImpl"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x67Ae52ee859c552CAfabFC08D00bb68D3a2e57bB",
+      "normalizedAddress": "0x67ae52ee859c552cafabfc08d00bb68d3a2e57bb",
+      "networks": [
+        "zksync-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/zk-distributor-optionb-1766817028733.json"
+      ],
+      "keys": [
+        "verifier"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x6Dc42e62024F3f18d6fD91F662C19850c1BFD978",
+      "normalizedAddress": "0x6dc42e62024f3f18d6fd91f662c19850c1bfd978",
+      "networks": [
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/emissions-optionb-1766817016180.json"
+      ],
+      "keys": [
+        "emissionsContract"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x6Ec7b9508e131D08B9d680e1A857fb53215E9c50",
+      "normalizedAddress": "0x6ec7b9508e131d08b9d680e1a857fb53215e9c50",
+      "networks": [
+        "arbitrum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/arbitrum-sepolia-oft-v2-spoke.json"
+      ],
+      "keys": [
+        "contracts.myntisOFTSpoke"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x6EDCE65403992e310A62460808c4b910D972f10f",
+      "normalizedAddress": "0x6edce65403992e310a62460808c4b910d972f10f",
+      "networks": [
+        "ethereum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/ethereum-sepolia-spoke-1764759110560.json",
+        "deployments/ethereum-sepolia-spoke-1770381410089.json",
+        "deployments/ethereum-sepolia-spoke-latest.json"
+      ],
+      "keys": [
+        "endpoint"
+      ],
+      "seenCount": 3,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x712e680892AF9CA9D0C9498335D71031B435C53e",
+      "normalizedAddress": "0x712e680892af9ca9d0c9498335d71031b435c53e",
+      "networks": [
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/spoke-distributor-optionb-1766817121658.json",
+        "deployments/spoke-distributor-optionb-latest.json"
+      ],
+      "keys": [
+        "spokeToken"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x723754749830B533381775a22407FCeC3597B052",
+      "normalizedAddress": "0x723754749830b533381775a22407fcec3597b052",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json"
+      ],
+      "keys": [
+        "globalSupplyRegistry"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x725bC5d5C75Dc6afB4e61A43fbC35909866e4C8e",
+      "normalizedAddress": "0x725bc5d5c75dc6afb4e61a43fbc35909866e4c8e",
+      "networks": [
+        "zksync-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/zk-distributor-optionb-1767728267700.json"
+      ],
+      "keys": [
+        "groth16Verifier"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x72846079AcBf42ae7E7c3E51EdDF87AA0D11BAAF",
+      "normalizedAddress": "0x72846079acbf42ae7e7c3e51eddf87aa0d11baaf",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.0.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x74880966F4e89b86B3Cda7B8eB34eb7E5413cc66",
+      "normalizedAddress": "0x74880966f4e89b86b3cda7b8eb34eb7e5413cc66",
+      "networks": [
+        "base-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.globalSupplyRegistry",
+        "globalSupplyRegistry",
+        "results.15.actual",
+        "results.15.expected"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "normalizedAddress": "0x7629fd045e1462c9dcd580d0af31db6d46c5ab47",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "myntis",
+        "myntisImplementation"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x789301aCF660D75c369333F5F6f574eac16A413c",
+      "normalizedAddress": "0x789301acf660d75c369333f5f6f574eac16a413c",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.9.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x79cd6467a7CF732248B0A8E790acdB7170F08021",
+      "normalizedAddress": "0x79cd6467a7cf732248b0a8e790acdb7170f08021",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.23.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x7aFC88080C64748b2fcB73644BF04aDc2013D686",
+      "normalizedAddress": "0x7afc88080c64748b2fcb73644bf04adc2013d686",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json"
+      ],
+      "keys": [
+        "liquidStakingVault",
+        "liquidStakingVaultImplementation"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x7DD7C14927008274000de1813c017c3219A06aD6",
+      "normalizedAddress": "0x7dd7c14927008274000de1813c017c3219a06ad6",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.4.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+      "normalizedAddress": "0x803f9694be31d3ace5792c21ab9f72b69838c0e0",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "emissionsContract"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x807833243F1AAFD29e1B9acDB4D796987D0aa934",
+      "normalizedAddress": "0x807833243f1aafd29e1b9acdb4d796987d0aa934",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "zkMerkleDistributor",
+        "zkMerkleDistributorImplementation"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x81511Ba99e9B747893a1D0CF121DCf835c78f82C",
+      "normalizedAddress": "0x81511ba99e9b747893a1d0cf121dcf835c78f82c",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.7ff363c2df9c9c7170540004909732552d4c2d8d043b84445421e24951cc06f3.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x856A7928Bb88F59e05b83059f1f9F233ECC5E4c4",
+      "normalizedAddress": "0x856a7928bb88f59e05b83059f1f9f233ecc5e4c4",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.18.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "normalizedAddress": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "networks": [
+        "arbitrum-sepolia",
+        "base-sepolia",
+        "ethereum-sepolia",
+        "optimism-sepolia",
+        "unknown",
+        "zksync-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/arbitrum-sepolia-oft-v2-spoke.json",
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json",
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json",
+        "deployments/emissions-optionb-1766817016180.json",
+        "deployments/ethereum-sepolia-oft-v2-spoke.json",
+        "deployments/ethereum-sepolia-spoke-1770381410089.json",
+        "deployments/ethereum-sepolia-spoke-latest.json",
+        "deployments/optimism-sepolia-oft-v2-spoke.json",
+        "deployments/spoke-distributor-optionb-1766817121658.json",
+        "deployments/spoke-distributor-optionb-latest.json",
+        "deployments/zk-distributor-optionb-1766817028733.json",
+        "deployments/zk-distributor-optionb-1767728267700.json"
+      ],
+      "keys": [
+        "admin",
+        "deployer"
+      ],
+      "seenCount": 13,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x8B269FD6cf9df0914A41b32f0aF4B3d18E76291d",
+      "normalizedAddress": "0x8b269fd6cf9df0914a41b32f0af4b3d18e76291d",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "globalSupplyRegistry"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x8BEceC0fFbc93bBd94DEcaa9Bbf7b2CfDd286d55",
+      "normalizedAddress": "0x8becec0ffbc93bbd94decaa9bbf7b2cfdd286d55",
+      "networks": [
+        "base-sepolia",
+        "ethereum-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/ethereum-sepolia-spoke-1764759110560.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.myntis",
+        "hub",
+        "myntis",
+        "results.11.actual",
+        "results.11.expected",
+        "results.13.actual",
+        "results.13.expected",
+        "results.6.actual",
+        "results.6.expected",
+        "results.8.actual",
+        "results.8.expected"
+      ],
+      "seenCount": 11,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x8D7817B77692Ad0B1D0D399F889A3158104291a5",
+      "normalizedAddress": "0x8d7817b77692ad0b1d0d399f889a3158104291a5",
+      "networks": [
+        "unknown",
+        "zksync-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/emissions-optionb-1766817016180.json",
+        "deployments/zk-distributor-optionb-1767728267700.json"
+      ],
+      "keys": [
+        "staking",
+        "stakingContract"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x944de5c174c606967C6B9F6158CD597ac1Cd879A",
+      "normalizedAddress": "0x944de5c174c606967c6b9f6158cd597ac1cd879a",
+      "networks": [
+        "optimism-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/optimism-sepolia-oft-v2-spoke.json"
+      ],
+      "keys": [
+        "contracts.myntisOFTSpoke"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0x99466736A2285Ca2BE0279C1f2c7757533ebc0cd",
+      "normalizedAddress": "0x99466736a2285ca2be0279c1f2c7757533ebc0cd",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "liquidStakingVault",
+        "liquidStakingVaultImplementation"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xa0124FfFe64267B04C13dB330F9452Abaf7Ad6f0",
+      "normalizedAddress": "0xa0124fffe64267b04c13db330f9452abaf7ad6f0",
+      "networks": [
+        "ethereum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/ethereum-sepolia-oft-v2-spoke.json"
+      ],
+      "keys": [
+        "contracts.myntisOFTSpoke"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xa101ff8C9fb5c0143b19dBb37e6689eb25FE9863",
+      "normalizedAddress": "0xa101ff8c9fb5c0143b19dbb37e6689eb25fe9863",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json"
+      ],
+      "keys": [
+        "dualPoolStakingImplementation"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xa42DC4305Bb08540109F85621C29d71689eA35F9",
+      "normalizedAddress": "0xa42dc4305bb08540109f85621c29d71689ea35f9",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.6.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xAA6C0474308f29943991Ce80d6c7b17DF2806dC2",
+      "normalizedAddress": "0xaa6c0474308f29943991ce80d6c7b17df2806dc2",
+      "networks": [
+        "sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/sepolia.json"
+      ],
+      "keys": [
+        "proxies.0.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xAea0e9d9c7a38860361d836C3ba3f70f66d4D1A1",
+      "normalizedAddress": "0xaea0e9d9c7a38860361d836c3ba3f70f66d4d1a1",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "globalSupplyRegistry"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xb53DFD4142741C9469cf5052eD0d55dac3A85361",
+      "normalizedAddress": "0xb53dfd4142741c9469cf5052ed0d55dac3a85361",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json"
+      ],
+      "keys": [
+        "groth16Verifier"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xB7976Bc67327cCD41435c5a555ADbf8B987F8E1E",
+      "normalizedAddress": "0xb7976bc67327ccd41435c5a555adbf8b987f8e1e",
+      "networks": [
+        "base-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.liquidStakingVault",
+        "liquidStakingVault",
+        "results.10.actual",
+        "results.10.expected"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xBe3E429Ff9Fe8Eaa39655C96a787c43b4C607056",
+      "normalizedAddress": "0xbe3e429ff9fe8eaa39655c96a787c43b4c607056",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.bcf43765f1c4a639140df057fb3248a73d707d380933dfcf806078d756a2bb62.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xbebB59857bE6D1C05A0FB66a6E9721F1ba10c345",
+      "normalizedAddress": "0xbebb59857be6d1c05a0fb66a6e9721f1ba10c345",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "dualPoolStakingImplementation"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xC24e30632a02950d476d27D2De6Ceb7F2C5E9978",
+      "normalizedAddress": "0xc24e30632a02950d476d27d2de6ceb7f2c5e9978",
+      "networks": [
+        "base-sepolia",
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.rewardClaimVerifier",
+        "results.14.actual",
+        "results.14.expected",
+        "rewardClaimVerifier"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xc345E2ECb99F30a419215330706196Cc234ff991",
+      "normalizedAddress": "0xc345e2ecb99f30a419215330706196cc234ff991",
+      "networks": [
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/reward-weighting-registry-84532-1764763269527.json",
+        "deployments/reward-weighting-registry-84532-latest.json"
+      ],
+      "keys": [
+        "rewardWeightingRegistry"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xc5996A1ca8C4B558feEFFf2b403C09C9e1aE27Cf",
+      "normalizedAddress": "0xc5996a1ca8c4b558feefff2b403c09c9e1ae27cf",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "emissionsContract"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xC5aA7e0992EEDf67f5096Cb629152267cEDf2875",
+      "normalizedAddress": "0xc5aa7e0992eedf67f5096cb629152267cedf2875",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "myntis",
+        "myntisImplementation"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xC86C0Ce8Fcf3887C9F189FCE7f0853126bF0F8Ab",
+      "normalizedAddress": "0xc86c0ce8fcf3887c9f189fce7f0853126bf0f8ab",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.17.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xc8B635C09161CA61005143630B3002B4FA335770",
+      "normalizedAddress": "0xc8b635c09161ca61005143630b3002b4fa335770",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "dualPoolStaking"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xca7295efd7794E86BC165ea4fF005582EC71209D",
+      "normalizedAddress": "0xca7295efd7794e86bc165ea4ff005582ec71209d",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.16.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xcBeC89921DDb9Ec10aF7737e7AA10249660d37D8",
+      "normalizedAddress": "0xcbec89921ddb9ec10af7737e7aa10249660d37d8",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.10.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xcCd520507Ff96b88487A85ab8662DFf2D4368186",
+      "normalizedAddress": "0xccd520507ff96b88487a85ab8662dff2d4368186",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.11.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xD8a07d14b541d8FdeBFcE76F69445f2aa9b29AfD",
+      "normalizedAddress": "0xd8a07d14b541d8fdebfce76f69445f2aa9b29afd",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.6acdc94212e700451aa1e8a886697ac3b1dd4c56bc67163c71698c45d8637bbf.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xdB59bb54c01aBe6DF427a7994AeDD986083D18D4",
+      "normalizedAddress": "0xdb59bb54c01abe6df427a7994aedd986083d18d4",
+      "networks": [
+        "ethereum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/ethereum-sepolia-distributor-1764759735509.json",
+        "deployments/ethereum-sepolia-distributor-latest.json",
+        "deployments/ethereum-sepolia-spoke-1764759110560.json"
+      ],
+      "keys": [
+        "spoke",
+        "spokeToken"
+      ],
+      "seenCount": 3,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xDCC8C3A2eF1f25607AEF98532D3bcFd310939346",
+      "normalizedAddress": "0xdcc8c3a2ef1f25607aef98532d3bcfd310939346",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.21.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xdEF48e6d4c7990c52d142CC4775C1687b809c73D",
+      "normalizedAddress": "0xdef48e6d4c7990c52d142cc4775c1687b809c73d",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.15.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xdFb3b8107B33d54BAe402a76BbA1432668B2D896",
+      "normalizedAddress": "0xdfb3b8107b33d54bae402a76bba1432668b2d896",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "globalSupplyRegistry"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xE038B26c8aD60B280Cddec161fC71435200Ad636",
+      "normalizedAddress": "0xe038b26c8ad60b280cddec161fc71435200ad636",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.5.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xE1eFd4598Cb371035F78dD3eb4151A7498F9dEa4",
+      "normalizedAddress": "0xe1efd4598cb371035f78dd3eb4151a7498f9dea4",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/base-sepolia-oft-v2-hub.json"
+      ],
+      "keys": [
+        "contracts.myntisOFT"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xe2A90b4324717Dcfd479f6fcBd4f177B81aAB90e",
+      "normalizedAddress": "0xe2a90b4324717dcfd479f6fcbd4f177b81aab90e",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.1.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xe382983E88511C55C5818Aa26e402f924993f304",
+      "normalizedAddress": "0xe382983e88511c55c5818aa26e402f924993f304",
+      "networks": [
+        "ethereum-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/ethereum-sepolia-spoke-1764759110560.json"
+      ],
+      "keys": [
+        "spokeImpl"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xE638a450FCaeD7A53C6170D37da7B282c2FD8704",
+      "normalizedAddress": "0xe638a450fcaed7a53c6170d37da7b282c2fd8704",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.19.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xe66e51C61a0D89831e9B41f8dE28fbFf18C5E1f8",
+      "normalizedAddress": "0xe66e51c61a0d89831e9b41f8de28fbff18c5e1f8",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.13.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xE6d841B5ADb874CB13e257DA672cf3a9B7525fe0",
+      "normalizedAddress": "0xe6d841b5adb874cb13e257da672cf3a9b7525fe0",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.12.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xE715AFf135Ee9A6161F8365Eda8e48EFa0435537",
+      "normalizedAddress": "0xe715aff135ee9a6161f8365eda8e48efa0435537",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment",
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json",
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "dualPoolStakingImplementation",
+        "impls.42d37ca770607abab1c0f7c0601e0c22ba0ad0403a3a1e6eee4d4a162cacb092.address"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": true,
+      "trackedStatus": "both"
+    },
+    {
+      "address": "0xEa382d47e68799c4acA4e5948B1735C5d70C6760",
+      "normalizedAddress": "0xea382d47e68799c4aca4e5948b1735c5d70c6760",
+      "networks": [
+        "unknown"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/reward-weighting-registry-84532-1764763269527.json",
+        "deployments/reward-weighting-registry-84532-latest.json"
+      ],
+      "keys": [
+        "rewardWeightingRegistryImpl"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xebd5dd492DB4ec069698ACfCCa34FC9dc400737D",
+      "normalizedAddress": "0xebd5dd492db4ec069698acfcca34fc9dc400737d",
+      "networks": [
+        "zksync-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/zk-distributor-optionb-1767728267700.json"
+      ],
+      "keys": [
+        "zkMerkleDistributor"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xF357a42D706DA367f641Caf4de5B90b9d9a2e084",
+      "normalizedAddress": "0xf357a42d706da367f641caf4de5b90b9d9a2e084",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.603b2cb3e336fe9dd4c9b227259df4cbcf6e0e77b45a26e1c8a6d277b6761e81.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xf74dF81441D120E4e4EF1c5bCa9bcde6f44256C8",
+      "normalizedAddress": "0xf74df81441d120e4e4ef1c5bca9bcde6f44256c8",
+      "networks": [
+        "zksync-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/zk-distributor-optionb-1766817028733.json"
+      ],
+      "keys": [
+        "zkMerkleDistributor"
+      ],
+      "seenCount": 1,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xf80D159e64400E9aCAAb625e285F556d79E9Ac70",
+      "normalizedAddress": "0xf80d159e64400e9acaab625e285f556d79e9ac70",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "dualPoolStakingImplementation"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xF9C08054D00b726E6B9C78559483bbBcA5D310b5",
+      "normalizedAddress": "0xf9c08054d00b726e6b9c78559483bbbca5d310b5",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.7.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xFa1410229bdFc031137113438Af74A858aAf6964",
+      "normalizedAddress": "0xfa1410229bdfc031137113438af74a858aaf6964",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.a16b8a5fbcf5321ab9a1c3ebed87fd98f984b0b8f9a8db85a396412e050c6e28.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xFDF1Aa6FE61675Cab26e083f92ce9A7986bEaF6f",
+      "normalizedAddress": "0xfdf1aa6fe61675cab26e083f92ce9a7986beaf6f",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json"
+      ],
+      "keys": [
+        "zkMerkleDistributor",
+        "zkMerkleDistributorImplementation"
+      ],
+      "seenCount": 2,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    },
+    {
+      "address": "0xFf2B6022a2a012D470d23136913ADf06b467E591",
+      "normalizedAddress": "0xff2b6022a2a012d470d23136913adf06b467e591",
+      "networks": [
+        "base-sepolia"
+      ],
+      "sourceTypes": [
+        "openzeppelin"
+      ],
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.8.address"
+      ],
+      "seenCount": 1,
+      "inDeployments": false,
+      "inOpenZeppelin": true,
+      "trackedStatus": "openzeppelin_only"
+    },
+    {
+      "address": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+      "normalizedAddress": "0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+      "networks": [
+        "base-mainnet"
+      ],
+      "sourceTypes": [
+        "deployment"
+      ],
+      "files": [
+        "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "deployments/deployment-base-mainnet-latest.json"
+      ],
+      "keys": [
+        "zkMerkleDistributor",
+        "zkMerkleDistributorImplementation"
+      ],
+      "seenCount": 4,
+      "inDeployments": true,
+      "inOpenZeppelin": false,
+      "trackedStatus": "deployments_only"
+    }
+  ]
+}

@@ -15,6 +15,7 @@ interface IStakingPool {
     function getProviderInfo(address provider) external view returns (uint256 stake, uint256 rewardDebt);
     function notifyReward(address provider, uint256 amount) external;
     function syncEmissions() external returns (uint256 totalRewards_);
+    function pendingRewards(address user) external view returns (uint256 pending);
 }
 
 /**
@@ -47,7 +48,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     uint256 public constant PRECISION = 1e12;
     uint256 public constant MAX_MIGRATION_BATCH = 200;
 
-    uint256 public immutable startTime;
+    uint256 public startTime;
     uint256 public lastRewardTime;
     uint256 public mintedEmissions; // total minted supply from this contract
     
@@ -60,8 +61,8 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
     // Accumulated reward per share, scaled by 1e12
     uint256 public accRewardPerShare;
     
-    // CRITICAL FIX: Track provider reward debt internally to prevent double-claiming
-    // This separates emission rewards from DualPoolStaking rewards
+    // Legacy migration storage for provider emission debt snapshots.
+    // Canonical pending/claim accounting lives in DualPoolStaking.
     mapping(address => uint256) public providerRewardDebt;
 
     // Events
@@ -126,6 +127,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      * @param _mintedEmissions Total minted emissions from old contract
      * @param _accountedEmissions Total accounted emissions from old contract
      * @param _accRewardPerShare Accumulated reward per share from old contract
+     * @param _startTime Emission start time from old contract
      * @param _lastRewardTime Last reward time from old contract
      * @param _providers Array of provider addresses with existing debt
      * @param _debts Array of corresponding reward debts
@@ -134,6 +136,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         uint256 _mintedEmissions,
         uint256 _accountedEmissions,
         uint256 _accRewardPerShare,
+        uint256 _startTime,
         uint256 _lastRewardTime,
         address[] calldata _providers,
         uint256[] calldata _debts
@@ -144,10 +147,14 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
         require(_mintedEmissions <= TOTAL_EMISSIONS, "Exceeds emissions cap");
         require(_accountedEmissions <= TOTAL_EMISSIONS, "Exceeds emissions cap");
         require(_accountedEmissions >= _mintedEmissions, "Accounted must be >= minted");
+        require(_startTime <= block.timestamp, "Invalid start time");
+        require(_lastRewardTime >= _startTime, "Invalid reward time");
+        require(_lastRewardTime <= block.timestamp, "Reward time in future");
         
         mintedEmissions = _mintedEmissions;
         accountedEmissions = _accountedEmissions;
         accRewardPerShare = _accRewardPerShare;
+        startTime = _startTime;
         lastRewardTime = _lastRewardTime;
         
         for (uint256 i = 0; i < _providers.length; i++) {
@@ -314,7 +321,7 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      * @notice Harvest rewards for a provider
      * @dev Called by StakingContract on behalf of provider
      * @dev Uses checks-effects-interactions pattern for reentrancy safety
-     * @dev CRITICAL FIX: Uses internal providerRewardDebt to prevent double-claiming
+     * @dev Harvest mints globally-accounted emissions and delegates split/distribution to staking.
      * @param provider Provider address to harvest rewards for
      * @return mintedAmount The amount of tokens minted (0 if no rewards)
      */
@@ -343,17 +350,6 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
 
         // Effects - update state BEFORE external calls
         mintedEmissions += pendingTotal;
-        
-        // Update provider reward debt for informational pendingRewards
-        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
-        uint256 accumulated = (stake * accRewardPerShare) / PRECISION;
-        uint256 oldDebt = providerRewardDebt[provider];
-        providerRewardDebt[provider] = accumulated;
-        emit ProviderRewardDebtUpdated(provider, oldDebt, accumulated);
-
-        // Notify staking contract (informational only)
-        uint256 providerPortion = (pendingTotal * PROVIDER_SHARE) / SHARE_DENOMINATOR;
-        stakingContract.notifyReward(provider, providerPortion);
 
         // Interactions - external calls last
         token.mint(address(stakingContract), pendingTotal);
@@ -367,38 +363,11 @@ contract EmissionsContract is AccessControl, ReentrancyGuard {
      * @notice Get pending rewards for a provider (view function)
      * @param provider Provider address
      * @return pending Pending reward amount
-     * @dev CRITICAL FIX: Uses internal providerRewardDebt to prevent double-claiming
+     * @dev Delegates to staking contract pending rewards for the canonical view.
      */
     function pendingRewards(address provider) external view returns (uint256) {
         if (address(stakingContract) == address(0)) revert StakingContractNotSet();
-        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
-        
-        // Calculate what accRewardPerShare would be if updated now
-        uint256 currentAccReward = accRewardPerShare;
-        
-        if (block.timestamp > lastRewardTime) {
-            // SECURITY FIX: Use provider pool stake only
-            uint256 providerStake = stakingContract.getProviderPoolStaked();
-            if (providerStake > 0) {
-                uint256 emissionRate = getCurrentEmissionRate();
-                uint256 timeElapsed = block.timestamp - lastRewardTime;
-                uint256 tokensToAccount = emissionRate * timeElapsed;
-                
-                // SECURITY FIX: Cap check against accountedEmissions
-                uint256 remainingAccountable = TOTAL_EMISSIONS - accountedEmissions;
-                if (tokensToAccount > remainingAccountable) {
-                    tokensToAccount = remainingAccountable;
-                }
-
-                uint256 providerPortion = (tokensToAccount * PROVIDER_SHARE) / SHARE_DENOMINATOR;
-                currentAccReward += (providerPortion * PRECISION) / providerStake;
-            }
-        }
-        
-        uint256 accumulated = (stake * currentAccReward) / PRECISION;
-        // CRITICAL FIX: Use internal providerRewardDebt
-        uint256 rewardDebt = providerRewardDebt[provider];
-        return accumulated > rewardDebt ? accumulated - rewardDebt : 0;
+        return stakingContract.pendingRewards(provider);
     }
 
     /**

@@ -119,7 +119,37 @@ describe("Provider Batch ZK Proof Integration", function () {
     it("Should allow user claims with Merkle proof only", async function () {
         // Test that users can claim with just Merkle proof (no ZK needed)
         // This would require a submitted epoch first
-        
-        expect(true).to.be.true; // Placeholder
+        const amount = ethers.parseEther("100");
+        const chainId = BigInt((await ethers.provider.getNetwork()).chainId);
+        const leaf = ethers.keccak256(
+            ethers.AbiCoder.defaultAbiCoder().encode(
+                ["address", "uint256", "uint256"],
+                [user.address, amount, chainId]
+            )
+        );
+
+        const expiry = (await time.latest()) + 2 * 24 * 60 * 60;
+        const totalAmount = amount;
+
+        const proofA: [bigint, bigint] = [0n, 0n];
+        const proofB: [[bigint, bigint], [bigint, bigint]] = [[0n, 0n], [0n, 0n]];
+        const proofC: [bigint, bigint] = [0n, 0n];
+        const publicInputs: [bigint, bigint, bigint] = [0n, totalAmount, 0n];
+
+        await distributor.connect(provider).submitMerkleRoot(
+            leaf,
+            expiry,
+            totalAmount,
+            proofA,
+            proofB,
+            proofC,
+            publicInputs
+        );
+
+        const balanceBefore = await token.balanceOf(user.address);
+        await distributor.connect(user).claim(provider.address, 0, amount, []);
+        const balanceAfter = await token.balanceOf(user.address);
+
+        expect(balanceAfter - balanceBefore).to.equal(amount);
     });
 });

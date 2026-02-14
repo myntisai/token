@@ -54,31 +54,32 @@ describe("EmissionsContract Coverage", function () {
     const { emissions, admin } = await deployFixture();
 
     await expect(
-      emissions.connect(admin).initializeMigration(0, 0, 0, 0, [admin.address], [])
+      emissions.connect(admin).initializeMigration(0, 0, 0, 0, 0, [admin.address], [])
     ).to.be.revertedWith("Length mismatch");
 
     const providers = Array(201).fill(admin.address);
     const debts = Array(201).fill(0);
     await expect(
-      emissions.connect(admin).initializeMigration(0, 0, 0, 0, providers, debts)
+      emissions.connect(admin).initializeMigration(0, 0, 0, 0, 0, providers, debts)
     ).to.be.revertedWith("Batch too large");
 
     const tooBig = ethers.parseEther("900000000");
     await expect(
-      emissions.connect(admin).initializeMigration(tooBig, 0, 0, 0, [], [])
+      emissions.connect(admin).initializeMigration(tooBig, 0, 0, 0, 0, [], [])
     ).to.be.revertedWith("Exceeds emissions cap");
 
     await expect(
-      emissions.connect(admin).initializeMigration(0, tooBig, 0, 0, [], [])
+      emissions.connect(admin).initializeMigration(0, tooBig, 0, 0, 0, [], [])
     ).to.be.revertedWith("Exceeds emissions cap");
 
     await expect(
-      emissions.connect(admin).initializeMigration(10, 5, 0, 0, [], [])
+      emissions.connect(admin).initializeMigration(10, 5, 0, 0, 0, [], [])
     ).to.be.revertedWith("Accounted must be >= minted");
 
-    await emissions.connect(admin).initializeMigration(1, 1, 0, 1, [admin.address], [1]);
+    const now = await time.latest();
+    await emissions.connect(admin).initializeMigration(1, 1, 0, now, now, [admin.address], [1]);
     await expect(
-      emissions.connect(admin).initializeMigration(1, 1, 0, 1, [], [])
+      emissions.connect(admin).initializeMigration(1, 1, 0, now, now, [], [])
     ).to.be.revertedWithCustomError(emissions, "MigrationAlreadyInitialized");
   });
 
@@ -118,9 +119,9 @@ describe("EmissionsContract Coverage", function () {
   it("updateEmissions branches", async function () {
     const { emissions, staking, provider, admin } = await deployFixture();
 
-    // block.timestamp <= lastRewardTime
+    // Set migration baseline and run one immediate update
     const now = await time.latest();
-    await emissions.connect(admin).initializeMigration(0, 0, 0, now + 100, [], []);
+    await emissions.connect(admin).initializeMigration(0, 0, 0, now, now, [], []);
     await emissions.updateEmissions();
 
     // emissionRate == 0
@@ -164,15 +165,15 @@ describe("EmissionsContract Coverage", function () {
 
     await staking.setTotals(100, 100);
     await staking.setProvider(provider.address, 100, 0);
+    await staking.setPendingRewards(provider.address, 0);
 
     // pendingRewards with no time advance
-    await emissions.pendingRewards(provider.address);
+    expect(await emissions.pendingRewards(provider.address)).to.equal(0n);
 
-    // advance time so emissions accrue
-    await time.increase(10);
-    await emissions.updateEmissions();
+    // Canonical pending now comes from staking contract
+    await staking.setPendingRewards(provider.address, 1234);
     const pending = await emissions.pendingRewards(provider.address);
-    expect(pending).to.be.gt(0n);
+    expect(pending).to.equal(1234n);
   });
 
   it("pendingRewards caps tokensToAccount at remaining", async function () {
@@ -194,7 +195,7 @@ describe("EmissionsContract Coverage", function () {
     await staking.setTotals(0, 0);
     await staking.setProvider(provider.address, 0, 0);
 
-    await emissions.initializeMigration(0, 0, 0, 1, [], []);
+    await emissions.initializeMigration(0, 0, 0, 1, 1, [], []);
     await time.increase(10);
 
     await staking.callHarvest(provider.address);
@@ -232,7 +233,7 @@ describe("EmissionsContract Coverage", function () {
       emissions.connect(admin).correctAccountedEmissions(total + 1n)
     ).to.be.revertedWith("Exceeds total emissions cap");
 
-    await emissions.connect(admin).initializeMigration(1, 1, 0, 1, [], []);
+    await emissions.connect(admin).initializeMigration(1, 1, 0, 1, 1, [], []);
     await expect(
       emissions.connect(admin).correctAccountedEmissions(0)
     ).to.be.revertedWith("Cannot be less than minted");

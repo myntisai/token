@@ -1,5 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "hardhat";
+import { anyValue } from "@nomicfoundation/hardhat-chai-matchers/withArgs";
 
 describe("MyntisOFTSpoke Coverage", function () {
   async function deployFixture() {
@@ -68,7 +69,7 @@ describe("MyntisOFTSpoke Coverage", function () {
     );
   });
 
-  it("reverts mint when reporting disabled and enforcement is on", async function () {
+  it("mints and emits SupplyUpdateSkipped when auto-reporting is disabled", async function () {
     const { spoke, admin, quotaReceiver } = await deployFixture();
 
     await spoke.setRegistryPeer(ethers.zeroPadValue(admin.address, 32));
@@ -76,10 +77,12 @@ describe("MyntisOFTSpoke Coverage", function () {
     const quotaSigner = await impersonate(await quotaReceiver.getAddress());
     await spoke.connect(quotaSigner).increaseMintQuota(1);
 
-    await expect(spoke.mint(admin.address, 1)).to.be.revertedWithCustomError(spoke, "SupplyReportingDisabled");
+    await expect(spoke.mint(admin.address, 1))
+      .to.emit(spoke, "SupplyUpdateSkipped")
+      .withArgs(1, 1, 0, anyValue);
   });
 
-  it("reverts mint when auto-reporting is enabled without refund address", async function () {
+  it("mints and emits SupplyUpdateSkipped when auto-reporting has no refund address", async function () {
     const { spoke, admin, quotaReceiver } = await deployFixture();
 
     await spoke.setRegistryPeer(ethers.zeroPadValue(admin.address, 32));
@@ -88,10 +91,12 @@ describe("MyntisOFTSpoke Coverage", function () {
     const quotaSigner = await impersonate(await quotaReceiver.getAddress());
     await spoke.connect(quotaSigner).increaseMintQuota(1);
 
-    await expect(spoke.mint(admin.address, 1)).to.be.revertedWithCustomError(spoke, "SupplyReportingConfigMissing");
+    await expect(spoke.mint(admin.address, 1))
+      .to.emit(spoke, "SupplyUpdateSkipped")
+      .withArgs(1, 1, 0, anyValue);
   });
 
-  it("reverts mint when reporting fee is insufficient", async function () {
+  it("mints and emits SupplyUpdateSkipped when reporting fee is insufficient", async function () {
     const { spoke, admin, quotaReceiver, endpoint } = await deployFixture();
 
     await spoke.setRegistryPeer(ethers.zeroPadValue(admin.address, 32));
@@ -103,6 +108,8 @@ describe("MyntisOFTSpoke Coverage", function () {
     const quotaSigner = await impersonate(await quotaReceiver.getAddress());
     await spoke.connect(quotaSigner).increaseMintQuota(1);
 
-    await expect(spoke.mint(admin.address, 1)).to.be.revertedWithCustomError(spoke, "InsufficientReportingFee");
+    await expect(spoke.mint(admin.address, 1))
+      .to.emit(spoke, "SupplyUpdateSkipped")
+      .withArgs(1, 1, 1, 0);
   });
 });

@@ -14,6 +14,7 @@ contract MockStakingPool {
 
     mapping(address => uint256) public stakeOf;
     mapping(address => uint256) public rewardDebtOf;
+    mapping(address => uint256) public pendingOf;
 
     uint256 public notifyCount;
     address public lastNotifyProvider;
@@ -57,6 +58,14 @@ contract MockStakingPool {
         notifyCount += 1;
         lastNotifyProvider = provider;
         lastNotifyAmount = amount;
+    }
+
+    function setPendingRewards(address user, uint256 amount) external {
+        pendingOf[user] = amount;
+    }
+
+    function pendingRewards(address user) external view returns (uint256 pending) {
+        return pendingOf[user];
     }
 
     function syncEmissions() external returns (uint256 totalRewards_) {

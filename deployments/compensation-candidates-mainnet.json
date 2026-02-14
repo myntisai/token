@@ -1,0 +1,20 @@
+{
+  "generatedAt": "2026-02-14T05:12:08.002Z",
+  "chainId": 8453,
+  "assumptions": {
+    "immediateIncludes": [
+      "legacy staking pendingRewards for discovered stakers",
+      "legacy staking providerAccruedEmissions for discovered providers",
+      "legacy distributor providerBalance"
+    ],
+    "excludedFromImmediate": [
+      "legacy distributor lockedBalance (kept as locked-epoch liability bucket)"
+    ]
+  },
+  "totals": {
+    "immediateTotal": "0",
+    "lockedOnlyTotal": "0"
+  },
+  "immediate": [],
+  "lockedOnly": []
+}

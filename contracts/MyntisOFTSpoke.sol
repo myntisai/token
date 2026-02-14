@@ -485,22 +485,24 @@ contract MyntisOFTSpoke is OFT, Pausable, AccessControl {
 
     function _notifySupplyChange() internal {
         if (registryPeer == bytes32(0)) return;
-        if (enforceSupplyReporting && !autoReportSupply) {
-            revert SupplyReportingDisabled();
+        uint256 currentSupply = totalSupply();
+        emit SupplyChangeRequiresReporting(currentSupply, hubChainEid);
+        if (!autoReportSupply) {
+            emit SupplyUpdateSkipped(localChainEid, currentSupply, 0, address(this).balance);
+            return;
         }
-        emit SupplyChangeRequiresReporting(totalSupply(), hubChainEid);
         _maybeAutoReportSupply();
     }
 
     function _maybeAutoReportSupply() internal {
         if (!autoReportSupply) return;
         if (registryPeer == bytes32(0)) return;
+        uint256 currentSupply = totalSupply();
         if (supplyUpdateRefundAddress == address(0)) {
-            if (enforceSupplyReporting) revert SupplyReportingConfigMissing();
+            emit SupplyUpdateSkipped(localChainEid, currentSupply, 0, address(this).balance);
             return;
         }
 
-        uint256 currentSupply = totalSupply();
         supplyUpdateNonce++;
 
         SupplyUpdate memory update = SupplyUpdate({
@@ -521,9 +523,6 @@ contract MyntisOFTSpoke is OFT, Pausable, AccessControl {
 
         uint256 nativeFee = endpoint.quote(params, address(this)).nativeFee;
         if (address(this).balance < nativeFee) {
-            if (enforceSupplyReporting) {
-                revert InsufficientReportingFee(nativeFee, address(this).balance);
-            }
             emit SupplyUpdateSkipped(localChainEid, currentSupply, nativeFee, address(this).balance);
             return;
         }

@@ -1,0 +1,50 @@
+{
+  "dryRun": true,
+  "dryRunNote": "Generated with NEW_EMISSIONS_ADDRESS equal to current emissions; do not execute.",
+  "generatedAt": "2026-02-14T20:30:34.504Z",
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "multisig": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+  "deployment": {
+    "myntis": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+    "myntisImplementation": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+    "emissionsContract": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+    "dualPoolStaking": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+    "dualPoolStakingImplementation": "0xbebB59857bE6D1C05A0FB66a6E9721F1ba10c345",
+    "groth16Verifier": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
+    "zkMerkleDistributor": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+    "zkMerkleDistributorImplementation": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+    "globalSupplyRegistry": "0xdFb3b8107B33d54BAe402a76BbA1432668B2D896",
+    "liquidStakingVault": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+    "liquidStakingVaultImplementation": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+    "network": "base-mainnet",
+    "chainId": 8453,
+    "deployer": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+    "timestamp": "2026-02-08T04:32:48.860Z",
+    "gasUsed": "0"
+  },
+  "oldEmissionsAddress": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+  "newEmissionsAddress": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+  "deployedNewEmissionsTx": null,
+  "migrationSnapshot": {
+    "mintedEmissions": "1652054794520547944980800",
+    "accountedEmissions": "1652054794520547944980800",
+    "accRewardPerShare": "255263700117051",
+    "startTime": "1770524987",
+    "lastRewardTime": "1771100487",
+    "providerDebtCount": 0
+  },
+  "notes": [
+    "Run this script immediately before creating the Safe proposal to reduce state drift.",
+    "If old emissions can still be harvested before cutover, regenerate proposal data at execution time.",
+    "Provider debt arrays can be empty when DualPoolStaking remains the canonical pending-reward source."
+  ],
+  "transactions": [
+    {
+      "to": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+      "value": "0",
+      "data": "0x2d72f4ef000000000000000000000000000000000000000000015dd611e29f00829a6140000000000000000000000000000000000000000000015dd611e29f00829a61400000000000000000000000000000000000000000000000000000e829362b663b000000000000000000000000000000000000000000000000000000006988113b000000000000000000000000000000000000000000000000000000006990d94700000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "description": "Emissions.initializeMigration(snapshotFromOldEmissions)"
+    }
+  ]
+}

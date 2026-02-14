@@ -1,9 +1,9 @@
 {
   "myntis": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
   "myntisImplementation": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
-  "emissionsContract": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+  "emissionsContract": "0x7086792971b623462B6C1d1263Ac73b0761ADDB9",
   "dualPoolStaking": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
-  "dualPoolStakingImplementation": "0xbebB59857bE6D1C05A0FB66a6E9721F1ba10c345",
+  "dualPoolStakingImplementation": "0x4540361c613ba75DD0e394b652a6D8401EA4310F",
   "groth16Verifier": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
   "zkMerkleDistributor": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
   "zkMerkleDistributorImplementation": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
@@ -13,6 +13,6 @@
   "network": "base-mainnet",
   "chainId": 8453,
   "deployer": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
-  "timestamp": "2026-02-08T04:32:48.860Z",
+  "timestamp": "2026-02-14T22:08:49.000Z",
   "gasUsed": "0"
 }

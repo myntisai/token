@@ -1,0 +1,516 @@
+{
+  "generatedAt": "2026-02-14T05:10:50.467Z",
+  "chainId": 8453,
+  "latestBlock": 42128251,
+  "roles": {
+    "emissionsContract": [
+      {
+        "role": "emissionsContract",
+        "status": "legacy",
+        "address": "0x47386e229d3D76962f339D5e93349724858F88Ac",
+        "normalizedAddress": "0x47386e229d3d76962f339d5e93349724858f88ac",
+        "firstSeenFile": "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json",
+        "firstSeenTimestamp": "2026-02-08T03:53:20.798Z",
+        "creationBlock": 41866689,
+        "creationTxHash": "0xf04872db9d4f3d217c1984a8f9953a046cc6ab676e9fa66ae92947d7e8427b19",
+        "snapshots": {
+          "creation": {
+            "block": 41866689,
+            "data": {
+              "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+              "stakingContract": "0x0000000000000000000000000000000000000000",
+              "mintedEmissions": "0",
+              "accountedEmissions": "0",
+              "unmintedEmissions": "0",
+              "accRewardPerShare": "0",
+              "startTime": "1770522725",
+              "lastRewardTime": "1770522725",
+              "emissionRate": "0",
+              "tokenBalance": "0"
+            }
+          },
+          "latest": {
+            "block": 42128251,
+            "data": {
+              "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+              "stakingContract": "0x48bcD6177f958C26fCc8D8e4B8088936bd20541e",
+              "mintedEmissions": "0",
+              "accountedEmissions": "0",
+              "unmintedEmissions": "0",
+              "accRewardPerShare": "0",
+              "startTime": "1770522725",
+              "lastRewardTime": "1770522725",
+              "emissionRate": "3170979198376458650",
+              "tokenBalance": "0"
+            }
+          }
+        }
+      },
+      {
+        "role": "emissionsContract",
+        "status": "active",
+        "address": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+        "normalizedAddress": "0x803f9694be31d3ace5792c21ab9f72b69838c0e0",
+        "firstSeenFile": "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "firstSeenTimestamp": "2026-02-08T04:32:48.860Z",
+        "creationBlock": 41867820,
+        "creationTxHash": "0xbae08ff2a72d9371dc183f12bb75c48811aa5c294c8de7f22f971dfc6f43c548",
+        "snapshots": {
+          "creation": {
+            "block": 41867820,
+            "data": {
+              "token": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+              "stakingContract": "0x0000000000000000000000000000000000000000",
+              "mintedEmissions": "0",
+              "accountedEmissions": "0",
+              "unmintedEmissions": "0",
+              "accRewardPerShare": "0",
+              "startTime": "1770524987",
+              "lastRewardTime": "1770524987",
+              "emissionRate": "0",
+              "tokenBalance": "0"
+            }
+          },
+          "latest": {
+            "block": 42128251,
+            "data": {
+              "token": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+              "stakingContract": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+              "mintedEmissions": "1477004058853373921666200",
+              "accountedEmissions": "1477004058853373921666200",
+              "unmintedEmissions": "0",
+              "accRewardPerShare": "233690546073603",
+              "startTime": "1770524987",
+              "lastRewardTime": "1771045283",
+              "emissionRate": "3170979198376458650",
+              "tokenBalance": "0"
+            }
+          }
+        }
+      }
+    ],
+    "dualPoolStaking": [
+      {
+        "role": "dualPoolStaking",
+        "status": "legacy",
+        "address": "0x48bcD6177f958C26fCc8D8e4B8088936bd20541e",
+        "normalizedAddress": "0x48bcd6177f958c26fcc8d8e4b8088936bd20541e",
+        "firstSeenFile": "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json",
+        "firstSeenTimestamp": "2026-02-08T03:53:20.798Z",
+        "creationBlock": 41866693,
+        "creationTxHash": "0xf174165445b748da6abb22f4d9121594bab30f3fa0a22ada2b65e2ca96b946f8",
+        "snapshots": {
+          "creation": {
+            "block": 41866693,
+            "data": {
+              "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+              "emissionsContract": "0x47386e229d3D76962f339D5e93349724858F88Ac",
+              "zkMerkleDistributor": "0x0000000000000000000000000000000000000000",
+              "liquidStakingVault": "0x0000000000000000000000000000000000000000",
+              "treasury": "0x0000000000000000000000000000000000000000",
+              "tokenBalance": "0",
+              "providerPool": {
+                "totalStaked": "0",
+                "accRewardPerShare": "0",
+                "lastRewardTime": "1770522733",
+                "emissionShare": "875",
+                "totalRewards": "0"
+              },
+              "userPool": {
+                "totalStaked": "0",
+                "accRewardPerShare": "0",
+                "lastRewardTime": "1770522733",
+                "emissionShare": "125",
+                "totalRewards": "0"
+              },
+              "principal": "0",
+              "providerPendingRewards": "0",
+              "userPendingRewards": "0",
+              "pendingTreasuryWithdrawal": "0",
+              "totalProviderAccruedEmissions": "0",
+              "knownStakersCount": 0,
+              "knownProvidersCount": 0,
+              "knownStakersPendingTotal": "0",
+              "knownProvidersAccruedTotal": "0",
+              "rewardLiability": "0",
+              "rewardFunds": "0",
+              "rewardGap": "0",
+              "rewardSurplus": "0",
+              "perStakerPending": [],
+              "perProviderAccrued": []
+            }
+          },
+          "latest": {
+            "block": 42128251,
+            "data": {
+              "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+              "emissionsContract": "0x47386e229d3D76962f339D5e93349724858F88Ac",
+              "zkMerkleDistributor": "0xFDF1Aa6FE61675Cab26e083f92ce9A7986bEaF6f",
+              "liquidStakingVault": "0x7aFC88080C64748b2fcB73644BF04aDc2013D686",
+              "treasury": "0x2440433b6eB8A64E3175884714FA5a4F2aC56A12",
+              "tokenBalance": "0",
+              "providerPool": {
+                "totalStaked": "0",
+                "accRewardPerShare": "0",
+                "lastRewardTime": "1770522733",
+                "emissionShare": "875",
+                "totalRewards": "0"
+              },
+              "userPool": {
+                "totalStaked": "0",
+                "accRewardPerShare": "0",
+                "lastRewardTime": "1770522733",
+                "emissionShare": "125",
+                "totalRewards": "0"
+              },
+              "principal": "0",
+              "providerPendingRewards": "0",
+              "userPendingRewards": "0",
+              "pendingTreasuryWithdrawal": "0",
+              "totalProviderAccruedEmissions": "0",
+              "knownStakersCount": 0,
+              "knownProvidersCount": 0,
+              "knownStakersPendingTotal": "0",
+              "knownProvidersAccruedTotal": "0",
+              "rewardLiability": "0",
+              "rewardFunds": "0",
+              "rewardGap": "0",
+              "rewardSurplus": "0",
+              "perStakerPending": [],
+              "perProviderAccrued": []
+            }
+          }
+        },
+        "knownAddresses": {
+          "stakers": [],
+          "providers": []
+        }
+      },
+      {
+        "role": "dualPoolStaking",
+        "status": "active",
+        "address": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+        "normalizedAddress": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+        "firstSeenFile": "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "firstSeenTimestamp": "2026-02-08T04:32:48.860Z",
+        "creationBlock": 41867822,
+        "creationTxHash": "0xaa45589568b2d03003f227bcf5cec53ffbb97a9bcdf49a1d532930b3a3645f9f",
+        "snapshots": {
+          "creation": {
+            "block": 41867822,
+            "data": {
+              "token": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+              "emissionsContract": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+              "zkMerkleDistributor": "0x0000000000000000000000000000000000000000",
+              "liquidStakingVault": "0x0000000000000000000000000000000000000000",
+              "treasury": "0x0000000000000000000000000000000000000000",
+              "tokenBalance": "0",
+              "providerPool": {
+                "totalStaked": "0",
+                "accRewardPerShare": "0",
+                "lastRewardTime": "1770524991",
+                "emissionShare": "875",
+                "totalRewards": "0"
+              },
+              "userPool": {
+                "totalStaked": "0",
+                "accRewardPerShare": "0",
+                "lastRewardTime": "1770524991",
+                "emissionShare": "125",
+                "totalRewards": "0"
+              },
+              "principal": "0",
+              "providerPendingRewards": "0",
+              "userPendingRewards": "0",
+              "pendingTreasuryWithdrawal": "0",
+              "totalProviderAccruedEmissions": "0",
+              "knownStakersCount": 3,
+              "knownProvidersCount": 2,
+              "knownStakersPendingTotal": "0",
+              "knownProvidersAccruedTotal": "0",
+              "rewardLiability": "0",
+              "rewardFunds": "0",
+              "rewardGap": "0",
+              "rewardSurplus": "0",
+              "perStakerPending": [],
+              "perProviderAccrued": []
+            }
+          },
+          "latest": {
+            "block": 42128251,
+            "data": {
+              "token": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+              "emissionsContract": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+              "zkMerkleDistributor": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+              "liquidStakingVault": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+              "treasury": "0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B",
+              "tokenBalance": "212487493658041755962624",
+              "providerPool": {
+                "totalStaked": "7100000000000000000000",
+                "accRewardPerShare": "225101128446527",
+                "lastRewardTime": "1770524991",
+                "emissionShare": "875",
+                "totalRewards": "1125505642233404324043138"
+              },
+              "userPool": {
+                "totalStaked": "5000000000000000000000",
+                "accRewardPerShare": "618446220192716",
+                "lastRewardTime": "1770524991",
+                "emissionShare": "125",
+                "totalRewards": "3092231100963977675886542"
+              },
+              "principal": "12100000000000000000000",
+              "providerPendingRewards": "0",
+              "userPendingRewards": "0",
+              "pendingTreasuryWithdrawal": "161268074581430745792463",
+              "totalProviderAccruedEmissions": "418410705225926461564",
+              "knownStakersCount": 3,
+              "knownProvidersCount": 2,
+              "knownStakersPendingTotal": "3092649511668805926461564",
+              "knownProvidersAccruedTotal": "418410705225926461564",
+              "rewardLiability": "3254335996955462598715591",
+              "rewardFunds": "200387493658041755962624",
+              "rewardGap": "3053948503297420842752967",
+              "rewardSurplus": "0",
+              "perStakerPending": [
+                {
+                  "address": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+                  "pending": "3092231100963580000000000"
+                },
+                {
+                  "address": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+                  "pending": "418410705225926461564"
+                }
+              ],
+              "perProviderAccrued": [
+                {
+                  "address": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+                  "accrued": "418410705225926461564"
+                }
+              ]
+            }
+          }
+        },
+        "knownAddresses": {
+          "stakers": [
+            "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+            "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+            "0xca7735a6290f384C8A9394B0E3141FeF89e6589d"
+          ],
+          "providers": [
+            "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+            "0xca7735a6290f384C8A9394B0E3141FeF89e6589d"
+          ]
+        }
+      }
+    ],
+    "zkMerkleDistributor": [
+      {
+        "role": "zkMerkleDistributor",
+        "status": "legacy",
+        "address": "0xFDF1Aa6FE61675Cab26e083f92ce9A7986bEaF6f",
+        "normalizedAddress": "0xfdf1aa6fe61675cab26e083f92ce9a7986beaf6f",
+        "firstSeenFile": "deployments/deployment-base-mainnet-2026-02-08T03-53-20-799Z.json",
+        "firstSeenTimestamp": "2026-02-08T03:53:20.798Z",
+        "creationBlock": 41866697,
+        "creationTxHash": "0xfb48c06e4ff7a374258c92293fe97028b583016ee12dce3efb77e78984f81b1b",
+        "snapshots": {
+          "creation": {
+            "block": 41866697,
+            "data": {
+              "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+              "stakingContract": "0x0000000000000000000000000000000000000000",
+              "slashRecipient": "0x0000000000000000000000000000000000000000",
+              "batchVerifier": "0xb53DFD4142741C9469cf5052eD0d55dac3A85361",
+              "tokenBalance": "0",
+              "knownProvidersCount": 0,
+              "totalProviderBalance": "0",
+              "totalLockedBalance": "0",
+              "totalEpochOutstanding": "0",
+              "liability": "0",
+              "gap": "0",
+              "surplus": "0",
+              "perProvider": []
+            }
+          },
+          "latest": {
+            "block": 42128251,
+            "data": {
+              "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+              "stakingContract": "0x48bcD6177f958C26fCc8D8e4B8088936bd20541e",
+              "slashRecipient": "0x2440433b6eB8A64E3175884714FA5a4F2aC56A12",
+              "batchVerifier": "0xb53DFD4142741C9469cf5052eD0d55dac3A85361",
+              "tokenBalance": "0",
+              "knownProvidersCount": 0,
+              "totalProviderBalance": "0",
+              "totalLockedBalance": "0",
+              "totalEpochOutstanding": "0",
+              "liability": "0",
+              "gap": "0",
+              "surplus": "0",
+              "perProvider": []
+            }
+          }
+        },
+        "knownProviders": []
+      },
+      {
+        "role": "zkMerkleDistributor",
+        "status": "active",
+        "address": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+        "normalizedAddress": "0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+        "firstSeenFile": "deployments/deployment-base-mainnet-2026-02-08T04-32-48-860Z.json",
+        "firstSeenTimestamp": "2026-02-08T04:32:48.860Z",
+        "creationBlock": 41867824,
+        "creationTxHash": "0xbffd06946d8ebaed031f7087b26c8d6c510ee5ae3c8ee9decc03337764f560d9",
+        "snapshots": {
+          "creation": {
+            "block": 41867824,
+            "data": {
+              "token": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+              "stakingContract": "0x0000000000000000000000000000000000000000",
+              "slashRecipient": "0x0000000000000000000000000000000000000000",
+              "batchVerifier": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
+              "tokenBalance": "0",
+              "knownProvidersCount": 1,
+              "totalProviderBalance": "0",
+              "totalLockedBalance": "0",
+              "totalEpochOutstanding": "0",
+              "liability": "0",
+              "gap": "0",
+              "surplus": "0",
+              "perProvider": []
+            }
+          },
+          "latest": {
+            "block": 42128251,
+            "data": {
+              "token": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+              "stakingContract": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+              "slashRecipient": "0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B",
+              "batchVerifier": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
+              "tokenBalance": "1096415259094401329277828",
+              "knownProvidersCount": 1,
+              "totalProviderBalance": "979516063376775567222429",
+              "totalLockedBalance": "116899195717625762055399",
+              "totalEpochOutstanding": "116899195717625762055399",
+              "liability": "1096415259094401329277828",
+              "gap": "0",
+              "surplus": "0",
+              "perProvider": [
+                {
+                  "address": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+                  "providerBalance": "979516063376775567222429",
+                  "lockedBalance": "116899195717625762055399",
+                  "epochCount": "43",
+                  "epochOutstanding": "116899195717625762055399"
+                }
+              ]
+            }
+          }
+        },
+        "knownProviders": [
+          "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6"
+        ]
+      }
+    ]
+  },
+  "cutover": {
+    "emissionsContract": {
+      "block": 41867819,
+      "legacyAddress": "0x47386e229d3D76962f339D5e93349724858F88Ac",
+      "activeAddress": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+      "data": {
+        "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+        "stakingContract": "0x48bcD6177f958C26fCc8D8e4B8088936bd20541e",
+        "mintedEmissions": "0",
+        "accountedEmissions": "0",
+        "unmintedEmissions": "0",
+        "accRewardPerShare": "0",
+        "startTime": "1770522725",
+        "lastRewardTime": "1770522725",
+        "emissionRate": "3170979198376458650",
+        "tokenBalance": "0"
+      }
+    },
+    "dualPoolStaking": {
+      "block": 41867821,
+      "legacyAddress": "0x48bcD6177f958C26fCc8D8e4B8088936bd20541e",
+      "activeAddress": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "data": {
+        "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+        "emissionsContract": "0x47386e229d3D76962f339D5e93349724858F88Ac",
+        "zkMerkleDistributor": "0xFDF1Aa6FE61675Cab26e083f92ce9A7986bEaF6f",
+        "liquidStakingVault": "0x7aFC88080C64748b2fcB73644BF04aDc2013D686",
+        "treasury": "0x2440433b6eB8A64E3175884714FA5a4F2aC56A12",
+        "tokenBalance": "0",
+        "providerPool": {
+          "totalStaked": "0",
+          "accRewardPerShare": "0",
+          "lastRewardTime": "1770522733",
+          "emissionShare": "875",
+          "totalRewards": "0"
+        },
+        "userPool": {
+          "totalStaked": "0",
+          "accRewardPerShare": "0",
+          "lastRewardTime": "1770522733",
+          "emissionShare": "125",
+          "totalRewards": "0"
+        },
+        "principal": "0",
+        "providerPendingRewards": "0",
+        "userPendingRewards": "0",
+        "pendingTreasuryWithdrawal": "0",
+        "totalProviderAccruedEmissions": "0",
+        "knownStakersCount": 0,
+        "knownProvidersCount": 0,
+        "knownStakersPendingTotal": "0",
+        "knownProvidersAccruedTotal": "0",
+        "rewardLiability": "0",
+        "rewardFunds": "0",
+        "rewardGap": "0",
+        "rewardSurplus": "0",
+        "perStakerPending": [],
+        "perProviderAccrued": []
+      }
+    },
+    "zkMerkleDistributor": {
+      "block": 41867823,
+      "legacyAddress": "0xFDF1Aa6FE61675Cab26e083f92ce9A7986bEaF6f",
+      "activeAddress": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+      "data": {
+        "token": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+        "stakingContract": "0x48bcD6177f958C26fCc8D8e4B8088936bd20541e",
+        "slashRecipient": "0x2440433b6eB8A64E3175884714FA5a4F2aC56A12",
+        "batchVerifier": "0xb53DFD4142741C9469cf5052eD0d55dac3A85361",
+        "tokenBalance": "0",
+        "knownProvidersCount": 0,
+        "totalProviderBalance": "0",
+        "totalLockedBalance": "0",
+        "totalEpochOutstanding": "0",
+        "liability": "0",
+        "gap": "0",
+        "surplus": "0",
+        "perProvider": []
+      }
+    }
+  },
+  "gapSummary": {
+    "rewardLiabilityStaking": "0",
+    "rewardFundsStaking": "0",
+    "rewardGapStaking": "0",
+    "rewardSurplusStaking": "0",
+    "distributorLiability": "0",
+    "distributorFunds": "0",
+    "distributorGap": "0",
+    "distributorSurplus": "0",
+    "distributorLocked": "0",
+    "combinedLiability": "0",
+    "combinedFunds": "0",
+    "combinedGap": "0",
+    "combinedSurplus": "0",
+    "immediateCandidatesTotal": "0",
+    "lockedOnlyCandidatesTotal": "0"
+  }
+}

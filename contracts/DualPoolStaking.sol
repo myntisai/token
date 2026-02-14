@@ -38,6 +38,7 @@ contract DualPoolStaking is
 
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
     bytes32 public constant EMISSIONS_ROLE = keccak256("EMISSIONS_ROLE");
+    bytes32 public constant HARVESTER_ROLE = keccak256("HARVESTER_ROLE");
     
     /// @notice Precision multiplier for reward per share calculations
     uint256 public constant PRECISION = 1e12;
@@ -146,6 +147,7 @@ contract DualPoolStaking is
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         _grantRole(UPGRADER_ROLE, admin);
         _grantRole(EMISSIONS_ROLE, _emissionsContract);
+        _grantRole(HARVESTER_ROLE, admin);
         
         // Initialize pools
         providerPool.emissionShare = 875; // 87.5%
@@ -422,8 +424,13 @@ contract DualPoolStaking is
     /**
      * @notice Harvest rewards for a user
      * @param user User address
+     * @dev Restrict third-party harvesting to authorized harvesters.
      */
     function harvestRewards(address user) external nonReentrant {
+        require(
+            msg.sender == user || hasRole(HARVESTER_ROLE, msg.sender),
+            "Not authorized harvester"
+        );
         _updatePools();
         _harvestRewards(user);
     }
@@ -551,8 +558,8 @@ contract DualPoolStaking is
     function syncEmissions() external onlyRole(EMISSIONS_ROLE) returns (uint256 totalRewards_) {
         uint256 balance = token.balanceOf(address(this));
         uint256 principal = providerPool.totalStaked + userPool.totalStaked;
-        // V3 FIX: Include totalProviderAccruedEmissions to prevent double-counting.
-        // Provider share is already tracked via notifyReward → providerAccruedEmissions.
+        // Include legacy providerAccruedEmissions obligations in accounting so reserved
+        // balances from historical notifyReward flows can't be swept as new rewards.
         uint256 accounted = principal + providerPendingRewards + userPendingRewards
             + pendingTreasuryWithdrawal + totalProviderAccruedEmissions;
         if (balance <= accounted) {
@@ -562,9 +569,18 @@ contract DualPoolStaking is
 
         uint256 rewards = balance - accounted;
 
-        // V3 FIX: Provider share already handled by notifyReward → providerAccruedEmissions.
-        // Remaining unaccounted tokens are the user share only.
-        uint256 userShare = rewards;
+        uint256 providerShare = (rewards * providerPool.emissionShare) / 1000;
+        uint256 userShare = rewards - providerShare;
+
+        // If there are no providers staked, queue for treasury to avoid windfall on first provider
+        if (providerPool.totalStaked == 0 && providerShare > 0) {
+            pendingTreasuryWithdrawal += providerShare;
+            if (treasury != address(0)) {
+                emit TreasuryRewardsQueued(providerShare, pendingTreasuryWithdrawal);
+                emit UnclaimedRewardsSentToTreasury(providerShare, 0);
+            }
+            providerShare = 0;
+        }
 
         // If there are no users staked, queue for treasury to avoid windfall on first user
         if (userPool.totalStaked == 0 && userShare > 0) {
@@ -576,18 +592,19 @@ contract DualPoolStaking is
             userShare = 0;
         }
 
+        providerPendingRewards += providerShare;
         userPendingRewards += userShare;
 
-        emit RewardsQueued(0, userShare);
+        emit RewardsQueued(providerShare, userShare);
 
         _updatePools();
         return rewards;
     }
     
     /**
-     * @notice Notify reward for a provider (called by EmissionsContract)
-     * @dev SECURITY FIX: Simplified to just emit event - reward debt is managed by harvest
-     * @dev SECURITY FIX: Allows notification for addresses that were ever providers
+     * @notice Legacy provider reward notification hook.
+     * @dev Maintained for backwards compatibility with historical emissions flows.
+     * @dev New emissions distribution uses syncEmissions() pool splits instead.
      * @param provider Provider address
      * @param amount Reward amount that was minted
      */
@@ -654,12 +671,7 @@ contract DualPoolStaking is
         UserInfo memory userInfo_ = userInfo[user];
 
         if (userInfo_.poolType == PoolType.Provider) {
-            uint256 masterchefPending = _pendingProviderRewards(userInfo_);
-            // V3 FIX: Cap to providerAccruedEmissions for accurate display.
-            // MasterChef pending is inflated from historical double-counting;
-            // providers receive rewards through providerAccruedEmissions pipeline.
-            uint256 accrued = providerAccruedEmissions[user];
-            return masterchefPending > accrued ? accrued : masterchefPending;
+            return _pendingProviderRewards(userInfo_);
         } else {
             return _pendingUserRewards(userInfo_);
         }
@@ -757,36 +769,18 @@ contract DualPoolStaking is
         if (userInfo_.poolType == PoolType.Provider) {
             pending = _pendingProviderRewards(userInfo_);
             if (pending > 0) {
-                // FIX: Use PRECISION constant consistently (was 1e12)
                 userInfo_.rewardDebt = (userInfo_.amount * providerPool.accRewardPerShare) / PRECISION;
-                // REMOVED: providerPool.totalRewards += pending; (already counted in _updatePools)
             }
         } else {
             pending = _pendingUserRewards(userInfo_);
             if (pending > 0) {
                 userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / PRECISION;
-                // REMOVED: userPool.totalRewards += pending; (already counted in _updatePools)
             }
         }
         
         if (pending > 0) {
-            uint256 transferAmount = pending;
-            if (userInfo_.poolType == PoolType.Provider) {
-                // V3 FIX: Cap transfer to providerAccruedEmissions.
-                // MasterChef pending is inflated from historical double-counting.
-                // Providers receive the bulk of rewards through the
-                // providerAccruedEmissions → fundProviderBalance → ZK distributor pipeline.
-                uint256 accrued = providerAccruedEmissions[user];
-                transferAmount = pending > accrued ? accrued : pending;
-                if (transferAmount > 0) {
-                    providerAccruedEmissions[user] -= transferAmount;
-                    totalProviderAccruedEmissions -= transferAmount;
-                }
-            }
-            if (transferAmount > 0) {
-                token.safeTransfer(user, transferAmount);
-            }
-            emit RewardsHarvested(user, transferAmount, userInfo_.poolType);
+            token.safeTransfer(user, pending);
+            emit RewardsHarvested(user, pending, userInfo_.poolType);
         }
     }
 
