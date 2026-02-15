@@ -44,6 +44,48 @@ describe("DualPoolStaking Coverage", function () {
     return { admin, provider, user, treasury, token, emissions, staking };
   }
 
+  async function deploySyncFixture() {
+    const [admin, provider, user, treasury] = await ethers.getSigners();
+    const Token = await ethers.getContractFactory("MockERC20");
+    const token = await Token.deploy("Mock", "MOCK");
+    await token.waitForDeployment();
+
+    const EmissionsMock = await ethers.getContractFactory("MockEmissionsForStaking");
+    const emissions = await EmissionsMock.deploy(await token.getAddress());
+    await emissions.waitForDeployment();
+
+    const Staking = await ethers.getContractFactory("DualPoolStaking");
+    const impl = await Staking.deploy();
+    await impl.waitForDeployment();
+
+    const ProxyAdmin = await ethers.getContractFactory("ProxyAdmin");
+    const proxyAdmin = await ProxyAdmin.deploy(admin.address);
+    await proxyAdmin.waitForDeployment();
+
+    const initData = Staking.interface.encodeFunctionData("initialize", [
+      await token.getAddress(),
+      await emissions.getAddress(),
+      admin.address
+    ]);
+    const Proxy = await ethers.getContractFactory("TransparentUpgradeableProxy");
+    const proxy = await Proxy.deploy(await impl.getAddress(), await proxyAdmin.getAddress(), initData);
+    await proxy.waitForDeployment();
+    const staking = Staking.attach(await proxy.getAddress());
+
+    await emissions.setStaking(await staking.getAddress());
+    await staking.setLiquidStakingVault(user.address);
+
+    await token.mint(provider.address, ethers.parseEther("1000"));
+    await token.mint(user.address, ethers.parseEther("1000"));
+    await token.mint(admin.address, ethers.parseEther("1000"));
+
+    await token.connect(provider).approve(await staking.getAddress(), ethers.parseEther("1000"));
+    await token.connect(user).approve(await staking.getAddress(), ethers.parseEther("1000"));
+    await token.connect(admin).approve(await staking.getAddress(), ethers.parseEther("1000"));
+
+    return { admin, provider, user, treasury, token, emissions, staking };
+  }
+
   it("admin setters and reinitializer", async function () {
     const { admin, staking, token } = await deployFixture();
     const Dummy = await ethers.getContractFactory("MockERC20");
@@ -92,7 +134,7 @@ describe("DualPoolStaking Coverage", function () {
   });
 
   it("pending rewards, harvest, treasury, and sync flows", async function () {
-    const { staking, provider, user, token, treasury } = await deployFixture();
+    const { staking, provider, user, emissions, treasury } = await deploySyncFixture();
     await staking.setTreasury(treasury.address);
 
     await staking.connect(provider).stakeToProviderPool(ethers.parseEther("200"));
@@ -105,8 +147,8 @@ describe("DualPoolStaking Coverage", function () {
     // queue rewards by sending tokens to staking
     await staking.connect(provider).unstakeFromProviderPool(ethers.parseEther("200"));
     await staking.connect(user).unstakeFromUserPool(ethers.parseEther("10"), user.address);
-    await token.mint(await staking.getAddress(), ethers.parseEther("10"));
     await staking.grantRole(await staking.EMISSIONS_ROLE(), treasury.address);
+    await emissions.mintToStaking(ethers.parseEther("10"));
     await staking.connect(treasury).syncEmissions();
 
     await staking.withdrawTreasuryRewards();
@@ -168,11 +210,11 @@ describe("DualPoolStaking Coverage", function () {
   });
 
   it("harvest transfers pending rewards", async function () {
-    const { admin, provider, token, staking } = await deployFixture();
+    const { admin, provider, emissions, staking } = await deploySyncFixture();
 
     await staking.connect(provider).stakeToProviderPool(ethers.parseEther("200"));
 
-    await token.mint(await staking.getAddress(), ethers.parseEther("5"));
+    await emissions.mintToStaking(ethers.parseEther("5"));
     await staking.grantRole(await staking.EMISSIONS_ROLE(), admin.address);
     await staking.syncEmissions();
 
@@ -180,11 +222,11 @@ describe("DualPoolStaking Coverage", function () {
   });
 
   it("harvests user pool rewards when pending", async function () {
-    const { admin, user, token, staking } = await deployFixture();
+    const { admin, user, emissions, staking } = await deploySyncFixture();
 
     await staking.connect(user).stakeToUserPool(ethers.parseEther("10"), user.address);
 
-    await token.mint(await staking.getAddress(), ethers.parseEther("5"));
+    await emissions.mintToStaking(ethers.parseEther("5"));
     await staking.grantRole(await staking.EMISSIONS_ROLE(), admin.address);
     await staking.syncEmissions();
 
@@ -192,9 +234,9 @@ describe("DualPoolStaking Coverage", function () {
   });
 
   it("syncEmissions returns 0 when no new rewards", async function () {
-    const { admin, token, staking } = await deployFixture();
+    const { admin, emissions, staking } = await deploySyncFixture();
 
-    await token.mint(await staking.getAddress(), ethers.parseEther("5"));
+    await emissions.mintToStaking(ethers.parseEther("5"));
     await staking.grantRole(await staking.EMISSIONS_ROLE(), admin.address);
     await staking.syncEmissions();
 
@@ -203,9 +245,9 @@ describe("DualPoolStaking Coverage", function () {
   });
 
   it("syncEmissions routes rewards to treasury when no stakers", async function () {
-    const { admin, token, staking } = await deployFixture();
+    const { admin, emissions, staking } = await deploySyncFixture();
 
-    await token.mint(await staking.getAddress(), ethers.parseEther("10"));
+    await emissions.mintToStaking(ethers.parseEther("10"));
     await staking.grantRole(await staking.EMISSIONS_ROLE(), admin.address);
 
     const beforeTreasury = await staking.pendingTreasuryWithdrawal();
@@ -218,10 +260,10 @@ describe("DualPoolStaking Coverage", function () {
   });
 
   it("reset pending rewards branches", async function () {
-    const { staking, token, admin } = await deployFixture();
+    const { staking, emissions, admin } = await deploySyncFixture();
 
     // Create pending rewards without stakers/treasury.
-    await token.mint(await staking.getAddress(), ethers.parseEther("10"));
+    await emissions.mintToStaking(ethers.parseEther("10"));
     await staking.grantRole(await staking.EMISSIONS_ROLE(), admin.address);
     await staking.syncEmissions();
 

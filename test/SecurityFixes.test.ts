@@ -22,12 +22,8 @@ describe("Security Fixes", function () {
     const token = await Token.deploy("Mock", "MOCK");
     await token.waitForDeployment();
 
-    const Emissions = await ethers.getContractFactory("EmissionsContract");
-    const emissions = await Emissions.deploy(
-      await token.getAddress(),
-      ethers.ZeroAddress,
-      owner.address
-    );
+    const Emissions = await ethers.getContractFactory("MockEmissionsForStaking");
+    const emissions = await Emissions.deploy(await token.getAddress());
     await emissions.waitForDeployment();
 
     const Staking = await ethers.getContractFactory("DualPoolStaking");
@@ -52,7 +48,7 @@ describe("Security Fixes", function () {
     await proxy.waitForDeployment();
 
     const staking = Staking.attach(await proxy.getAddress());
-    await emissions.setStakingContract(await staking.getAddress());
+    await emissions.setStaking(await staking.getAddress());
 
     return { token, emissions, staking };
   }
@@ -72,7 +68,7 @@ describe("Security Fixes", function () {
         await staking.connect(owner).stakeToUserPool(stakeAmount, user.address);
 
         const rewardAmount = ethers.parseEther("10");
-        await token.mint(await staking.getAddress(), rewardAmount);
+        await emissions.mintToStaking(rewardAmount);
 
         await staking.syncEmissions();
         const expectedUserShare = (rewardAmount * 125n) / 1000n;
@@ -93,7 +89,7 @@ describe("Security Fixes", function () {
         await staking.grantRole(await staking.EMISSIONS_ROLE(), owner.address);
 
         const rewardAmount = ethers.parseEther("5");
-        await token.mint(await staking.getAddress(), rewardAmount);
+        await emissions.mintToStaking(rewardAmount);
 
         await staking.syncEmissions();
         expect(await staking.pendingTreasuryWithdrawal()).to.equal(rewardAmount);
@@ -103,7 +99,7 @@ describe("Security Fixes", function () {
 
     describe("Fix 2.4: Minimum Stake Bypass", function () {
       it("should enforce minimum stake on total balance after deposit", async function () {
-        const { token, emissions, staking } = await deployDualPoolFixture();
+        const { token, staking } = await deployDualPoolFixture();
 
         await staking.updateMinProviderStake(ethers.parseEther("100"));
 
@@ -115,15 +111,13 @@ describe("Security Fixes", function () {
           staking.connect(provider).stakeToProviderPool(stakeAttempt)
         ).to.be.revertedWith("Total stake below minimum");
 
-        await emissions.setStakingContract(await staking.getAddress());
         await staking.connect(provider).stakeToProviderPool(ethers.parseEther("100"));
       });
 
       it("should prevent unstaking below minimum unless full withdrawal", async function () {
-        const { token, emissions, staking } = await deployDualPoolFixture();
+        const { token, staking } = await deployDualPoolFixture();
 
         await staking.updateMinProviderStake(ethers.parseEther("100"));
-        await emissions.setStakingContract(await staking.getAddress());
 
         await token.mint(provider.address, ethers.parseEther("200"));
         await token.connect(provider).approve(await staking.getAddress(), ethers.parseEther("200"));
