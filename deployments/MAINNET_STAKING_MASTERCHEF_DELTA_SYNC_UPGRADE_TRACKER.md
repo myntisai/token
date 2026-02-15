@@ -129,7 +129,7 @@ Record the Safe execution:
 
 | Step | Contract Call | Safe Tx Hash | Exec Tx Hash | Block | Status | Notes |
 |---|---|---|---:|---:|---|---|
-| 1 | `DualPoolStaking.upgradeToAndCall(newImpl, reinitializeV5MasterchefFix(accounts))` | `TBD` | `TBD` | TBD | TBD | reinitializer(5) |
+| 1 | `DualPoolStaking.upgradeToAndCall(newImpl, reinitializeV5MasterchefFix(accounts))` | `0x6d80fe0722a439a3783648c5c224226f3bb8ade365f7f04e3f4df78041fd0c3c` | `0x31ad0d48dc1156da01068bdaa28deb9d19e505180ca110ee5e89c2640c606b80` | 42201908 | ✅ executed | executed 2026-02-15T22:06:03Z |
 
 ## Phase 4: Post-Upgrade Verification (Must Pass)
 
@@ -146,6 +146,12 @@ Record the Safe execution:
 ## Evidence / Notes
 
 - Pre-upgrade snapshot:
-  - `TBD`
+  - See `deployments/MAINNET_EMISSIONS_STAKING_DISTRIBUTION_AUDIT_2026-02-15.md` (snapshot at 2026-02-15T20:34:11Z)
 - Post-upgrade snapshot:
-  - `TBD`
+  - Verified 2026-02-15 (after execution)
+  - ERC1967 implementation: `0xAB62e9dD23f77a6ceEbCd386AC7ed6869115c755`
+  - `pendingTreasuryWithdrawal == 0`
+  - `lastSyncedEmissionsMinted == EmissionsContract.mintedEmissions == 1,947,025.6215119228815211`
+  - `Myntis.balanceOf(staking) == 70,184.155187977781225707`
+  - `pendingRewards(vault) == 6,184.20218163` (no longer > staking balance)
+  - `harvestFromEmissions(provider) staticCall ok` (no `accounted exceeds balance` revert)
