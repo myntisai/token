@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-02-15T21:57:47.043Z",
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "safeAddress": "0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B",
+  "serviceUrl": "https://safe-transaction-base.safe.global",
+  "proposalFile": "deployments/multisig-proposal-base-mainnet-staking-masterchef-fix-2026-02-15T21-57-03-108Z.json",
+  "startNonce": 10,
+  "results": [
+    {
+      "index": 1,
+      "description": "DualPoolStaking.upgradeToAndCall(newImpl, reinitializeV5MasterchefFix(3 accounts))",
+      "nonce": 10,
+      "safeTxHash": "0x6d80fe0722a439a3783648c5c224226f3bb8ade365f7f04e3f4df78041fd0c3c",
+      "to": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "status": "proposed",
+      "responseStatus": 201,
+      "responseBody": ""
+    }
+  ]
+}

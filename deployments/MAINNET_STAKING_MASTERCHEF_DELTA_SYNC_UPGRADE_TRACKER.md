@@ -90,8 +90,8 @@ npx hardhat run scripts/deploy-dual-pool-staking-impl.ts --network base-mainnet
 
 Record:
 
-- New implementation: `TBD`
-- Deployment tx hash: `TBD`
+- New implementation: `0xAB62e9dD23f77a6ceEbCd386AC7ed6869115c755`
+- Deployment tx hash: `0x5ca2f762d07d4b04e2cde4d57581e4f7377b5b3b25caeaa57274148e51e91abb`
 
 ## Phase 2: Prepare Safe Transaction (Upgrade + Reinitialize V5)
 
@@ -106,8 +106,8 @@ npx hardhat run scripts/prepare-mainnet-staking-masterchef-fix-proposal.ts --net
 
 Artifacts (fill in after generation):
 
-- Proposal JSON: `TBD`
-- Proposal MD: `TBD`
+- Proposal JSON: `deployments/multisig-proposal-base-mainnet-staking-masterchef-fix-2026-02-15T21-57-03-108Z.json`
+- Proposal MD: `deployments/multisig-proposal-base-mainnet-staking-masterchef-fix-2026-02-15T21-57-03-108Z.md`
 
 ## Phase 2.5: Propose Transaction To Safe
 
@@ -119,9 +119,9 @@ npx hardhat run scripts/propose-safe-upgrade.ts --network base-mainnet
 
 Record:
 
-- Safe nonce: `TBD`
-- SafeTxHash: `TBD`
-- Submission output JSON: `TBD`
+- Safe nonce: `10`
+- SafeTxHash: `0x6d80fe0722a439a3783648c5c224226f3bb8ade365f7f04e3f4df78041fd0c3c`
+- Submission output JSON: `deployments/safe-proposal-submit-base-mainnet-2026-02-15T21-57-47-043Z.json`
 
 ## Phase 3: Safe Execution
 
