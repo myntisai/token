@@ -112,6 +112,13 @@ contract DualPoolStaking is
     event ProviderEmissionsAccrued(address indexed provider, uint256 amount, uint256 totalAccrued);
     event ProviderEmissionsWithdrawn(address indexed provider, uint256 amount);
     event PendingRewardsReset(PoolType poolType, uint256 amount, uint256 newPendingTreasury);
+    event RewardDebtSynced(
+        address indexed account,
+        PoolType poolType,
+        uint256 amount,
+        uint256 oldDebt,
+        uint256 newDebt
+    );
     
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor() {
@@ -199,6 +206,42 @@ contract DualPoolStaking is
         }
 
         emit PendingRewardsReset(PoolType.Provider, 0, pendingTreasuryWithdrawal);
+    }
+
+    /**
+     * @notice Reinitialize V4: Sync rewardDebt for existing stakers.
+     * @dev Fixes "rewardDebt=0 with huge accRewardPerShare" situations that can
+     *      make harvestRewards revert (trying to pay out an impossible backlog).
+     * @dev This is a one-time remediation. Pass the known staker addresses you
+     *      want to rebaseline at the current accRewardPerShare.
+     *
+     * IMPORTANT:
+     * - This sets pending rewards for those accounts to ~0 at the time of sync.
+     * - Use a separate compensation plan (Merkle/manual) if you intend to honor
+     *   historical rewards from a broken accounting period.
+     */
+    function reinitializeV4SyncRewardDebt(address[] calldata accounts)
+        external
+        reinitializer(4)
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        for (uint256 i = 0; i < accounts.length; i++) {
+            address account = accounts[i];
+            if (account == address(0)) continue;
+
+            UserInfo storage u = userInfo[account];
+            if (u.amount == 0) continue;
+
+            uint256 acc = u.poolType == PoolType.Provider
+                ? providerPool.accRewardPerShare
+                : userPool.accRewardPerShare;
+
+            uint256 oldDebt = u.rewardDebt;
+            uint256 newDebt = (u.amount * acc) / PRECISION;
+            u.rewardDebt = newDebt;
+
+            emit RewardDebtSynced(account, u.poolType, u.amount, oldDebt, newDebt);
+        }
     }
 
     /**
