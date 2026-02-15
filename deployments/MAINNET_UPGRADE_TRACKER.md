@@ -24,6 +24,10 @@ Source snapshot:
 - Rewire staking to new emissions contract.
 - Transfer admin/control roles to multisig at the end.
 
+Additional upgrades after this change are tracked separately (example: staking `rewardDebt` sync fix):
+
+- `deployments/MAINNET_STAKING_REWARDDEBT_SYNC_UPGRADE_TRACKER.md`
+
 ## Contract Addresses
 
 ### Before

@@ -76,9 +76,9 @@ Known current stakers (Base mainnet):
 
 Final list used (fill at execution time):
 
-- [ ] `0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6`
-- [ ] `0xca7735a6290f384c8a9394b0e3141fef89e6589d`
-- [ ] `0x019cB2AA19465Ca1e140AbeADF13320414031C6B`
+- [x] `0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6`
+- [x] `0xca7735a6290f384c8a9394b0e3141fef89e6589d`
+- [x] `0x019cB2AA19465Ca1e140AbeADF13320414031C6B`
 
 ## Phase 0: Preflight (Do Not Skip)
 
@@ -131,22 +131,38 @@ If entering manually in Safe UI, the one and only transaction is:
 - `value`: `0`
 - `data`: `TBD` (this is `upgradeToAndCall(newImpl, reinitCalldata)`)
 
+## Phase 2.5: Propose Transaction To Safe (So It Appears In UI)
+
+From `token/`:
+
+```bash
+PROPOSAL_FILE=deployments/multisig-proposal-base-mainnet-staking-rewarddebt-sync-2026-02-15T03-09-14-256Z.json \
+SAFE_ADDRESS=0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B \
+npx hardhat run scripts/propose-safe-upgrade.ts --network base-mainnet
+```
+
+Recorded proposal submission:
+
+- Safe nonce used: `9`
+- SafeTxHash: `0x6965863ad2fd0757d85920691907b438c18b9e63ac902a8c225850f64386865f`
+- Submission output JSON: `deployments/safe-proposal-submit-base-mainnet-2026-02-15T03-16-27-253Z.json`
+
 ## Phase 3: Safe Execution
 
 Record the Safe execution details:
 
 | Step | Contract Call | Safe Tx Hash | Exec Tx Hash | Block | Status | Notes |
 |---|---|---|---:|---:|---|---|
-| 1 | `DualPoolStaking.upgradeToAndCall(newImpl,reinitV4SyncRewardDebt(accounts))` | `TBD` | `TBD` | `TBD` | Pending |  |
+| 1 | `DualPoolStaking.upgradeToAndCall(newImpl,reinitV4SyncRewardDebt(accounts))` | `0x6965863ad2fd0757d85920691907b438c18b9e63ac902a8c225850f64386865f` | `0x322c98ec8feba2d6d334efc5bde3972aa03c1a3a7be8ca26b333cc7f958f9630` | 42168127 | Executed | nonce=9, new impl `0x086D76393A089286AFfcc690f95129d3235EFeaC` |
 
 ## Phase 4: Post-Upgrade Verification (Must Pass)
 
 On-chain checks:
 
-- [ ] `erc1967` implementation == `<NEW_IMPL>`
-- [ ] `pendingRewards(0x26A942...)` is near `0` (should no longer be millions)
-- [ ] `pendingRewards(0xca7735...)` is near `0`
-- [ ] `pendingRewards(0x019cB2AA...)` is near `0`
+- [x] `erc1967` implementation == `<NEW_IMPL>`
+- [x] `pendingRewards(0x26A942...)` is near `0` (should no longer be millions)
+- [x] `pendingRewards(0xca7735...)` is near `0`
+- [x] `pendingRewards(0x019cB2AA...)` is near `0`
 - [ ] `harvestRewards(0x26A942...)` no longer reverts (test with a small pending window after some emissions accrue)
 
 Operational checks:
@@ -164,7 +180,14 @@ Operational checks:
 - Pre-upgrade snapshot:
   - `TBD`
 - Post-upgrade snapshot:
-  - `TBD`
+  - Safe execution date (Safe TX service): `2026-02-15T03:20:01Z`
+  - Staking proxy implementation (EIP-1967): `0x086D76393A089286AFfcc690f95129d3235EFeaC`
+  - `DualPoolStaking.getTotalStaked()`: `12100` MYNT
+  - `providerPool.totalStaked`: `7100` MYNT
+  - `userPool.totalStaked`: `5000` MYNT
+  - `pendingRewards(0x26A942...325B6)`: `0`
+  - `pendingRewards(0xca7735...589d)`: `0`
+  - `pendingRewards(0x019cB2...31C6B)`: `0`
 - Any manual interventions:
   - `TBD`
 
