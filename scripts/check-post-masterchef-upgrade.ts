@@ -133,10 +133,22 @@ async function main() {
     console.log("\nSIMULATION");
     console.log("  harvestFromEmissions(provider) staticCall REVERT:", e?.shortMessage || e?.message || String(e));
   }
+
+  // Non-invasive simulation: ensure key accounts can harvest without insolvency.
+  // (We set `from` to satisfy `harvestRewards` auth checks.)
+  const stakingRO = staking.connect(ethers.provider);
+  for (const a of accounts) {
+    try {
+      const simulatedHarvest = await (stakingRO as any).harvestRewards.staticCall(a, { from: a });
+      void simulatedHarvest;
+      console.log("  harvestRewards(account) staticCall ok:", a);
+    } catch (e: any) {
+      console.log("  harvestRewards(account) staticCall REVERT:", a, "-", e?.shortMessage || e?.message || String(e));
+    }
+  }
 }
 
 main().catch((e) => {
   console.error(e);
   process.exitCode = 1;
 });
-
