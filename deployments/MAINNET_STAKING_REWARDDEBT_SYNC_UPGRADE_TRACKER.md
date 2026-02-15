@@ -106,8 +106,8 @@ npx hardhat run scripts/deploy-dual-pool-staking-impl.ts --network base-mainnet
 
 Record:
 
-- New implementation: `TBD`
-- Deployment tx hash: `TBD`
+- New implementation: `0x086D76393A089286AFfcc690f95129d3235EFeaC`
+- Deployment tx hash: `0x2133e8d2c03b6e5f218a40c4d4baa77bb937f92c8670f05eeae6817f11abc877`
 
 ## Phase 2: Prepare Safe Transaction (Upgrade + Sync)
 
@@ -122,8 +122,8 @@ npx hardhat run scripts/prepare-mainnet-staking-rewarddebt-sync-proposal.ts --ne
 
 Artifacts (fill in after generation):
 
-- Proposal JSON: `TBD`
-- Proposal MD: `TBD`
+- Proposal JSON: `deployments/multisig-proposal-base-mainnet-staking-rewarddebt-sync-2026-02-15T03-09-14-256Z.json`
+- Proposal MD: `deployments/multisig-proposal-base-mainnet-staking-rewarddebt-sync-2026-02-15T03-09-14-256Z.md`
 
 If entering manually in Safe UI, the one and only transaction is:
 
@@ -173,4 +173,3 @@ Operational checks:
 If the new implementation introduces unexpected behavior, rollback is a Safe `upgradeToAndCall`
 back to the previous implementation address `0x4540361c613ba75DD0e394b652a6D8401EA4310F`
 (note: the `reinitializer(4)` cannot be undone; rollback only changes code, not state).
-
