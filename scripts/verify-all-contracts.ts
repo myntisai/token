@@ -88,7 +88,8 @@ const SPOKE_CONTRACTS = {
     args: [
       "0x6EDCE65403992e310A62460808c4b910D972f10f", // LZ Endpoint (Eth Sepolia)
       "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627", // Admin
-      40245 // Hub Chain EID (Base Sepolia)
+      40245, // Hub Chain EID (Base Sepolia)
+      40161 // Local Chain EID (Eth Sepolia)
     ],
     contract: "contracts/MyntisOFTSpoke.sol:MyntisOFTSpoke"
   },

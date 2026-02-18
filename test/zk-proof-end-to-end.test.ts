@@ -60,26 +60,24 @@ describe("ZK Proof End-to-End", function () {
         const zkeyPath = path.join(__dirname, "../zk-circuits/reward_claim_final.zkey");
 
         // Deploy token
-        const TokenFactory = await ethers.getContractFactory("MyntisToken");
-        const token = await TokenFactory.deploy(admin.address);
+        const LayerZeroEndpointMockFactory = await ethers.getContractFactory("LayerZeroEndpointMock");
+        const mockEndpoint = await LayerZeroEndpointMockFactory.deploy(1);
+        await mockEndpoint.waitForDeployment();
+
+        const TokenFactory = await ethers.getContractFactory("Myntis");
+        const token = await TokenFactory.deploy(await mockEndpoint.getAddress(), admin.address);
         await token.waitForDeployment();
 
-        // Deploy RewardClaimVerifier wrapper
-        const RewardClaimVerifier = await ethers.getContractFactory("RewardClaimVerifier");
-        const verifier = await RewardClaimVerifier.deploy();
-        await verifier.waitForDeployment();
-        
         // Deploy mock Groth16 verifier (for testing)
         const MockGroth16Verifier = await ethers.getContractFactory("MockGroth16Verifier");
         const grothVerifier = await MockGroth16Verifier.deploy();
         await grothVerifier.waitForDeployment();
-        await verifier.setVerifierContract(await grothVerifier.getAddress());
 
         // Deploy ZK Merkle Distributor
         const ZKMerkleDistributor = await ethers.getContractFactory("ZKMerkleDistributor");
         const distributor = await ZKMerkleDistributor.deploy(
             await token.getAddress(),
-            await verifier.getAddress(),
+            await grothVerifier.getAddress(),
             admin.address
         );
         await distributor.waitForDeployment();
@@ -87,13 +85,14 @@ describe("ZK Proof End-to-End", function () {
         // Grant roles
         await distributor.grantRole(await distributor.PROVIDER_ROLE(), provider.address);
 
-        // Mint tokens
-        await token.mint(await distributor.getAddress(), ethers.parseEther("1000000"));
+        // Mint tokens to admin and approve distributor
+        const fundingAmount = ethers.parseEther("1000000");
+        await token.mint(admin.address, fundingAmount);
+        await token.approve(await distributor.getAddress(), fundingAmount);
         await distributor.addProviderBalance(provider.address, ethers.parseEther("10000"));
 
         return {
             token,
-            verifier,
             grothVerifier,
             distributor,
             admin,
@@ -152,7 +151,7 @@ describe("ZK Proof End-to-End", function () {
     });
 
     it("Should verify proof structure matches contract interface", async function () {
-        const { verifier } = await loadFixture(deployZKSystemFixture);
+        await loadFixture(deployZKSystemFixture);
 
         // Create test proof
         const proof = {
@@ -204,7 +203,8 @@ describe("ZK Proof End-to-End", function () {
     });
 
     it("Should handle nullifier generation correctly", async function () {
-        const userAddress = "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb";
+        const [user] = await ethers.getSigners();
+        const userAddress = user.address;
         const merkleRoot = "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef";
 
         // Simple nullifier generation (Poseidon would be used in production)
@@ -215,7 +215,7 @@ describe("ZK Proof End-to-End", function () {
 
         expect(nullifier).to.be.a("string");
         expect(nullifier).to.have.length(66); // 0x + 64 hex chars
-        expect(nullifier).to.startWith("0x");
+        expect(nullifier).to.match(/^0x/);
 
         // Same inputs should produce same nullifier
         const nullifier2 = ethers.keccak256(

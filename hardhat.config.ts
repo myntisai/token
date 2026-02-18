@@ -1,5 +1,15 @@
 import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-chai-matchers";
+import "@nomicfoundation/hardhat-ethers";
+import "@nomicfoundation/hardhat-network-helpers";
+import "@nomicfoundation/hardhat-verify";
+import "@typechain/hardhat";
+try {
+  require("hardhat-gas-reporter");
+} catch (error) {
+  console.warn("hardhat-gas-reporter not available, skipping plugin load");
+}
+import "solidity-coverage";
 import "@openzeppelin/hardhat-upgrades";
 import * as dotenv from "dotenv";
 import * as path from "path";
@@ -37,7 +47,8 @@ const config: HardhatUserConfig = {
     hardhat: { chainId: 1337 },
     localhost: { url: "http://127.0.0.1:8545" },
     "base-sepolia": {
-      url: "https://sepolia.base.org",
+      // Public endpoint can intermittently fail; allow override via token/.env.
+      url: process.env.BASE_SEPOLIA_RPC_URL || "https://sepolia.base.org",
       accounts: getPrivateKey(),
       timeout: 60000,
     },
@@ -202,4 +213,3 @@ const config: HardhatUserConfig = {
 };
 
 export default config;
-

@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 
-const HUB_ADDRESS = "0xc2300D4edD794E5a61431AE0cC4922dE0771eD6E";
+const HUB_ADDRESS = "0x599016bF00eE23d531223c6285C92aa0cAC278EF";
 const ETH_SEPOLIA_EID = 40161;
 
 // Build options using proper LayerZero V2 format
@@ -34,10 +34,10 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Fixing enforced options...\n");
   
-  const hub = await ethers.getContractAt("MyntisOFT", HUB_ADDRESS);
+  const hub = await ethers.getContractAt("Myntis", HUB_ADDRESS);
   
   // Build proper options
-  const options = buildOptions(200000n);
+  const options = buildOptions(400000n);
   console.log("Options hex:", options);
   console.log("Options length:", (options.length - 2) / 2, "bytes");
   

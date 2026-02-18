@@ -3,13 +3,15 @@ pragma solidity ^0.8.22;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {
-    ILayerZeroEndpointV2,
     MessagingParams,
     MessagingReceipt,
     MessagingFee,
     Origin
 } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import {OAppCore} from "@layerzerolabs/oapp-evm/contracts/oapp/OAppCore.sol";
+import {OAppReceiver} from "@layerzerolabs/oapp-evm/contracts/oapp/OAppReceiver.sol";
 
 /**
  * @title GlobalSupplyRegistry
@@ -17,18 +19,38 @@ import {
  * @dev Deployed on hub chain, receives supply updates from spokes via LayerZero
  * @dev Enforces global cap (1B) across all chains
  */
-contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
+contract GlobalSupplyRegistry is OAppReceiver, AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
     bytes32 public constant SPOKE_ROLE = keccak256("SPOKE_ROLE");
     bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE"); // For hub/spoke token contracts
     
-    ILayerZeroEndpointV2 public immutable endpoint;
-    mapping(uint32 eid => bytes32 peer) public peers;
+    mapping(uint32 eid => bytes32 quotaReceivers) public quotaReceivers;
     
     // Global supply tracking
     uint256 public globalCap; // e.g., 1B tokens
     mapping(uint32 eid => uint256) public chainSupply; // Per-chain supply
     uint256 public totalCrossChainSupply; // Sum of all chain supplies
+    mapping(uint32 eid => uint256) public chainQuota; // Remaining mint quota per chain
+    uint256 public totalReservedQuota; // Sum of all remaining quotas
+
+    // Message types for LZ payloads
+    uint8 public constant MSG_SUPPLY_UPDATE = 1;
+    uint8 public constant MSG_QUOTA_REQUEST = 2;
+    uint8 public constant MSG_QUOTA_UPDATE = 3;
+    
+    struct QuotaRequest {
+        uint32 chainId;
+        uint256 requestedQuota;
+        uint256 newTotalSupply;
+        uint256 nonce;
+        uint256 consumedQuota;
+    }
+    
+    struct QuotaUpdate {
+        uint32 chainId;
+        uint256 grantedQuota;
+        uint256 nonce;
+    }
     
     struct SupplyUpdate {
         uint32 chainId;
@@ -45,17 +67,27 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
     event CapUpdated(uint256 oldCap, uint256 newCap);
     event ChainReseeded(uint32 indexed chainId, uint256 oldSupply, uint256 newSupply);
     event StaleUpdateRejected(uint32 indexed chainId, uint256 providedNonce, uint256 expectedNonce);
+    event QuotaReceiverUpdated(uint32 indexed eid, bytes32 indexed receiver);
+    event QuotaGranted(uint32 indexed chainId, uint256 requested, uint256 granted, uint256 newChainQuota, uint256 totalReserved);
+    event QuotaConsumed(uint32 indexed chainId, uint256 amount, uint256 remainingChainQuota, uint256 totalReserved);
+    event QuotaUpdateOptionsSet(bytes options, address refundAddress);
+    event QuotaUpdateSkipped(uint32 indexed chainId, uint256 amount, uint256 requiredFee, uint256 balance);
+    event ChainQuotaUpdated(uint32 indexed chainId, uint256 oldQuota, uint256 newQuota, uint256 totalReserved);
     
     error UnknownPeer(uint32 eid);
     error InvalidEndpoint();
     error InvalidPeer();
     error CapExceeded(uint256 current, uint256 cap);
+
+    receive() external payable {}
     
-    constructor(address endpoint_, address admin_) {
+    constructor(address endpoint_, address admin_)
+        OAppCore(endpoint_, admin_)
+        Ownable(admin_)
+    {
         require(endpoint_ != address(0), "GlobalSupplyRegistry: endpoint zero");
         require(admin_ != address(0), "GlobalSupplyRegistry: admin zero");
         
-        endpoint = ILayerZeroEndpointV2(endpoint_);
         _grantRole(ADMIN_ROLE, admin_);
         globalCap = 1_000_000_000 * 1e18; // 1B default
     }
@@ -65,9 +97,22 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
      */
     function registerSpoke(uint32 eid, bytes32 peer) external onlyRole(ADMIN_ROLE) {
         require(peer != bytes32(0), "GlobalSupplyRegistry: zero peer");
-        peers[eid] = peer;
-        _grantRole(SPOKE_ROLE, address(uint160(uint256(peer))));
+        _setPeer(eid, peer);
+        // Only grant SPOKE_ROLE for peers that cleanly encode an EVM address
+        // (high 12 bytes must be zero in bytes32 representation).
+        if ((uint256(peer) >> 160) == 0) {
+            _grantRole(SPOKE_ROLE, address(uint160(uint256(peer))));
+        }
         emit PeerUpdated(eid, peer);
+    }
+
+    /**
+     * @notice Register the quota receiver on a spoke chain
+     */
+    function registerQuotaReceiver(uint32 eid, bytes32 receiver) external onlyRole(ADMIN_ROLE) {
+        require(receiver != bytes32(0), "GlobalSupplyRegistry: zero receiver");
+        quotaReceivers[eid] = receiver;
+        emit QuotaReceiverUpdated(eid, receiver);
     }
 
     /**
@@ -75,6 +120,7 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
      */
     function registerToken(address token) external onlyRole(ADMIN_ROLE) {
         require(token != address(0), "GlobalSupplyRegistry: zero token");
+        require(token.code.length > 0, "GlobalSupplyRegistry: token not contract");
         _grantRole(TOKEN_ROLE, token);
     }
     
@@ -84,47 +130,137 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
      */
     function lzReceive(
         Origin calldata origin,
-        address receiver,
         bytes32 guid,
         bytes calldata message,
-        bytes calldata /* extraData */
-    ) external payable nonReentrant {
-        if (msg.sender != address(endpoint)) revert InvalidEndpoint();
-        if (receiver != address(this)) revert InvalidEndpoint();
+        address executor,
+        bytes calldata extraData
+    ) public payable override nonReentrant {
+        // Validate endpoint + peer via OAppReceiver, then dispatch in _lzReceive.
+        super.lzReceive(origin, guid, message, executor, extraData);
+    }
+
+    function _lzReceive(
+        Origin calldata origin,
+        bytes32 /*guid*/,
+        bytes calldata message,
+        address /*executor*/,
+        bytes calldata /*extraData*/
+    ) internal override {
+        uint8 msgType;
+        assembly {
+            msgType := byte(31, calldataload(message.offset))
+        }
         
-        bytes32 expectedPeer = peers[origin.srcEid];
-        if (expectedPeer == bytes32(0) || expectedPeer != origin.sender) revert InvalidPeer();
-        
-        SupplyUpdate memory update = abi.decode(message, (SupplyUpdate));
-        
+        if (msgType == MSG_SUPPLY_UPDATE) {
+            (, SupplyUpdate memory update) = abi.decode(message, (uint8, SupplyUpdate));
+            _handleSupplyUpdate(origin.srcEid, update);
+        } else if (msgType == MSG_QUOTA_REQUEST) {
+            (, QuotaRequest memory request) = abi.decode(message, (uint8, QuotaRequest));
+            _handleQuotaRequest(origin.srcEid, request);
+        } else {
+            revert("GlobalSupplyRegistry: unknown message type");
+        }
+    }
+
+    function _handleSupplyUpdate(uint32 srcEid, SupplyUpdate memory update) internal {
         uint32 chainId = update.chainId;
         uint256 supplyDelta = update.supplyDelta;
         uint256 newChainSupply = update.newTotalSupply;
         
-        // CRITICAL FIX: Validate chainId matches the actual source chain
-        // Prevents spoke from spoofing supply updates for other chains
-        require(chainId == origin.srcEid, "GlobalSupplyRegistry: chainId mismatch");
+        require(chainId == srcEid, "GlobalSupplyRegistry: chainId mismatch");
         
-        // SECURITY FIX: Validate nonce to prevent stale updates
         if (update.nonce <= chainNonce[chainId]) {
             emit StaleUpdateRejected(chainId, update.nonce, chainNonce[chainId]);
-            return; // Silently reject stale updates
+            return;
         }
         chainNonce[chainId] = update.nonce;
         
-        // Update chain supply
-        uint256 oldChainSupply = chainSupply[chainId];
-        chainSupply[chainId] = newChainSupply;
+        _applySupplyUpdate(chainId, supplyDelta, newChainSupply);
+    }
+
+    function _handleQuotaRequest(uint32 srcEid, QuotaRequest memory request) internal {
+        uint32 chainId = request.chainId;
+        require(chainId == srcEid, "GlobalSupplyRegistry: chainId mismatch");
         
-        // Update total cross-chain supply
+        if (request.nonce <= chainNonce[chainId]) {
+            emit StaleUpdateRejected(chainId, request.nonce, chainNonce[chainId]);
+            return;
+        }
+        chainNonce[chainId] = request.nonce;
+        
+        uint256 oldChainSupply = chainSupply[chainId];
+        uint256 newChainSupply = request.newTotalSupply;
+        
+        // Update supply first
+        _applySupplyUpdate(chainId, newChainSupply > oldChainSupply ? newChainSupply - oldChainSupply : oldChainSupply - newChainSupply, newChainSupply);
+        
+        // Consume reported quota usage (spoke-enforced)
+        if (request.consumedQuota > 0) {
+            uint256 remaining = chainQuota[chainId];
+            uint256 consumed = request.consumedQuota <= remaining ? request.consumedQuota : remaining;
+            chainQuota[chainId] = remaining - consumed;
+            totalReservedQuota -= consumed;
+            emit QuotaConsumed(chainId, consumed, chainQuota[chainId], totalReservedQuota);
+        }
+        
+        // Ensure allocated supply stays within cap after consumption
+        require(totalCrossChainSupply + totalReservedQuota <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+
+        // Grant new quota based on remaining global cap
+        uint256 available = globalCap - totalCrossChainSupply - totalReservedQuota;
+        uint256 grant = request.requestedQuota <= available ? request.requestedQuota : available;
+        
+        if (grant > 0) {
+            chainQuota[chainId] += grant;
+            totalReservedQuota += grant;
+        }
+        
+        emit QuotaGranted(chainId, request.requestedQuota, grant, chainQuota[chainId], totalReservedQuota);
+        
+        bytes32 receiver = quotaReceivers[chainId];
+        if (receiver != bytes32(0) && grant > 0) {
+            _sendQuotaUpdate(chainId, receiver, grant, chainNonce[chainId]);
+        }
+    }
+
+    function _applySupplyUpdate(uint32 chainId, uint256 /* supplyDelta */, uint256 newChainSupply) internal {
+        uint256 oldChainSupply = chainSupply[chainId];
+        uint256 delta = newChainSupply > oldChainSupply
+            ? newChainSupply - oldChainSupply
+            : oldChainSupply - newChainSupply;
+        chainSupply[chainId] = newChainSupply;
         totalCrossChainSupply = totalCrossChainSupply - oldChainSupply + newChainSupply;
         
-        // Verify global cap
         if (totalCrossChainSupply > globalCap) {
             revert CapExceeded(totalCrossChainSupply, globalCap);
         }
         
-        emit SupplyUpdated(chainId, supplyDelta, newChainSupply, totalCrossChainSupply);
+        emit SupplyUpdated(chainId, delta, newChainSupply, totalCrossChainSupply);
+    }
+
+    function _sendQuotaUpdate(uint32 chainId, bytes32 receiver, uint256 amount, uint256 nonce) internal {
+        QuotaUpdate memory update = QuotaUpdate({
+            chainId: chainId,
+            grantedQuota: amount,
+            nonce: nonce
+        });
+        
+        require(quotaUpdateRefundAddress != address(0), "GlobalSupplyRegistry: refund not set");
+        bytes memory payload = abi.encode(MSG_QUOTA_UPDATE, update);
+        MessagingParams memory params = MessagingParams({
+            dstEid: chainId,
+            receiver: receiver,
+            message: payload,
+            options: quotaUpdateOptions,
+            payInLzToken: false
+        });
+        
+        uint256 nativeFee = endpoint.quote(params, address(this)).nativeFee;
+        if (address(this).balance < nativeFee) {
+            emit QuotaUpdateSkipped(chainId, amount, nativeFee, address(this).balance);
+            return;
+        }
+        endpoint.send{value: nativeFee}(params, quotaUpdateRefundAddress);
     }
     
     /**
@@ -146,8 +282,9 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
         
         // Check cap before updating
         uint256 newTotal = totalCrossChainSupply - oldChainSupply + newChainSupply;
-        if (newTotal > globalCap) {
-            revert CapExceeded(newTotal, globalCap);
+        uint256 newAllocated = newTotal + totalReservedQuota;
+        if (newAllocated > globalCap) {
+            revert CapExceeded(newAllocated, globalCap);
         }
         
         chainSupply[chainId] = newChainSupply;
@@ -179,7 +316,7 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
      * @notice Check if minting would exceed global cap
      */
     function canMint(uint256 amount) external view returns (bool) {
-        return totalCrossChainSupply + amount <= globalCap;
+        return totalCrossChainSupply + totalReservedQuota + amount <= globalCap;
     }
     
     /**
@@ -191,10 +328,11 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
         require(chainSupply[chainId] == 0, "GlobalSupplyRegistry: chain already seeded");
         require(initialSupply <= globalCap, "GlobalSupplyRegistry: initial supply exceeds cap");
         
-        chainSupply[chainId] = initialSupply;
-        totalCrossChainSupply += initialSupply;
+        uint256 newTotal = totalCrossChainSupply + initialSupply;
+        require(newTotal + totalReservedQuota <= globalCap, "GlobalSupplyRegistry: would exceed cap");
         
-        require(totalCrossChainSupply <= globalCap, "GlobalSupplyRegistry: total exceeds cap");
+        chainSupply[chainId] = initialSupply;
+        totalCrossChainSupply = newTotal;
         
         emit SupplyUpdated(chainId, initialSupply, initialSupply, totalCrossChainSupply);
     }
@@ -203,10 +341,84 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
      * @notice Update global cap (admin only)
      */
     function updateCap(uint256 newCap) external onlyRole(ADMIN_ROLE) {
-        require(newCap >= totalCrossChainSupply, "GlobalSupplyRegistry: cap < current supply");
+        require(newCap >= totalCrossChainSupply + totalReservedQuota, "GlobalSupplyRegistry: cap < allocated supply");
         uint256 oldCap = globalCap;
         globalCap = newCap;
         emit CapUpdated(oldCap, newCap);
+    }
+
+    /**
+     * @notice Set default options/refund for quota updates
+     */
+    function setQuotaUpdateOptions(bytes calldata options, address refundAddress) external onlyRole(ADMIN_ROLE) {
+        require(refundAddress != address(0), "GlobalSupplyRegistry: refund zero");
+        quotaUpdateOptions = options;
+        quotaUpdateRefundAddress = refundAddress;
+        emit QuotaUpdateOptionsSet(options, refundAddress);
+    }
+
+    function withdrawETH(address to, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(to != address(0), "GlobalSupplyRegistry: zero address");
+        (bool ok, ) = to.call{value: amount}("");
+        require(ok, "GlobalSupplyRegistry: transfer failed");
+    }
+
+    /**
+     * @notice Update chain quota (admin recovery)
+     */
+    function setChainQuota(uint32 chainId, uint256 newQuota) external onlyRole(ADMIN_ROLE) {
+        uint256 oldQuota = chainQuota[chainId];
+        uint256 newTotalReserved = totalReservedQuota;
+        if (newQuota > oldQuota) {
+            newTotalReserved += (newQuota - oldQuota);
+        } else if (oldQuota > newQuota) {
+            newTotalReserved -= (oldQuota - newQuota);
+        }
+        require(totalCrossChainSupply + newTotalReserved <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+
+        totalReservedQuota = newTotalReserved;
+        chainQuota[chainId] = newQuota;
+        emit ChainQuotaUpdated(chainId, oldQuota, newQuota, totalReservedQuota);
+    }
+
+    /**
+     * @notice Re-seed chain supply and quota in one call (admin recovery)
+     * @param chainId Chain ID to reseed
+     * @param newSupply Corrected supply for that chain
+     * @param newQuota Corrected remaining quota for that chain
+     * @param newNonce New nonce to set (should be higher than any pending messages)
+     * @dev Ensures supply + quota remain consistent with global cap
+     */
+    function reseedChainSupplyAndQuota(
+        uint32 chainId,
+        uint256 newSupply,
+        uint256 newQuota,
+        uint256 newNonce
+    ) external onlyRole(ADMIN_ROLE) {
+        uint256 oldSupply = chainSupply[chainId];
+        uint256 oldQuota = chainQuota[chainId];
+
+        uint256 newTotalSupply = totalCrossChainSupply - oldSupply + newSupply;
+        uint256 newTotalReserved = totalReservedQuota;
+        if (newQuota > oldQuota) {
+            newTotalReserved += (newQuota - oldQuota);
+        } else if (oldQuota > newQuota) {
+            newTotalReserved -= (oldQuota - newQuota);
+        }
+
+        require(newTotalSupply + newTotalReserved <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+
+        chainSupply[chainId] = newSupply;
+        totalCrossChainSupply = newTotalSupply;
+
+        chainQuota[chainId] = newQuota;
+        totalReservedQuota = newTotalReserved;
+
+        chainNonce[chainId] = newNonce;
+
+        emit ChainReseeded(chainId, oldSupply, newSupply);
+        emit ChainQuotaUpdated(chainId, oldQuota, newQuota, totalReservedQuota);
+        emit SupplyUpdated(chainId, newSupply > oldSupply ? newSupply - oldSupply : oldSupply - newSupply, newSupply, totalCrossChainSupply);
     }
     
     /**
@@ -222,7 +434,7 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
         
         // Calculate new total
         uint256 newTotal = totalCrossChainSupply - oldSupply + newSupply;
-        require(newTotal <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+        require(newTotal + totalReservedQuota <= globalCap, "GlobalSupplyRegistry: would exceed cap");
         
         chainSupply[chainId] = newSupply;
         totalCrossChainSupply = newTotal;
@@ -247,13 +459,15 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
      * @notice Force accept next supply update for a chain (admin recovery)
      * @param chainId Chain ID to reset nonce for
      * @dev SECURITY FIX: Allows recovery from out-of-order message scenarios
-     * @dev Sets nonce to 0 so next update will be accepted regardless of its nonce
-     * @dev Use with caution - can allow replay of old messages
+     * @dev Advances nonce by 1 to accept the next update and reject older in-flight messages
+     * @dev Use with caution - may still allow some out-of-order messages depending on timing
      */
     function resetChainNonce(uint32 chainId) external onlyRole(ADMIN_ROLE) {
         uint256 oldNonce = chainNonce[chainId];
-        chainNonce[chainId] = 0;
+        uint256 newNonce = oldNonce + 1;
+        chainNonce[chainId] = newNonce;
         emit ChainNonceReset(chainId, oldNonce);
+        emit ChainNonceAdvanced(chainId, oldNonce, newNonce);
     }
     
     /**
@@ -267,7 +481,7 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
     function forceSupplySync(uint32 chainId, uint256 newSupply, uint256 minNonce) external onlyRole(ADMIN_ROLE) {
         uint256 oldSupply = chainSupply[chainId];
         uint256 newTotal = totalCrossChainSupply - oldSupply + newSupply;
-        require(newTotal <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+        require(newTotal + totalReservedQuota <= globalCap, "GlobalSupplyRegistry: would exceed cap");
         
         chainSupply[chainId] = newSupply;
         totalCrossChainSupply = newTotal;
@@ -281,5 +495,7 @@ contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
     }
     
     event ChainNonceReset(uint32 indexed chainId, uint256 oldNonce);
+    event ChainNonceAdvanced(uint32 indexed chainId, uint256 oldNonce, uint256 newNonce);
+    bytes public quotaUpdateOptions;
+    address public quotaUpdateRefundAddress;
 }
-

@@ -1,0 +1,111 @@
+{
+  "generatedAt": "2026-02-14T21:48:35.254Z",
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "safeAddress": "0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B",
+  "serviceUrl": "https://safe-transaction-base.safe.global",
+  "proposalFile": "deployments/multisig-proposal-base-mainnet-emissions-upgrade-2026-02-14T21-37-07-910Z.json",
+  "startNonce": 4,
+  "results": [
+    {
+      "index": 1,
+      "description": "Myntis.grantRole(MINTER_ROLE, newEmissions)",
+      "nonce": 4,
+      "safeTxHash": "0x32c1e6fd9012110183a812f824e8a451f6ad3cb879c48816b836c46c55a91372",
+      "to": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "status": "proposed",
+      "responseStatus": 0,
+      "responseBody": {
+        "to": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+        "value": "0",
+        "data": "0x2f2ff15d9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a60000000000000000000000007086792971b623462b6c1d1263ac73b0761addb9",
+        "operation": 0,
+        "safeTxGas": 0,
+        "baseGas": 0,
+        "gasPrice": "0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "refundReceiver": "0x0000000000000000000000000000000000000000",
+        "nonce": 4,
+        "contractTransactionHash": "0x32c1e6fd9012110183a812f824e8a451f6ad3cb879c48816b836c46c55a91372",
+        "sender": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+        "signature": "0xc23690d8df4518dfa6adc908e0661b85c53351ad31ce3966c6914cf9d7f1bf514e5cbc6df12f3ebe756d6ba453ab7141e4cc2db62ced306d941f044b09c2875a1c",
+        "origin": "myntis-base-mainnet-upgrade"
+      }
+    },
+    {
+      "index": 2,
+      "description": "Emissions.initializeMigration(snapshotFromOldEmissions)",
+      "nonce": 5,
+      "safeTxHash": "0xc25dc3af9ae618c3cb036feaedcf8a0e98aa7f80a365e18e6a6a400bebdc5e4a",
+      "to": "0x7086792971b623462B6C1d1263Ac73b0761ADDB9",
+      "status": "proposed",
+      "responseStatus": 0,
+      "responseBody": {
+        "to": "0x7086792971b623462B6C1d1263Ac73b0761ADDB9",
+        "value": "0",
+        "data": "0x2d72f4ef0000000000000000000000000000000000000000000160a863d6b60e58aadb040000000000000000000000000000000000000000000160a863d6b60e58aadb040000000000000000000000000000000000000000000000000000e9a78adaa143000000000000000000000000000000000000000000000000000000006988113b000000000000000000000000000000000000000000000000000000006990e9b100000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "operation": 0,
+        "safeTxGas": 0,
+        "baseGas": 0,
+        "gasPrice": "0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "refundReceiver": "0x0000000000000000000000000000000000000000",
+        "nonce": 5,
+        "contractTransactionHash": "0xc25dc3af9ae618c3cb036feaedcf8a0e98aa7f80a365e18e6a6a400bebdc5e4a",
+        "sender": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+        "signature": "0x7000efa10cd1d9fc3d10583c3d340700459e585becf2958086013e038524ae7407a1e9cef9321e402c3123fbcadb3b66efc62acbb279f566e5ab437239dd70f11b",
+        "origin": "myntis-base-mainnet-upgrade"
+      }
+    },
+    {
+      "index": 3,
+      "description": "DualPoolStaking.setEmissionsContract(newEmissions)",
+      "nonce": 6,
+      "safeTxHash": "0x5eaea1bc5ddb78f0bfbd7d50725f1bb180b33e0c6782ae02923e5216716810be",
+      "to": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "status": "proposed",
+      "responseStatus": 0,
+      "responseBody": {
+        "to": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+        "value": "0",
+        "data": "0xa9c353340000000000000000000000007086792971b623462b6c1d1263ac73b0761addb9",
+        "operation": 0,
+        "safeTxGas": 0,
+        "baseGas": 0,
+        "gasPrice": "0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "refundReceiver": "0x0000000000000000000000000000000000000000",
+        "nonce": 6,
+        "contractTransactionHash": "0x5eaea1bc5ddb78f0bfbd7d50725f1bb180b33e0c6782ae02923e5216716810be",
+        "sender": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+        "signature": "0x129ac9d83b19bce83dfe85143e00a2aba0fbbece455da6e6fb106d901eb7009806a090601e848833dae327d69fdeae879608ae81c07e84a87643e6d6c2b99d611c",
+        "origin": "myntis-base-mainnet-upgrade"
+      }
+    },
+    {
+      "index": 4,
+      "description": "Myntis.revokeRole(MINTER_ROLE, oldEmissions)",
+      "nonce": 7,
+      "safeTxHash": "0x75d94a54ee7d66915be1bd07aba5bfb4f41fe7686dd3169a44b16237d0a548c4",
+      "to": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "status": "proposed",
+      "responseStatus": 0,
+      "responseBody": {
+        "to": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+        "value": "0",
+        "data": "0xd547741f9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6000000000000000000000000803f9694be31d3ace5792c21ab9f72b69838c0e0",
+        "operation": 0,
+        "safeTxGas": 0,
+        "baseGas": 0,
+        "gasPrice": "0",
+        "gasToken": "0x0000000000000000000000000000000000000000",
+        "refundReceiver": "0x0000000000000000000000000000000000000000",
+        "nonce": 7,
+        "contractTransactionHash": "0x75d94a54ee7d66915be1bd07aba5bfb4f41fe7686dd3169a44b16237d0a548c4",
+        "sender": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+        "signature": "0x549089f8738e36447153026cc67cf5ac56adf499bdc2c9c4efdab32e717848db6e0044924df413b1586376bc5e6082d2707bf46b2f329a859c39cb9e07f52db11c",
+        "origin": "myntis-base-mainnet-upgrade"
+      }
+    }
+  ]
+}

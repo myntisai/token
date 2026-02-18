@@ -45,11 +45,15 @@ async function main() {
   console.log("  sendLib:", sendLib);
   console.log("  receiveLib:", receiveLib);
 
-  const tx1 = await endpoint.setSendLibrary(appAddress, dstEid, sendLib);
+  // Explicit nonce management: avoids occasional provider nonce races on public RPCs.
+  let nonce = await signer.getNonce();
+
+  const tx1 = await endpoint.setSendLibrary(appAddress, dstEid, sendLib, { nonce });
   console.log("  setSendLibrary tx:", tx1.hash);
   await tx1.wait();
 
-  const tx2 = await endpoint.setReceiveLibrary(appAddress, dstEid, receiveLib, gracePeriod);
+  nonce += 1;
+  const tx2 = await endpoint.setReceiveLibrary(appAddress, dstEid, receiveLib, gracePeriod, { nonce });
   console.log("  setReceiveLibrary tx:", tx2.hash);
   await tx2.wait();
 

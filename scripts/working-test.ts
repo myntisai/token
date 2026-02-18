@@ -1,13 +1,13 @@
 import { ethers } from "hardhat";
 
-const HUB_ADDRESS = "0xc2300D4edD794E5a61431AE0cC4922dE0771eD6E";
+const HUB_ADDRESS = "0x599016bF00eE23d531223c6285C92aa0cAC278EF";
 const ETH_SEPOLIA_EID = 40161;
 
 async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Testing quoteSend properly...\n");
   
-  const hub = await ethers.getContractAt("MyntisOFT", HUB_ADDRESS);
+  const hub = await ethers.getContractAt("Myntis", HUB_ADDRESS);
   
   const sendParam = {
     dstEid: ETH_SEPOLIA_EID,

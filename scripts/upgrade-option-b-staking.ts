@@ -1,10 +1,12 @@
 import { ethers, upgrades } from "hardhat";
 
 /**
- * Upgrade DualPoolStaking (Option B)
- * Adds distributor wiring and fundProviderBalance function
+ * Deprecated: Option B (fundProviderBalance) is no longer used under pool-split emissions.
  */
 async function main() {
+    console.log("NOTE: Option B (fundProviderBalance) is deprecated under pool-split emissions.");
+    console.log("Skipping upgrade script.");
+    return;
     const [deployer] = await ethers.getSigners();
     const network = await ethers.provider.getNetwork();
     

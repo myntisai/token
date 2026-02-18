@@ -1,0 +1,51 @@
+{
+  "generatedAt": "2026-02-14T21:48:46.228Z",
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "safeAddress": "0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B",
+  "serviceUrl": "https://safe-transaction-base.safe.global",
+  "proposalFile": "deployments/multisig-proposal-base-mainnet-emissions-upgrade-2026-02-14T21-37-07-910Z.json",
+  "startNonce": 4,
+  "results": [
+    {
+      "index": 1,
+      "description": "Myntis.grantRole(MINTER_ROLE, newEmissions)",
+      "nonce": 4,
+      "safeTxHash": "0x32c1e6fd9012110183a812f824e8a451f6ad3cb879c48816b836c46c55a91372",
+      "to": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "status": "proposed",
+      "responseStatus": 201,
+      "responseBody": ""
+    },
+    {
+      "index": 2,
+      "description": "Emissions.initializeMigration(snapshotFromOldEmissions)",
+      "nonce": 5,
+      "safeTxHash": "0xc25dc3af9ae618c3cb036feaedcf8a0e98aa7f80a365e18e6a6a400bebdc5e4a",
+      "to": "0x7086792971b623462B6C1d1263Ac73b0761ADDB9",
+      "status": "proposed",
+      "responseStatus": 201,
+      "responseBody": ""
+    },
+    {
+      "index": 3,
+      "description": "DualPoolStaking.setEmissionsContract(newEmissions)",
+      "nonce": 6,
+      "safeTxHash": "0x5eaea1bc5ddb78f0bfbd7d50725f1bb180b33e0c6782ae02923e5216716810be",
+      "to": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "status": "proposed",
+      "responseStatus": 201,
+      "responseBody": ""
+    },
+    {
+      "index": 4,
+      "description": "Myntis.revokeRole(MINTER_ROLE, oldEmissions)",
+      "nonce": 7,
+      "safeTxHash": "0x75d94a54ee7d66915be1bd07aba5bfb4f41fe7686dd3169a44b16237d0a548c4",
+      "to": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "status": "proposed",
+      "responseStatus": 201,
+      "responseBody": ""
+    }
+  ]
+}

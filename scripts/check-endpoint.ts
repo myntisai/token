@@ -1,7 +1,8 @@
-import { ethers } from "hardhat";
+import { ethers, network } from "hardhat";
+import { getLzEndpointV2 } from "./layerzero";
 
-const HUB_ADDRESS = "0xc2300D4edD794E5a61431AE0cC4922dE0771eD6E";
-const LZ_ENDPOINT = "0x6EDCE65403992e310A62460808c4b910D972f10f";
+const HUB_ADDRESS = "0x599016bF00eE23d531223c6285C92aa0cAC278EF";
+const LZ_ENDPOINT = getLzEndpointV2(network.name);
 const ETH_SEPOLIA_EID = 40161;
 
 // Minimal endpoint interface
@@ -18,7 +19,7 @@ async function main() {
   console.log("Checking LayerZero Endpoint Configuration...\n");
   
   const endpoint = new ethers.Contract(LZ_ENDPOINT, ENDPOINT_ABI, deployer);
-  const hub = await ethers.getContractAt("MyntisOFT", HUB_ADDRESS);
+  const hub = await ethers.getContractAt("Myntis", HUB_ADDRESS);
   
   // Check delegate
   console.log("1. Checking delegate for OApp...");

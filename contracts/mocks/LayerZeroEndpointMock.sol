@@ -8,135 +8,61 @@ import {
     Origin
 } from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
 
-interface ILzComposableReceiver {
+interface ILzReceiver {
     function lzReceive(
-        Origin calldata origin,
-        address receiver,
-        bytes32 guid,
-        bytes calldata message,
-        bytes calldata extraData
+        Origin calldata _origin,
+        bytes32 _guid,
+        bytes calldata _message,
+        address _executor,
+        bytes calldata _extraData
     ) external payable;
 }
 
 /**
  * @title LayerZeroEndpointMock
- * @notice Minimal endpoint mock that synchronously forwards packets to a configured remote receiver.
- * @dev Strictly for unit/integration testing. No safeguards or fee accounting.
+ * @notice Minimal mock used by tests; does not perform real messaging.
  */
 contract LayerZeroEndpointMock {
-    uint32 public immutable localEid;
-    mapping(uint32 eid => address endpoint) public remotes;
-    uint64 private _nextNonce = 1;
+    uint32 public immutable eid;
+    mapping(uint32 => address) public remotes;
+    address public delegate;
+    uint256 public nativeFee;
 
-    constructor(uint32 eid) {
-        require(eid != 0, "EndpointMock: eid zero");
-        localEid = eid;
+    constructor(uint32 _eid) {
+        eid = _eid;
     }
 
-    function setRemote(uint32 eid, address receiver) external {
-        remotes[eid] = receiver;
+    function setRemote(uint32 _eid, address _remote) external {
+        remotes[_eid] = _remote;
     }
 
-    // ----------------------------------------------------------------------
-    // ILayerZeroEndpointV2 (subset)
-    // ----------------------------------------------------------------------
+    function setDelegate(address _delegate) external {
+        delegate = _delegate;
+    }
 
-    function quote(
-        MessagingParams calldata,
-        address
-    ) external pure returns (MessagingFee memory) {
-        return MessagingFee({nativeFee: 0, lzTokenFee: 0});
+    function quote(MessagingParams calldata, address) external view returns (MessagingFee memory) {
+        return MessagingFee({nativeFee: nativeFee, lzTokenFee: 0});
     }
 
     function send(
         MessagingParams calldata params,
         address
-    ) external payable returns (MessagingReceipt memory receipt) {
-        address remoteEndpoint = remotes[params.dstEid];
-        require(remoteEndpoint != address(0), "EndpointMock: no remote");
-
-        bytes32 guid = keccak256(abi.encodePacked(blockhash(block.number - 1), msg.sender, _nextNonce));
-        receipt = MessagingReceipt({
-            guid: guid,
-            nonce: _nextNonce,
-            fee: MessagingFee({nativeFee: msg.value, lzTokenFee: 0})
-        });
-        _nextNonce += 1;
-
-        LayerZeroEndpointMock(remoteEndpoint).receivePacket(
-            Origin({
-                srcEid: localEid,
-                sender: bytes32(uint256(uint160(msg.sender))),
-                nonce: receipt.nonce
-            }),
-            params,
-            guid
+    ) external payable returns (MessagingReceipt memory) {
+        bytes32 guid = keccak256(
+            abi.encode(params.dstEid, params.receiver, params.message, block.number, msg.sender)
         );
+        return MessagingReceipt({
+            guid: guid,
+            nonce: 0,
+            fee: MessagingFee({nativeFee: 0, lzTokenFee: 0})
+        });
     }
 
-    function verifiable(Origin calldata, address) external pure returns (bool) {
-        return false;
+    function setNativeFee(uint256 fee) external {
+        nativeFee = fee;
     }
 
-    function verify(Origin calldata, address, bytes32) external pure {
-        revert("EndpointMock: unsupported");
-    }
-
-    function initializable(Origin calldata, address) external pure returns (bool) {
-        return false;
-    }
-
-    function lzReceive(
-        Origin calldata,
-        address,
-        bytes32,
-        bytes calldata,
-        bytes calldata
-    ) external payable {
-        revert("EndpointMock: unsupported");
-    }
-
-    function clear(address, Origin calldata, bytes32, bytes calldata) external pure {
-        revert("EndpointMock: unsupported");
-    }
-
-    function setLzToken(address) external pure {
-        revert("EndpointMock: unsupported");
-    }
-
-    function lzToken() external pure returns (address) {
-        return address(0);
-    }
-
-    function nativeToken() external pure returns (address) {
-        return address(0);
-    }
-
-    function setDelegate(address) external pure {
-        // no-op for tests
-    }
-
-    // ----------------------------------------------------------------------
-    // Test helper
-    // ----------------------------------------------------------------------
-
-    function receivePacket(
-        Origin memory origin,
-        MessagingParams memory params,
-        bytes32 guid
-    ) external {
-        address allowed = remotes[origin.srcEid];
-        require(allowed == msg.sender, "EndpointMock: unauthorized sender");
-
-        address receiver = bytes32ToAddress(params.receiver);
-        ILzComposableReceiver(receiver).lzReceive(origin, receiver, guid, params.message, "");
-    }
-
-    // ----------------------------------------------------------------------
-    // Helpers
-    // ----------------------------------------------------------------------
-
-    function bytes32ToAddress(bytes32 data) private pure returns (address) {
-        return address(uint160(uint256(data)));
+    function deliver(address receiver, Origin calldata origin, bytes calldata message) external {
+        ILzReceiver(receiver).lzReceive(origin, bytes32(0), message, address(0), "");
     }
 }

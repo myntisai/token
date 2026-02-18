@@ -1,0 +1,4627 @@
+/* ==== token/contracts/DualPoolStaking.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import {AccessControlUpgradeable} from "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
+import {ReentrancyGuardUpgradeable} from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+
+/**
+ * @notice Interface for EmissionsContract
+ * @dev SECURITY FIX: Allows DualPoolStaking to trigger emission harvests and initialize new providers
+ */
+interface IEmissionsContract {
+    function harvest(address provider) external returns (uint256);
+    function pendingRewards(address provider) external view returns (uint256);
+    function initializeNewProvider(address provider) external;
+}
+
+interface IZKMerkleDistributor {
+    function notifyRewardWithTransfer(address provider, uint256 amount) external;
+}
+
+/**
+ * @title DualPoolStaking
+ * @notice Dual-pool staking system with provider and user pools
+ * @dev Provider pool: 87.5% emissions, non-transferrable, min stake required
+ * @dev User pool: 12.5% emissions, transferrable via ERC-4626 vault
+ */
+contract DualPoolStaking is 
+    Initializable,
+    AccessControlUpgradeable,
+    ReentrancyGuardUpgradeable,
+    UUPSUpgradeable 
+{
+    using SafeERC20 for IERC20;
+
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant EMISSIONS_ROLE = keccak256("EMISSIONS_ROLE");
+    
+    /// @notice Precision multiplier for reward per share calculations
+    uint256 public constant PRECISION = 1e12;
+    
+    // Pool configuration
+    enum PoolType { Provider, User }
+    
+    struct PoolInfo {
+        uint256 totalStaked;
+        uint256 accRewardPerShare;
+        uint256 lastRewardTime;
+        uint256 emissionShare; // 875 for Provider (87.5%), 125 for User (12.5%)
+        uint256 totalRewards;  // Total rewards distributed to this pool
+    }
+    
+    struct UserInfo {
+        uint256 amount;
+        uint256 rewardDebt;
+        PoolType poolType;
+        bool isProvider;
+        uint256 lastStakeTime;
+    }
+    
+    // Token contracts
+    IERC20 public token;
+    address public emissionsContract;
+    address public liquidStakingVault;
+    
+    // OPTION B: ZK Merkle Distributor for auto-funding provider balances
+    address public zkMerkleDistributor;
+    
+    // Pool information
+    PoolInfo public providerPool;
+    PoolInfo public userPool;
+    
+    // User information
+    mapping(address => UserInfo) public userInfo;
+    
+    // SECURITY FIX: Track if address was ever a provider (for reward notifications)
+    mapping(address => bool) public wasEverProvider;
+    
+    // Configurable minimum provider stake
+    uint256 public minProviderStake;
+
+    // Reward accounting
+    uint256 public providerPendingRewards;
+    uint256 public userPendingRewards;
+    
+    // Treasury address for unclaimed rewards (prevents first-staker attack)
+    address public treasury;
+    
+    // SECURITY FIX: Pending treasury withdrawals (pull pattern)
+    uint256 public pendingTreasuryWithdrawal;
+    
+    // Events
+    event Staked(address indexed user, uint256 amount, PoolType poolType);
+    event Unstaked(address indexed user, uint256 amount, PoolType poolType);
+    event RewardsHarvested(address indexed user, uint256 amount, PoolType poolType);
+    event PoolUpdated(PoolType poolType, uint256 totalStaked, uint256 accRewardPerShare);
+    event MinProviderStakeUpdated(uint256 oldStake, uint256 newStake);
+    event RewardsQueued(uint256 providerAmount, uint256 userAmount);
+    event TreasuryUpdated(address indexed oldTreasury, address indexed newTreasury);
+    event LiquidStakingVaultUpdated(address indexed oldVault, address indexed newVault);
+    event RewardNotified(address indexed provider, uint256 amount);
+    event UnclaimedRewardsSentToTreasury(uint256 providerAmount, uint256 userAmount);
+    event TreasuryRewardsQueued(uint256 amount, uint256 totalPending);
+    event TreasuryWithdrawal(address indexed treasury, uint256 amount);
+    event ZkMerkleDistributorUpdated(address indexed oldDistributor, address indexed newDistributor);
+    event EmissionsContractUpdated(address indexed oldEmissions, address indexed newEmissions);
+    event ProviderBalanceFunded(address indexed provider, uint256 amount, address indexed distributor);
+    event ProviderEmissionsAccrued(address indexed provider, uint256 amount, uint256 totalAccrued);
+    event ProviderEmissionsWithdrawn(address indexed provider, uint256 amount);
+    event PendingRewardsReset(PoolType poolType, uint256 amount, uint256 newPendingTreasury);
+    
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+    
+    /**
+     * @notice Initialize the dual-pool staking system
+     * @param _token The staking token address
+     * @param _emissionsContract The emissions contract address
+     * @param admin The admin address
+     */
+    function initialize(
+        address _token,
+        address _emissionsContract,
+        address admin
+    ) public initializer {
+        // SECURITY FIX: Validate all addresses
+        require(_token != address(0), "DualPoolStaking: invalid token");
+        require(_token.code.length > 0, "DualPoolStaking: token not a contract");
+        require(_emissionsContract != address(0), "DualPoolStaking: invalid emissions");
+        require(_emissionsContract.code.length > 0, "DualPoolStaking: emissions not a contract");
+        require(admin != address(0), "DualPoolStaking: invalid admin");
+        
+        __AccessControl_init();
+        __ReentrancyGuard_init();
+        __UUPSUpgradeable_init();
+        
+        token = IERC20(_token);
+        emissionsContract = _emissionsContract;
+        minProviderStake = 100 * 1e18; // 100 MYNT default
+        
+        _grantRole(DEFAULT_ADMIN_ROLE, admin);
+        _grantRole(UPGRADER_ROLE, admin);
+        _grantRole(EMISSIONS_ROLE, _emissionsContract);
+        
+        // Initialize pools
+        providerPool.emissionShare = 875; // 87.5%
+        userPool.emissionShare = 125;     // 12.5%
+        
+        providerPool.lastRewardTime = block.timestamp;
+        userPool.lastRewardTime = block.timestamp;
+    }
+    
+    /**
+     * @notice Reinitialize pool configuration (fixes broken state from v1)
+     * @dev Uses reinitializer(2) to allow one-time execution after v1
+     */
+    function reinitializeV2() public reinitializer(2) onlyRole(DEFAULT_ADMIN_ROLE) {
+        // Fix pool emission shares
+        providerPool.emissionShare = 875; // 87.5%
+        userPool.emissionShare = 125;     // 12.5%
+        
+        // Fix lastRewardTime to current timestamp
+        providerPool.lastRewardTime = block.timestamp;
+        userPool.lastRewardTime = block.timestamp;
+        
+        // Fix minProviderStake (1000 MYNT)
+        minProviderStake = 1000 * 1e18;
+    }
+    
+    /**
+     * @notice Set the liquid staking vault address
+     * @param _liquidStakingVault The ERC-4626 vault address
+     * @dev SECURITY FIX: Added zero address validation
+     */
+    function setLiquidStakingVault(address _liquidStakingVault) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_liquidStakingVault != address(0), "Invalid vault address");
+        address oldVault = liquidStakingVault;
+        liquidStakingVault = _liquidStakingVault;
+        emit LiquidStakingVaultUpdated(oldVault, _liquidStakingVault);
+    }
+    
+    /**
+     * @notice Set the treasury address for unclaimed rewards
+     * @param _treasury The treasury address
+     */
+    function setTreasury(address _treasury) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_treasury != address(0), "Invalid treasury address");
+        address oldTreasury = treasury;
+        treasury = _treasury;
+        emit TreasuryUpdated(oldTreasury, _treasury);
+    }
+    
+    /**
+     * @notice Set the ZK Merkle Distributor address
+     * @param _zkMerkleDistributor The distributor contract address
+     * @dev OPTION B: Staking will auto-fund provider balances on this distributor
+     */
+    function setZkMerkleDistributor(address _zkMerkleDistributor) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_zkMerkleDistributor != address(0), "Invalid distributor address");
+        require(_zkMerkleDistributor.code.length > 0, "Distributor not a contract");
+        address oldDistributor = zkMerkleDistributor;
+        zkMerkleDistributor = _zkMerkleDistributor;
+        emit ZkMerkleDistributorUpdated(oldDistributor, _zkMerkleDistributor);
+    }
+    
+    /**
+     * @notice Set the emissions contract address
+     * @param _emissionsContract The new emissions contract address
+     * @dev Allows upgrading emissions logic without redeploying staking
+     */
+    function setEmissionsContract(address _emissionsContract) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(_emissionsContract != address(0), "Invalid emissions address");
+        require(_emissionsContract.code.length > 0, "Emissions not a contract");
+        address oldEmissions = emissionsContract;
+        emissionsContract = _emissionsContract;
+        
+        // Update emissions role
+        _revokeRole(EMISSIONS_ROLE, oldEmissions);
+        _grantRole(EMISSIONS_ROLE, _emissionsContract);
+        
+        emit EmissionsContractUpdated(oldEmissions, _emissionsContract);
+    }
+    
+    /**
+     * @notice Update minimum provider stake
+     * @param _minStake New minimum stake amount
+     */
+    function updateMinProviderStake(uint256 _minStake) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 oldStake = minProviderStake;
+        minProviderStake = _minStake;
+        emit MinProviderStakeUpdated(oldStake, _minStake);
+    }
+    
+    /**
+     * @notice Stake tokens in provider pool
+     * @param amount Amount to stake
+     * @dev SECURITY FIX: Validates total stake meets minimum after deposit
+     * @dev CRITICAL FIX: Initializes emission debt for new providers to prevent reward theft
+     */
+    function stakeToProviderPool(uint256 amount) external nonReentrant {
+        require(amount > 0, "Amount must be positive");
+        
+        _updatePools();
+        
+        UserInfo storage user = userInfo[msg.sender];
+        
+        // Prevent users already in user pool from staking in provider pool
+        require(user.poolType != PoolType.User || user.amount == 0, "User pool participant cannot stake in provider pool");
+        
+        // If user is already staked, harvest rewards first
+        if (user.amount > 0) {
+            _harvestRewards(msg.sender);
+        }
+        
+        // Transfer tokens from user
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
+        // Update user info
+        user.amount += amount;
+        
+        // SECURITY FIX: Validate total stake meets minimum after deposit
+        require(user.amount >= minProviderStake, "Total stake below minimum");
+        
+        // CRITICAL FIX: Initialize emission debt for NEW providers AFTER adding stake
+        // This prevents new providers from stealing accumulated rewards
+        if (user.amount == amount && emissionsContract != address(0)) {
+            IEmissionsContract(emissionsContract).initializeNewProvider(msg.sender);
+        }
+        
+        user.rewardDebt = (user.amount * providerPool.accRewardPerShare) / PRECISION;
+        user.poolType = PoolType.Provider;
+        user.isProvider = true;
+        user.lastStakeTime = block.timestamp;
+        
+        // SECURITY FIX: Mark as ever being a provider for future reward notifications
+        wasEverProvider[msg.sender] = true;
+        
+        // Update pool
+        providerPool.totalStaked += amount;
+        
+        emit Staked(msg.sender, amount, PoolType.Provider);
+        emit PoolUpdated(PoolType.Provider, providerPool.totalStaked, providerPool.accRewardPerShare);
+    }
+    
+    /**
+     * @notice Stake tokens in user pool (called by liquid staking vault)
+     * @param amount Amount to stake
+     * @param user The user address
+     */
+    function stakeToUserPool(uint256 amount, address user) external nonReentrant {
+        require(msg.sender == liquidStakingVault, "Only liquid staking vault");
+        
+        _updatePools();
+        
+        UserInfo storage userInfo_ = userInfo[user];
+        
+        // Prevent providers from staking in user pool to avoid accounting corruption
+        require(!userInfo_.isProvider || userInfo_.poolType != PoolType.Provider, 
+            "Provider cannot stake in user pool");
+        
+        // If user is already staked, harvest rewards first
+        if (userInfo_.amount > 0) {
+            _harvestRewards(user);
+        }
+        
+        // Transfer tokens from vault
+        token.safeTransferFrom(liquidStakingVault, address(this), amount);
+        
+        // Update user info
+        userInfo_.amount += amount;
+        userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / PRECISION;
+        userInfo_.poolType = PoolType.User;
+        userInfo_.isProvider = false;
+        userInfo_.lastStakeTime = block.timestamp;
+        
+        // Update pool
+        userPool.totalStaked += amount;
+        
+        emit Staked(user, amount, PoolType.User);
+        emit PoolUpdated(PoolType.User, userPool.totalStaked, userPool.accRewardPerShare);
+    }
+    
+    /**
+     * @notice Unstake from provider pool
+     * @param amount Amount to unstake
+     * @dev SECURITY FIX: Enforces minimum stake requirement on remaining balance
+     */
+    function unstakeFromProviderPool(uint256 amount) external nonReentrant {
+        UserInfo storage user = userInfo[msg.sender];
+        require(user.poolType == PoolType.Provider, "Not in provider pool");
+        require(user.amount >= amount, "Insufficient stake");
+        
+        // SECURITY FIX: Enforce minimum stake on remaining balance
+        // Either full withdrawal (0) or remaining must meet minimum
+        uint256 remainingStake = user.amount - amount;
+        require(remainingStake == 0 || remainingStake >= minProviderStake, 
+            "Remaining stake below minimum - unstake all or leave minimum");
+        
+        _updatePools();
+        _harvestRewards(msg.sender);
+        
+        // Update user info
+        user.amount = remainingStake;
+        user.rewardDebt = (user.amount * providerPool.accRewardPerShare) / PRECISION;
+        
+        // If fully unstaked, reset provider status
+        if (user.amount == 0) {
+            user.isProvider = false;
+        }
+        
+        // Update pool
+        providerPool.totalStaked -= amount;
+        
+        // Transfer tokens to user
+        token.safeTransfer(msg.sender, amount);
+        
+        emit Unstaked(msg.sender, amount, PoolType.Provider);
+        emit PoolUpdated(PoolType.Provider, providerPool.totalStaked, providerPool.accRewardPerShare);
+    }
+    
+    /**
+     * @notice Unstake from user pool (called by liquid staking vault)
+     * @param amount Amount to unstake
+     * @param user The user address
+     */
+    function unstakeFromUserPool(uint256 amount, address user) external nonReentrant {
+        require(msg.sender == liquidStakingVault, "Only liquid staking vault");
+        
+        UserInfo storage userInfo_ = userInfo[user];
+        require(userInfo_.poolType == PoolType.User, "Not in user pool");
+        require(userInfo_.amount >= amount, "Insufficient stake");
+        
+        _updatePools();
+        _harvestRewards(user);
+        
+        // Update user info
+        userInfo_.amount -= amount;
+        userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / PRECISION;
+        
+        // Update pool
+        userPool.totalStaked -= amount;
+        
+        // Transfer tokens to vault
+        token.safeTransfer(liquidStakingVault, amount);
+        
+        emit Unstaked(user, amount, PoolType.User);
+        emit PoolUpdated(PoolType.User, userPool.totalStaked, userPool.accRewardPerShare);
+    }
+    
+    /**
+     * @notice Harvest rewards for a user
+     * @param user User address
+     */
+    function harvestRewards(address user) external nonReentrant {
+        _updatePools();
+        _harvestRewards(user);
+    }
+    
+    /**
+     * @notice Harvest emission rewards for a provider from EmissionsContract
+     * @dev SECURITY FIX: Allows providers to trigger harvest from emissions
+     * @dev OPTION B: After harvest, minted tokens are held in this contract (staking).
+     * @dev Harvested amount is synced into pending rewards (provider/user split) via EmissionsContract.
+     * @dev When amount==0 we call _syncUnaccountedTokens() to pick up any other stuck tokens.
+     * @param provider Provider address to harvest for
+     * @return amount Amount of tokens harvested
+     */
+    function harvestFromEmissions(address provider) external nonReentrant returns (uint256 amount) {
+        require(emissionsContract != address(0), "Emissions contract not set");
+        
+        UserInfo storage user = userInfo[provider];
+        require(user.isProvider || (user.poolType == PoolType.Provider && user.amount > 0), 
+                "Not a provider");
+        
+        // Call EmissionsContract.harvest() which mints tokens to THIS contract (staking)
+        // Emissions were updated to mint to staking for OPTION B architecture
+        amount = IEmissionsContract(emissionsContract).harvest(provider);
+        if (amount == 0) {
+            // No harvest this call. Only sweep unaccounted tokens when there are no stakers,
+            // otherwise outstanding rewards would be double-counted.
+            if (providerPool.totalStaked == 0 && userPool.totalStaked == 0) {
+                _syncUnaccountedTokens();
+            }
+        }
+        
+        return amount;
+    }
+    
+    /**
+     * @notice Internal function to sync unaccounted tokens to pending rewards
+     * @dev Called automatically by harvestFromEmissions to handle stuck tokens
+     * @dev Split between provider/user pools based on emissionShare
+     */
+    function _syncUnaccountedTokens() internal {
+        uint256 balance = token.balanceOf(address(this));
+        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
+        
+        if (balance > accounted) {
+            uint256 rewards = balance - accounted;
+            uint256 providerShare = (rewards * providerPool.emissionShare) / 1000;
+            uint256 userShare = rewards - providerShare;
+
+            if (providerPool.totalStaked == 0 && providerShare > 0) {
+                pendingTreasuryWithdrawal += providerShare;
+                if (treasury != address(0)) {
+                    emit TreasuryRewardsQueued(providerShare, pendingTreasuryWithdrawal);
+                    emit UnclaimedRewardsSentToTreasury(providerShare, 0);
+                }
+                providerShare = 0;
+            }
+            if (userPool.totalStaked == 0 && userShare > 0) {
+                pendingTreasuryWithdrawal += userShare;
+                if (treasury != address(0)) {
+                    emit TreasuryRewardsQueued(userShare, pendingTreasuryWithdrawal);
+                    emit UnclaimedRewardsSentToTreasury(0, userShare);
+                }
+                userShare = 0;
+            }
+            
+            providerPendingRewards += providerShare;
+            userPendingRewards += userShare;
+            
+            emit RewardsQueued(providerShare, userShare);
+            _updatePools();
+        }
+    }
+    
+    
+    /**
+     * @notice Get pending emission rewards for a provider
+     * @param provider Provider address
+     * @return Pending emission rewards
+     */
+    function pendingEmissionRewards(address provider) external view returns (uint256) {
+        if (emissionsContract == address(0)) return 0;
+        return IEmissionsContract(emissionsContract).pendingRewards(provider);
+    }
+    
+    /**
+     * @notice Update pools and distribute rewards
+     */
+    function updatePools() external {
+        _updatePools();
+    }
+    
+    /**
+     * @notice Admin function to reset stuck pending rewards (emergency use only)
+     * @dev Use case: After harvest/fund fix upgrade, old userPendingRewards are stuck
+     * @dev because they were incorrectly synced from harvests and user pool has 0 stakers
+     * @param targetPool Pool to reset (0=Provider, 1=User)
+     */
+    function resetPendingRewards(PoolType targetPool) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 amount;
+        if (targetPool == PoolType.Provider) {
+            amount = providerPendingRewards;
+            providerPendingRewards = 0;
+        } else {
+            amount = userPendingRewards;
+            userPendingRewards = 0;
+        }
+
+        if (amount > 0) {
+            // Preserve accounting by moving to treasury withdrawal bucket
+            pendingTreasuryWithdrawal += amount;
+        }
+
+        emit PendingRewardsReset(targetPool, amount, pendingTreasuryWithdrawal);
+    }
+
+    /**
+     * @notice Sync newly minted emissions into reward accounting.
+     * @dev Expects the emissions contract to mint/transfer rewards to this contract before calling.
+     * @dev SECURITY FIX: Requires treasury to be set to prevent first-staker attack
+     * @dev SECURITY FIX: Includes pendingTreasuryWithdrawal in accounting to prevent double-counting
+     */
+    function syncEmissions() external onlyRole(EMISSIONS_ROLE) returns (uint256 totalRewards_) {
+        // SECURITY FIX: Treasury is optional at launch; if unset, rewards will remain pending
+        // SECURITY FIX: If no stakers in a pool, that pool's share is queued for treasury to prevent first-staker capture
+        
+        uint256 balance = token.balanceOf(address(this));
+        uint256 principal = providerPool.totalStaked + userPool.totalStaked;
+        // SECURITY FIX: Include pendingTreasuryWithdrawal to prevent double-counting
+        uint256 accounted = principal + providerPendingRewards + userPendingRewards + pendingTreasuryWithdrawal;
+        if (balance <= accounted) {
+            require(balance == accounted, "DualPoolStaking: accounted exceeds balance");
+            return 0;
+        }
+
+        uint256 rewards = balance - accounted;
+        uint256 providerShare = (rewards * providerPool.emissionShare) / 1000;
+        uint256 userShare = rewards - providerShare;
+
+        // If there are no providers staked, queue provider share for treasury to avoid windfall on first provider
+        if (providerPool.totalStaked == 0 && providerShare > 0) {
+            pendingTreasuryWithdrawal += providerShare;
+            if (treasury != address(0)) {
+                emit TreasuryRewardsQueued(providerShare, pendingTreasuryWithdrawal);
+                emit UnclaimedRewardsSentToTreasury(providerShare, 0);
+            }
+            providerShare = 0;
+        }
+        // If there are no users staked, queue user share for treasury to avoid windfall on first user
+        if (userPool.totalStaked == 0 && userShare > 0) {
+            pendingTreasuryWithdrawal += userShare;
+            if (treasury != address(0)) {
+                emit TreasuryRewardsQueued(userShare, pendingTreasuryWithdrawal);
+                emit UnclaimedRewardsSentToTreasury(0, userShare);
+            }
+            userShare = 0;
+        }
+
+        providerPendingRewards += providerShare;
+        userPendingRewards += userShare;
+
+        emit RewardsQueued(providerShare, userShare);
+
+        _updatePools();
+        return rewards;
+    }
+    
+    /**
+     * @notice Notify reward for a provider (called by EmissionsContract)
+     * @dev SECURITY FIX: Simplified to just emit event - reward debt is managed by harvest
+     * @dev SECURITY FIX: Allows notification for addresses that were ever providers
+     * @param provider Provider address
+     * @param amount Reward amount that was minted
+     */
+    function notifyReward(address provider, uint256 amount) external {
+        require(msg.sender == emissionsContract, "Only emissions contract");
+        require(provider != address(0), "Invalid provider");
+        require(amount > 0, "Amount must be positive");
+        
+        // SECURITY FIX: Allow notification for anyone who was ever a provider
+        // This handles the edge case where provider unstakes before rewards are harvested
+        require(wasEverProvider[provider], "Never was a provider");
+        
+        // SECURITY FIX: Don't update rewardDebt here - let harvest handle it
+        // This function is just a notification that rewards were minted
+        // The actual reward debt update happens in _harvestRewards
+        emit RewardNotified(provider, amount);
+    }
+    
+    /**
+     * @notice Get total staked amount across both pools
+     */
+    function getTotalStaked() external view returns (uint256) {
+        return providerPool.totalStaked + userPool.totalStaked;
+    }
+    
+    /**
+     * @notice Get total staked amount in user pool (for vault's totalAssets calculation)
+     */
+    function getUserPoolTotalStaked() external view returns (uint256) {
+        return userPool.totalStaked;
+    }
+    
+    /**
+     * @notice Get total staked amount in provider pool (for emissions calculation)
+     * @dev SECURITY FIX: Added for EmissionsContract to use provider-only stake
+     */
+    function getProviderPoolStaked() external view returns (uint256) {
+        return providerPool.totalStaked;
+    }
+    
+    /**
+     * @notice Get provider info for emissions contract
+     * @param provider Provider address
+     * @return stake Stake amount
+     * @return rewardDebt Reward debt
+     */
+    function getProviderInfo(address provider) external view returns (uint256 stake, uint256 rewardDebt) {
+        UserInfo memory user = userInfo[provider];
+        return (user.amount, user.rewardDebt);
+    }
+    
+    /**
+     * @notice Get pending rewards for a user
+     * @param user User address
+     * @return pending Pending reward amount
+     */
+    function pendingRewards(address user) external view returns (uint256 pending) {
+        UserInfo memory userInfo_ = userInfo[user];
+        
+        if (userInfo_.poolType == PoolType.Provider) {
+            return _pendingProviderRewards(userInfo_);
+        } else {
+            return _pendingUserRewards(userInfo_);
+        }
+    }
+    
+    /**
+     * @notice Get pool information
+     * @param poolType Pool type (0 = Provider, 1 = User)
+     * @return Pool information
+     */
+    function getPoolInfo(PoolType poolType) external view returns (PoolInfo memory) {
+        if (poolType == PoolType.Provider) {
+            return providerPool;
+        } else {
+            return userPool;
+        }
+    }
+    
+    // Internal functions
+    
+    /**
+     * @notice Internal function to update pool reward accounting
+     * @dev SECURITY FIX: Uses pull pattern for treasury to prevent blocking
+     * @dev When no stakers, rewards are queued for treasury withdrawal (not transferred immediately)
+     */
+    function _updatePools() internal {
+        // Handle provider pool rewards
+        if (providerPendingRewards > 0) {
+            if (providerPool.totalStaked > 0) {
+                // Normal distribution to stakers
+                uint256 rewards = providerPendingRewards;
+                providerPendingRewards = 0;
+                providerPool.accRewardPerShare += (rewards * PRECISION) / providerPool.totalStaked;
+                providerPool.totalRewards += rewards;
+                emit PoolUpdated(PoolType.Provider, providerPool.totalStaked, providerPool.accRewardPerShare);
+            } else if (treasury != address(0)) {
+                // SECURITY FIX: Queue for treasury withdrawal (pull pattern)
+                // This prevents malicious treasury from blocking staking operations
+                uint256 unclaimedProvider = providerPendingRewards;
+                providerPendingRewards = 0;
+                pendingTreasuryWithdrawal += unclaimedProvider;
+                emit TreasuryRewardsQueued(unclaimedProvider, pendingTreasuryWithdrawal);
+                emit UnclaimedRewardsSentToTreasury(unclaimedProvider, 0);
+            }
+            // If no treasury and no stakers, rewards accumulate (legacy behavior)
+        }
+
+        // Handle user pool rewards
+        if (userPendingRewards > 0) {
+            if (userPool.totalStaked > 0) {
+                // Normal distribution to stakers
+                uint256 rewards = userPendingRewards;
+                userPendingRewards = 0;
+                userPool.accRewardPerShare += (rewards * PRECISION) / userPool.totalStaked;
+                userPool.totalRewards += rewards;
+                emit PoolUpdated(PoolType.User, userPool.totalStaked, userPool.accRewardPerShare);
+            } else if (treasury != address(0)) {
+                // SECURITY FIX: Queue for treasury withdrawal (pull pattern)
+                uint256 unclaimedUser = userPendingRewards;
+                userPendingRewards = 0;
+                pendingTreasuryWithdrawal += unclaimedUser;
+                emit TreasuryRewardsQueued(unclaimedUser, pendingTreasuryWithdrawal);
+                emit UnclaimedRewardsSentToTreasury(0, unclaimedUser);
+            }
+            // If no treasury and no stakers, rewards accumulate (legacy behavior)
+        }
+    }
+    
+    /**
+     * @notice Withdraw queued treasury rewards (pull pattern)
+     * @dev SECURITY FIX: Allows treasury to pull rewards without blocking operations
+     * @dev Can be called by anyone to transfer pending rewards to treasury
+     */
+    function withdrawTreasuryRewards() external nonReentrant {
+        require(treasury != address(0), "DualPoolStaking: treasury not set");
+        require(pendingTreasuryWithdrawal > 0, "DualPoolStaking: no pending withdrawal");
+        
+        uint256 amount = pendingTreasuryWithdrawal;
+        pendingTreasuryWithdrawal = 0;
+        
+        token.safeTransfer(treasury, amount);
+        emit TreasuryWithdrawal(treasury, amount);
+    }
+    
+    /**
+     * @notice Internal function to harvest rewards for a user
+     * @dev SECURITY FIX: Removed double-counting of totalRewards (already counted in _updatePools)
+     */
+    function _harvestRewards(address user) internal {
+        UserInfo storage userInfo_ = userInfo[user];
+        
+        if (userInfo_.amount == 0) return;
+        
+        uint256 pending;
+        if (userInfo_.poolType == PoolType.Provider) {
+            pending = _pendingProviderRewards(userInfo_);
+            if (pending > 0) {
+                // FIX: Use PRECISION constant consistently (was 1e12)
+                userInfo_.rewardDebt = (userInfo_.amount * providerPool.accRewardPerShare) / PRECISION;
+                // REMOVED: providerPool.totalRewards += pending; (already counted in _updatePools)
+            }
+        } else {
+            pending = _pendingUserRewards(userInfo_);
+            if (pending > 0) {
+                userInfo_.rewardDebt = (userInfo_.amount * userPool.accRewardPerShare) / PRECISION;
+                // REMOVED: userPool.totalRewards += pending; (already counted in _updatePools)
+            }
+        }
+        
+        if (pending > 0) {
+            // Transfer rewards to user
+            token.safeTransfer(user, pending);
+            emit RewardsHarvested(user, pending, userInfo_.poolType);
+        }
+    }
+    
+    function _pendingProviderRewards(UserInfo memory user) internal view returns (uint256) {
+        if (user.amount == 0) return 0;
+        
+        uint256 accRewardPerShare = providerPool.accRewardPerShare;
+        // In production, this would calculate based on emissions
+        
+        uint256 pending = (user.amount * accRewardPerShare) / PRECISION;
+        return pending > user.rewardDebt ? pending - user.rewardDebt : 0;
+    }
+    
+    function _pendingUserRewards(UserInfo memory user) internal view returns (uint256) {
+        if (user.amount == 0) return 0;
+        
+        uint256 accRewardPerShare = userPool.accRewardPerShare;
+        // In production, this would calculate based on emissions
+        
+        uint256 pending = (user.amount * accRewardPerShare) / PRECISION;
+        return pending > user.rewardDebt ? pending - user.rewardDebt : 0;
+    }
+    
+    function _authorizeUpgrade(address newImplementation) 
+        internal 
+        override 
+        onlyRole(UPGRADER_ROLE) 
+    {}
+
+    // UPGRADE STORAGE: New variables added at the end to preserve layout compatibility
+    // Track provider accrued emissions for fundProviderBalance
+    mapping(address => uint256) public providerAccruedEmissions;
+    uint256 public totalProviderAccruedEmissions;
+
+    // SECURITY FIX: Reduced from 44 to 42 to account for providerAccruedEmissions + totalProviderAccruedEmissions
+    uint256[42] private __gap;
+}
+
+/* ==== token/contracts/EmissionsContract.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+interface IMyntisToken {
+    function mint(address to, uint256 amount) external;
+    function totalSupply() external view returns (uint256);
+}
+
+interface IStakingPool {
+    function getTotalStaked() external view returns (uint256);
+    function getProviderPoolStaked() external view returns (uint256);
+    function getProviderInfo(address provider) external view returns (uint256 stake, uint256 rewardDebt);
+    function notifyReward(address provider, uint256 amount) external;
+    function syncEmissions() external returns (uint256 totalRewards_);
+}
+
+/**
+ * @title EmissionsContract
+ * @notice Manages the emission schedule with halving logic and distributes rewards to providers.
+ * @dev Uses the MasterChef pattern for on-demand reward minting.
+ * @dev Provider calls harvest() through staking contract to claim rewards.
+ */
+contract EmissionsContract is AccessControl, ReentrancyGuard {
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+
+    IMyntisToken public immutable token;
+    IStakingPool public stakingContract;
+
+    // Emission split (matches DualPoolStaking emissionShare)
+    uint256 public constant PROVIDER_SHARE = 875; // 87.5% -> 700M of 800M
+    uint256 public constant USER_SHARE = 125;     // 12.5% -> 100M of 800M
+    uint256 public constant SHARE_DENOMINATOR = 1000;
+
+    // Emission parameters
+    uint256 public constant HALVING_PERIOD = 4 * 365 days; // 4 years per halving
+    uint256 public constant TOTAL_EMISSIONS = 800_000_000 * 1e18; // 800M total emissions
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18; // 1B max token supply
+    
+    // Initial emission rate (400M over 4 years, then halving)
+    // 400M / (4 * 365 * 24 * 60 * 60) ≈ 3.17 tokens per second
+    uint256 public constant INITIAL_EMISSION_RATE = (TOTAL_EMISSIONS / 2) / HALVING_PERIOD;
+    
+    /// @notice Precision multiplier for reward per share calculations
+    uint256 public constant PRECISION = 1e12;
+    uint256 public constant MAX_MIGRATION_BATCH = 200;
+
+    uint256 public immutable startTime;
+    uint256 public lastRewardTime;
+    uint256 public mintedEmissions; // total minted supply from this contract
+    
+    // SECURITY FIX: Track emissions added to accRewardPerShare to prevent exceeding cap
+    uint256 public accountedEmissions;
+    
+    // Migration state
+    bool public migrationInitialized;
+
+    // Accumulated reward per share, scaled by 1e12
+    uint256 public accRewardPerShare;
+    
+    // CRITICAL FIX: Track provider reward debt internally to prevent double-claiming
+    // This separates emission rewards from DualPoolStaking rewards
+    mapping(address => uint256) public providerRewardDebt;
+
+    // Events
+    event StakingContractUpdated(address indexed oldContract, address indexed newContract);
+    event EmissionsUpdated(uint256 timeElapsed, uint256 tokensAccounted, uint256 newAccRewardPerShare);
+    event ProviderRewardsHarvested(address indexed provider, uint256 amount);
+    event ProviderDebtInitialized(address indexed provider, uint256 debtAmount);
+    event ProviderRewardDebtUpdated(address indexed provider, uint256 oldDebt, uint256 newDebt);
+    event MigrationInitialized(uint256 mintedEmissions, uint256 accountedEmissions, uint256 accRewardPerShare, uint256 lastRewardTime, uint256 providerCount);
+
+    // Errors
+    error ZeroAddress();
+    error OnlyStakingContract();
+    error ExceedsEmissionsCap(uint256 requested, uint256 remaining);
+    error ExceedsMaxSupply(uint256 newSupply, uint256 maxSupply);
+    error MigrationAlreadyInitialized();
+    error StakingContractNotSet();
+
+    constructor(
+        address _token,
+        address _stakingContract,
+        address _admin
+    ) {
+        if (_token == address(0)) revert ZeroAddress();
+        require(_token.code.length > 0, "Token must be a contract");
+        if (_admin == address(0)) revert ZeroAddress();
+        // NOTE: _stakingContract can be address(0) initially for deployment order flexibility
+        // It will be set via setStakingContract() after DualPoolStaking is deployed
+        
+        token = IMyntisToken(_token);
+        if (_stakingContract != address(0)) {
+            require(_stakingContract.code.length > 0, "Staking must be a contract");
+        }
+        stakingContract = IStakingPool(_stakingContract);
+        _grantRole(ADMIN_ROLE, _admin);
+
+        startTime = block.timestamp;
+        lastRewardTime = block.timestamp;
+        mintedEmissions = 0;
+        accountedEmissions = 0;
+    }
+
+    // ----------------------------
+    //         ADMIN
+    // ----------------------------
+
+    /**
+     * @notice Update the staking contract address
+     * @param _stakingContract New staking contract address
+     */
+    function setStakingContract(address _stakingContract) external onlyRole(ADMIN_ROLE) {
+        if (_stakingContract == address(0)) revert ZeroAddress();
+        require(_stakingContract.code.length > 0, "Staking must be a contract");
+        address oldContract = address(stakingContract);
+        stakingContract = IStakingPool(_stakingContract);
+        emit StakingContractUpdated(oldContract, _stakingContract);
+    }
+    
+    /**
+     * @notice Initialize emissions state from old contract migration
+     * @dev One-time function to migrate state from previous EmissionsContract
+     * @param _mintedEmissions Total minted emissions from old contract
+     * @param _accountedEmissions Total accounted emissions from old contract
+     * @param _accRewardPerShare Accumulated reward per share from old contract
+     * @param _lastRewardTime Last reward time from old contract
+     * @param _providers Array of provider addresses with existing debt
+     * @param _debts Array of corresponding reward debts
+     */
+    function initializeMigration(
+        uint256 _mintedEmissions,
+        uint256 _accountedEmissions,
+        uint256 _accRewardPerShare,
+        uint256 _lastRewardTime,
+        address[] calldata _providers,
+        uint256[] calldata _debts
+    ) external onlyRole(ADMIN_ROLE) {
+        if (migrationInitialized) revert MigrationAlreadyInitialized();
+        require(_providers.length == _debts.length, "Length mismatch");
+        require(_providers.length <= MAX_MIGRATION_BATCH, "Batch too large");
+        require(_mintedEmissions <= TOTAL_EMISSIONS, "Exceeds emissions cap");
+        require(_accountedEmissions <= TOTAL_EMISSIONS, "Exceeds emissions cap");
+        require(_accountedEmissions >= _mintedEmissions, "Accounted must be >= minted");
+        
+        mintedEmissions = _mintedEmissions;
+        accountedEmissions = _accountedEmissions;
+        accRewardPerShare = _accRewardPerShare;
+        lastRewardTime = _lastRewardTime;
+        
+        for (uint256 i = 0; i < _providers.length; i++) {
+            if (_providers[i] != address(0)) {
+                providerRewardDebt[_providers[i]] = _debts[i];
+                emit ProviderDebtInitialized(_providers[i], _debts[i]);
+            }
+        }
+        
+        migrationInitialized = true;
+        emit MigrationInitialized(_mintedEmissions, _accountedEmissions, _accRewardPerShare, _lastRewardTime, _providers.length);
+    }
+    
+    /**
+     * @notice Initialize provider reward debt for existing stakers
+     * @param provider Provider address to initialize
+     * @dev SECURITY FIX: Prevents first-claim-gets-all for existing providers
+     * @dev Must be called for any provider who was staking before this contract was deployed/updated
+     */
+    function initializeProviderDebt(address provider) external onlyRole(ADMIN_ROLE) {
+        if (provider == address(0)) revert ZeroAddress();
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
+        require(providerRewardDebt[provider] == 0, "Provider debt already initialized");
+        
+        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+        require(stake > 0, "Provider has no stake");
+        
+        uint256 debtAmount = (stake * accRewardPerShare) / PRECISION;
+        providerRewardDebt[provider] = debtAmount;
+        
+        emit ProviderDebtInitialized(provider, debtAmount);
+    }
+    
+    /**
+     * @notice Batch initialize provider reward debt for multiple providers
+     * @param providers Array of provider addresses to initialize
+     * @dev SECURITY FIX: Efficient batch initialization for migrations
+     */
+    function batchInitializeProviderDebt(address[] calldata providers) external onlyRole(ADMIN_ROLE) {
+        require(providers.length <= MAX_MIGRATION_BATCH, "Batch too large");
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
+        for (uint256 i = 0; i < providers.length; i++) {
+            address provider = providers[i];
+            if (provider == address(0)) continue;
+            if (providerRewardDebt[provider] != 0) continue;
+            
+            (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+            if (stake == 0) continue;
+            
+            uint256 debtAmount = (stake * accRewardPerShare) / PRECISION;
+            providerRewardDebt[provider] = debtAmount;
+            
+            emit ProviderDebtInitialized(provider, debtAmount);
+        }
+    }
+    
+    /**
+     * @notice Initialize new provider's reward debt when they first stake
+     * @param provider Provider address
+     * @dev CRITICAL FIX: Called by DualPoolStaking when new provider stakes
+     * @dev Prevents new providers from stealing accumulated rewards
+     * @dev Sets debt based on actual stake to ensure they start with 0 pending rewards
+     * @dev MUST be called AFTER the stake is recorded in the staking contract
+     */
+    function initializeNewProvider(address provider) external {
+        if (msg.sender != address(stakingContract)) revert OnlyStakingContract();
+        if (provider == address(0)) revert ZeroAddress();
+        
+        // Only initialize if not already set (prevents re-initialization attack)
+        if (providerRewardDebt[provider] == 0) {
+            // Update emissions first to get current accRewardPerShare
+            updateEmissions();
+            
+            // CRITICAL: Get actual stake from staking contract
+            // This must be called AFTER stake is recorded to correctly initialize debt
+            (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+            
+            // Calculate debt based on actual stake so they start with 0 pending rewards
+            // Formula: debt = (stake * accRewardPerShare) / PRECISION
+            // This ensures: pending = accumulated - debt = 0 for new providers
+            uint256 debtAmount = (stake * accRewardPerShare) / PRECISION;
+            
+            // Use 1 wei as minimum to mark as initialized (prevents re-initialization)
+            providerRewardDebt[provider] = debtAmount > 0 ? debtAmount : 1;
+            
+            emit ProviderDebtInitialized(provider, providerRewardDebt[provider]);
+        }
+    }
+
+    // ----------------------------
+    //       EMISSION LOGIC
+    // ----------------------------
+
+    /**
+     * @notice Get the current emission rate based on halving schedule
+     * @return rate Tokens per second at current halving period
+     */
+    function getCurrentEmissionRate() public view returns (uint256) {
+        if (block.timestamp <= startTime) return 0;
+        uint256 elapsed = block.timestamp - startTime;
+        uint256 periods = elapsed / HALVING_PERIOD;
+        if (periods >= 25) return 0; // safety cap after ~100 years
+        return INITIAL_EMISSION_RATE >> periods;
+    }
+
+    /**
+     * @notice Get remaining emissions that can still be minted
+     * @return remaining Tokens remaining in emission allocation
+     */
+    function remainingEmissions() external view returns (uint256) {
+        return TOTAL_EMISSIONS > mintedEmissions ? TOTAL_EMISSIONS - mintedEmissions : 0;
+    }
+
+    /**
+     * @notice Update global emission accounting
+     * @dev Called internally before any harvest to ensure accRewardPerShare is current
+     * @dev SECURITY FIX: Uses provider pool stake only and tracks accountedEmissions
+     */
+    function updateEmissions() public {
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
+        if (block.timestamp <= lastRewardTime) {
+            return;
+        }
+        
+        uint256 emissionRate = getCurrentEmissionRate();
+        if (emissionRate == 0) {
+            lastRewardTime = block.timestamp;
+            return;
+        }
+
+        uint256 totalStake = stakingContract.getTotalStaked();
+        // If no stakers in either pool, skip accrual to prevent first-staker windfall
+        if (totalStake == 0) {
+            lastRewardTime = block.timestamp;
+            return;
+        }
+
+        uint256 timeElapsed = block.timestamp - lastRewardTime;
+        uint256 tokensToAccount = emissionRate * timeElapsed;
+
+        // SECURITY FIX: Cap at remaining accountable emissions (not just minted)
+        // This prevents accRewardPerShare from growing beyond what can be minted
+        uint256 remainingAccountable = TOTAL_EMISSIONS - accountedEmissions;
+        if (tokensToAccount > remainingAccountable) {
+            tokensToAccount = remainingAccountable;
+        }
+
+        if (tokensToAccount > 0) {
+            // Track total emissions accounted (provider + user)
+            accountedEmissions += tokensToAccount;
+            // Update provider-side accounting for informational pendingRewards
+            uint256 providerStake = stakingContract.getProviderPoolStaked();
+            if (providerStake > 0) {
+                uint256 providerPortion = (tokensToAccount * PROVIDER_SHARE) / SHARE_DENOMINATOR;
+                accRewardPerShare += (providerPortion * PRECISION) / providerStake;
+            }
+            emit EmissionsUpdated(timeElapsed, tokensToAccount, accRewardPerShare);
+        }
+
+        lastRewardTime = block.timestamp;
+    }
+
+    /**
+     * @notice Harvest rewards for a provider
+     * @dev Called by StakingContract on behalf of provider
+     * @dev Uses checks-effects-interactions pattern for reentrancy safety
+     * @dev CRITICAL FIX: Uses internal providerRewardDebt to prevent double-claiming
+     * @param provider Provider address to harvest rewards for
+     * @return mintedAmount The amount of tokens minted (0 if no rewards)
+     */
+    function harvest(address provider) external nonReentrant returns (uint256) {
+        // Checks
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
+        if (msg.sender != address(stakingContract)) revert OnlyStakingContract();
+        if (provider == address(0)) revert ZeroAddress();
+
+        // Update global emission state
+        updateEmissions();
+
+        uint256 pendingTotal = accountedEmissions > mintedEmissions ? accountedEmissions - mintedEmissions : 0;
+        if (pendingTotal == 0) return 0;
+
+        // Verify emission cap
+        if (mintedEmissions + pendingTotal > TOTAL_EMISSIONS) {
+            revert ExceedsEmissionsCap(pendingTotal, TOTAL_EMISSIONS - mintedEmissions);
+        }
+
+        // Verify max supply cap
+        uint256 currentSupply = token.totalSupply();
+        if (currentSupply + pendingTotal > MAX_SUPPLY) {
+            revert ExceedsMaxSupply(currentSupply + pendingTotal, MAX_SUPPLY);
+        }
+
+        // Effects - update state BEFORE external calls
+        mintedEmissions += pendingTotal;
+        
+        // Update provider reward debt for informational pendingRewards
+        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+        uint256 accumulated = (stake * accRewardPerShare) / PRECISION;
+        uint256 oldDebt = providerRewardDebt[provider];
+        providerRewardDebt[provider] = accumulated;
+        emit ProviderRewardDebtUpdated(provider, oldDebt, accumulated);
+
+        // Notify staking contract (informational only)
+        uint256 providerPortion = (pendingTotal * PROVIDER_SHARE) / SHARE_DENOMINATOR;
+        stakingContract.notifyReward(provider, providerPortion);
+
+        // Interactions - external calls last
+        token.mint(address(stakingContract), pendingTotal);
+        stakingContract.syncEmissions();
+
+        emit ProviderRewardsHarvested(provider, pendingTotal);
+        return pendingTotal;
+    }
+
+    /**
+     * @notice Get pending rewards for a provider (view function)
+     * @param provider Provider address
+     * @return pending Pending reward amount
+     * @dev CRITICAL FIX: Uses internal providerRewardDebt to prevent double-claiming
+     */
+    function pendingRewards(address provider) external view returns (uint256) {
+        if (address(stakingContract) == address(0)) revert StakingContractNotSet();
+        (uint256 stake, ) = stakingContract.getProviderInfo(provider);
+        
+        // Calculate what accRewardPerShare would be if updated now
+        uint256 currentAccReward = accRewardPerShare;
+        
+        if (block.timestamp > lastRewardTime) {
+            // SECURITY FIX: Use provider pool stake only
+            uint256 providerStake = stakingContract.getProviderPoolStaked();
+            if (providerStake > 0) {
+                uint256 emissionRate = getCurrentEmissionRate();
+                uint256 timeElapsed = block.timestamp - lastRewardTime;
+                uint256 tokensToAccount = emissionRate * timeElapsed;
+                
+                // SECURITY FIX: Cap check against accountedEmissions
+                uint256 remainingAccountable = TOTAL_EMISSIONS - accountedEmissions;
+                if (tokensToAccount > remainingAccountable) {
+                    tokensToAccount = remainingAccountable;
+                }
+
+                uint256 providerPortion = (tokensToAccount * PROVIDER_SHARE) / SHARE_DENOMINATOR;
+                currentAccReward += (providerPortion * PRECISION) / providerStake;
+            }
+        }
+        
+        uint256 accumulated = (stake * currentAccReward) / PRECISION;
+        // CRITICAL FIX: Use internal providerRewardDebt
+        uint256 rewardDebt = providerRewardDebt[provider];
+        return accumulated > rewardDebt ? accumulated - rewardDebt : 0;
+    }
+
+    /**
+     * @notice Get contract info for debugging/UI
+     */
+    function getContractInfo() external view returns (
+        uint256 totalEmissionsCap,
+        uint256 totalMinted,
+        uint256 currentRate,
+        uint256 accReward,
+        uint256 lastUpdate
+    ) {
+        return (
+            TOTAL_EMISSIONS,
+            mintedEmissions,
+            getCurrentEmissionRate(),
+            accRewardPerShare,
+            lastRewardTime
+        );
+    }
+    
+    /**
+     * @notice Emergency correction for accountedEmissions
+     * @param newAccountedEmissions New value for accountedEmissions
+     * @dev SECURITY FIX: Allows admin to correct accounting if emissions were skipped
+     * @dev Use with extreme caution - can affect reward distribution
+     */
+    function correctAccountedEmissions(uint256 newAccountedEmissions) external onlyRole(ADMIN_ROLE) {
+        require(newAccountedEmissions <= TOTAL_EMISSIONS, "Exceeds total emissions cap");
+        require(newAccountedEmissions >= mintedEmissions, "Cannot be less than minted");
+        require(newAccountedEmissions >= accountedEmissions, "Can only increase");
+        
+        uint256 oldValue = accountedEmissions;
+        accountedEmissions = newAccountedEmissions;
+        
+        emit AccountedEmissionsCorrected(oldValue, newAccountedEmissions);
+    }
+    
+    event AccountedEmissionsCorrected(uint256 oldValue, uint256 newValue);
+}
+
+/* ==== token/contracts/GlobalSupplyRegistry.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {
+    ILayerZeroEndpointV2,
+    MessagingParams,
+    MessagingReceipt,
+    MessagingFee,
+    Origin
+} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+
+/**
+ * @title GlobalSupplyRegistry
+ * @notice Tracks total token supply across all chains
+ * @dev Deployed on hub chain, receives supply updates from spokes via LayerZero
+ * @dev Enforces global cap (1B) across all chains
+ */
+contract GlobalSupplyRegistry is AccessControl, ReentrancyGuard {
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    bytes32 public constant SPOKE_ROLE = keccak256("SPOKE_ROLE");
+    bytes32 public constant TOKEN_ROLE = keccak256("TOKEN_ROLE"); // For hub/spoke token contracts
+    
+    ILayerZeroEndpointV2 public immutable endpoint;
+    mapping(uint32 eid => bytes32 peer) public peers;
+    mapping(uint32 eid => bytes32 quotaReceivers) public quotaReceivers;
+    
+    // Global supply tracking
+    uint256 public globalCap; // e.g., 1B tokens
+    mapping(uint32 eid => uint256) public chainSupply; // Per-chain supply
+    uint256 public totalCrossChainSupply; // Sum of all chain supplies
+    mapping(uint32 eid => uint256) public chainQuota; // Remaining mint quota per chain
+    uint256 public totalReservedQuota; // Sum of all remaining quotas
+
+    // Message types for LZ payloads
+    uint8 public constant MSG_SUPPLY_UPDATE = 1;
+    uint8 public constant MSG_QUOTA_REQUEST = 2;
+    uint8 public constant MSG_QUOTA_UPDATE = 3;
+    
+    struct QuotaRequest {
+        uint32 chainId;
+        uint256 requestedQuota;
+        uint256 newTotalSupply;
+        uint256 nonce;
+        uint256 consumedQuota;
+    }
+    
+    struct QuotaUpdate {
+        uint32 chainId;
+        uint256 grantedQuota;
+        uint256 nonce;
+    }
+    
+    struct SupplyUpdate {
+        uint32 chainId;
+        uint256 supplyDelta; // Positive for mint, negative for burn
+        uint256 newTotalSupply;
+        uint256 nonce; // SECURITY FIX: Added nonce for ordering
+    }
+    
+    // SECURITY FIX: Nonce tracking per chain to prevent stale updates
+    mapping(uint32 => uint256) public chainNonce;
+    
+    event SupplyUpdated(uint32 indexed chainId, uint256 supplyDelta, uint256 newTotalSupply, uint256 totalCrossChainSupply);
+    event PeerUpdated(uint32 indexed eid, bytes32 indexed peer);
+    event CapUpdated(uint256 oldCap, uint256 newCap);
+    event ChainReseeded(uint32 indexed chainId, uint256 oldSupply, uint256 newSupply);
+    event StaleUpdateRejected(uint32 indexed chainId, uint256 providedNonce, uint256 expectedNonce);
+    event QuotaReceiverUpdated(uint32 indexed eid, bytes32 indexed receiver);
+    event QuotaGranted(uint32 indexed chainId, uint256 requested, uint256 granted, uint256 newChainQuota, uint256 totalReserved);
+    event QuotaConsumed(uint32 indexed chainId, uint256 amount, uint256 remainingChainQuota, uint256 totalReserved);
+    event QuotaUpdateOptionsSet(bytes options, address refundAddress);
+    event QuotaUpdateSkipped(uint32 indexed chainId, uint256 amount, uint256 requiredFee, uint256 balance);
+    event ChainQuotaUpdated(uint32 indexed chainId, uint256 oldQuota, uint256 newQuota, uint256 totalReserved);
+    
+    error UnknownPeer(uint32 eid);
+    error InvalidEndpoint();
+    error InvalidPeer();
+    error CapExceeded(uint256 current, uint256 cap);
+
+    receive() external payable {}
+    
+    constructor(address endpoint_, address admin_) {
+        require(endpoint_ != address(0), "GlobalSupplyRegistry: endpoint zero");
+        require(admin_ != address(0), "GlobalSupplyRegistry: admin zero");
+        
+        endpoint = ILayerZeroEndpointV2(endpoint_);
+        _grantRole(ADMIN_ROLE, admin_);
+        globalCap = 1_000_000_000 * 1e18; // 1B default
+    }
+    
+    /**
+     * @notice Register a spoke chain
+     */
+    function registerSpoke(uint32 eid, bytes32 peer) external onlyRole(ADMIN_ROLE) {
+        require(peer != bytes32(0), "GlobalSupplyRegistry: zero peer");
+        peers[eid] = peer;
+        _grantRole(SPOKE_ROLE, address(uint160(uint256(peer))));
+        emit PeerUpdated(eid, peer);
+    }
+
+    /**
+     * @notice Register the quota receiver on a spoke chain
+     */
+    function registerQuotaReceiver(uint32 eid, bytes32 receiver) external onlyRole(ADMIN_ROLE) {
+        require(receiver != bytes32(0), "GlobalSupplyRegistry: zero receiver");
+        quotaReceivers[eid] = receiver;
+        emit QuotaReceiverUpdated(eid, receiver);
+    }
+
+    /**
+     * @notice Register a token contract (hub or spoke) to allow direct supply reporting
+     */
+    function registerToken(address token) external onlyRole(ADMIN_ROLE) {
+        require(token != address(0), "GlobalSupplyRegistry: zero token");
+        require(token.code.length > 0, "GlobalSupplyRegistry: token not contract");
+        _grantRole(TOKEN_ROLE, token);
+    }
+    
+    /**
+     * @notice Update supply from spoke chain (called via LayerZero)
+     * @dev SECURITY FIX: Validates nonce to prevent stale updates from overwriting newer ones
+     */
+    function lzReceive(
+        Origin calldata origin,
+        address receiver,
+        bytes32 /* guid */,
+        bytes calldata message,
+        bytes calldata /* extraData */
+    ) external payable nonReentrant {
+        if (msg.sender != address(endpoint)) revert InvalidEndpoint();
+        if (receiver != address(this)) revert InvalidEndpoint();
+        
+        bytes32 expectedPeer = peers[origin.srcEid];
+        if (expectedPeer == bytes32(0) || expectedPeer != origin.sender) revert InvalidPeer();
+
+        uint8 msgType;
+        assembly {
+            msgType := byte(31, calldataload(message.offset))
+        }
+        
+        if (msgType == MSG_SUPPLY_UPDATE) {
+            (, SupplyUpdate memory update) = abi.decode(message, (uint8, SupplyUpdate));
+            _handleSupplyUpdate(origin.srcEid, update);
+        } else if (msgType == MSG_QUOTA_REQUEST) {
+            (, QuotaRequest memory request) = abi.decode(message, (uint8, QuotaRequest));
+            _handleQuotaRequest(origin.srcEid, request);
+        } else {
+            revert("GlobalSupplyRegistry: unknown message type");
+        }
+    }
+
+    function _handleSupplyUpdate(uint32 srcEid, SupplyUpdate memory update) internal {
+        uint32 chainId = update.chainId;
+        uint256 supplyDelta = update.supplyDelta;
+        uint256 newChainSupply = update.newTotalSupply;
+        
+        require(chainId == srcEid, "GlobalSupplyRegistry: chainId mismatch");
+        
+        if (update.nonce <= chainNonce[chainId]) {
+            emit StaleUpdateRejected(chainId, update.nonce, chainNonce[chainId]);
+            return;
+        }
+        chainNonce[chainId] = update.nonce;
+        
+        _applySupplyUpdate(chainId, supplyDelta, newChainSupply);
+    }
+
+    function _handleQuotaRequest(uint32 srcEid, QuotaRequest memory request) internal {
+        uint32 chainId = request.chainId;
+        require(chainId == srcEid, "GlobalSupplyRegistry: chainId mismatch");
+        
+        if (request.nonce <= chainNonce[chainId]) {
+            emit StaleUpdateRejected(chainId, request.nonce, chainNonce[chainId]);
+            return;
+        }
+        chainNonce[chainId] = request.nonce;
+        
+        uint256 oldChainSupply = chainSupply[chainId];
+        uint256 newChainSupply = request.newTotalSupply;
+        
+        // Update supply first
+        _applySupplyUpdate(chainId, newChainSupply > oldChainSupply ? newChainSupply - oldChainSupply : oldChainSupply - newChainSupply, newChainSupply);
+        
+        // Consume reported quota usage (spoke-enforced)
+        if (request.consumedQuota > 0) {
+            uint256 remaining = chainQuota[chainId];
+            uint256 consumed = request.consumedQuota <= remaining ? request.consumedQuota : remaining;
+            chainQuota[chainId] = remaining - consumed;
+            totalReservedQuota -= consumed;
+            emit QuotaConsumed(chainId, consumed, chainQuota[chainId], totalReservedQuota);
+        }
+        
+        // Ensure allocated supply stays within cap after consumption
+        require(totalCrossChainSupply + totalReservedQuota <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+
+        // Grant new quota based on remaining global cap
+        uint256 available = globalCap - totalCrossChainSupply - totalReservedQuota;
+        uint256 grant = request.requestedQuota <= available ? request.requestedQuota : available;
+        
+        if (grant > 0) {
+            chainQuota[chainId] += grant;
+            totalReservedQuota += grant;
+        }
+        
+        emit QuotaGranted(chainId, request.requestedQuota, grant, chainQuota[chainId], totalReservedQuota);
+        
+        bytes32 receiver = quotaReceivers[chainId];
+        if (receiver != bytes32(0) && grant > 0) {
+            _sendQuotaUpdate(chainId, receiver, grant, chainNonce[chainId]);
+        }
+    }
+
+    function _applySupplyUpdate(uint32 chainId, uint256 /* supplyDelta */, uint256 newChainSupply) internal {
+        uint256 oldChainSupply = chainSupply[chainId];
+        uint256 delta = newChainSupply > oldChainSupply
+            ? newChainSupply - oldChainSupply
+            : oldChainSupply - newChainSupply;
+        chainSupply[chainId] = newChainSupply;
+        totalCrossChainSupply = totalCrossChainSupply - oldChainSupply + newChainSupply;
+        
+        if (totalCrossChainSupply > globalCap) {
+            revert CapExceeded(totalCrossChainSupply, globalCap);
+        }
+        
+        emit SupplyUpdated(chainId, delta, newChainSupply, totalCrossChainSupply);
+    }
+
+    function _sendQuotaUpdate(uint32 chainId, bytes32 receiver, uint256 amount, uint256 nonce) internal {
+        QuotaUpdate memory update = QuotaUpdate({
+            chainId: chainId,
+            grantedQuota: amount,
+            nonce: nonce
+        });
+        
+        require(quotaUpdateRefundAddress != address(0), "GlobalSupplyRegistry: refund not set");
+        bytes memory payload = abi.encode(MSG_QUOTA_UPDATE, update);
+        MessagingParams memory params = MessagingParams({
+            dstEid: chainId,
+            receiver: receiver,
+            message: payload,
+            options: quotaUpdateOptions,
+            payInLzToken: false
+        });
+        
+        uint256 nativeFee = endpoint.quote(params, address(this)).nativeFee;
+        if (address(this).balance < nativeFee) {
+            emit QuotaUpdateSkipped(chainId, amount, nativeFee, address(this).balance);
+            return;
+        }
+        endpoint.send{value: nativeFee}(params, quotaUpdateRefundAddress);
+    }
+    
+    /**
+     * @notice Get total supply across all chains
+     */
+    function getGlobalSupply() external view returns (uint256) {
+        return totalCrossChainSupply;
+    }
+    
+    /**
+     * @notice Record a mint on the hub chain (direct call, not via LayerZero)
+     * @param amount Amount minted
+     */
+    function recordMint(uint256 amount) external onlyRole(TOKEN_ROLE) nonReentrant {
+        require(amount > 0, "GlobalSupplyRegistry: zero amount");
+        uint32 chainId = uint32(block.chainid);
+        uint256 oldChainSupply = chainSupply[chainId];
+        uint256 newChainSupply = oldChainSupply + amount;
+        
+        // Check cap before updating
+        uint256 newTotal = totalCrossChainSupply - oldChainSupply + newChainSupply;
+        uint256 newAllocated = newTotal + totalReservedQuota;
+        if (newAllocated > globalCap) {
+            revert CapExceeded(newAllocated, globalCap);
+        }
+        
+        chainSupply[chainId] = newChainSupply;
+        totalCrossChainSupply = newTotal;
+        
+        emit SupplyUpdated(chainId, amount, newChainSupply, totalCrossChainSupply);
+    }
+    
+    /**
+     * @notice Record a burn on the hub chain (direct call, not via LayerZero)
+     * @param amount Amount burned (net amount after fees)
+     * @dev Emits amount as delta; newTotalSupply will be lower, indicating a burn
+     */
+    function recordBurn(uint256 amount) external onlyRole(TOKEN_ROLE) nonReentrant {
+        require(amount > 0, "GlobalSupplyRegistry: zero amount");
+        uint32 chainId = uint32(block.chainid);
+        uint256 oldChainSupply = chainSupply[chainId];
+        require(oldChainSupply >= amount, "GlobalSupplyRegistry: burn exceeds supply");
+        
+        uint256 newChainSupply = oldChainSupply - amount;
+        chainSupply[chainId] = newChainSupply;
+        totalCrossChainSupply = totalCrossChainSupply - amount;
+        
+        // Emit amount as delta; the reduction is clear from newTotalSupply < oldChainSupply
+        emit SupplyUpdated(chainId, amount, newChainSupply, totalCrossChainSupply);
+    }
+    
+    /**
+     * @notice Check if minting would exceed global cap
+     */
+    function canMint(uint256 amount) external view returns (bool) {
+        return totalCrossChainSupply + totalReservedQuota + amount <= globalCap;
+    }
+    
+    /**
+     * @notice Seed initial supply for a chain (for existing deployments)
+     * @param chainId Chain ID to seed
+     * @param initialSupply Initial supply on that chain
+     */
+    function seedChainSupply(uint32 chainId, uint256 initialSupply) external onlyRole(ADMIN_ROLE) {
+        require(chainSupply[chainId] == 0, "GlobalSupplyRegistry: chain already seeded");
+        require(initialSupply <= globalCap, "GlobalSupplyRegistry: initial supply exceeds cap");
+        
+        uint256 newTotal = totalCrossChainSupply + initialSupply;
+        require(newTotal + totalReservedQuota <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+        
+        chainSupply[chainId] = initialSupply;
+        totalCrossChainSupply = newTotal;
+        
+        emit SupplyUpdated(chainId, initialSupply, initialSupply, totalCrossChainSupply);
+    }
+
+    /**
+     * @notice Update global cap (admin only)
+     */
+    function updateCap(uint256 newCap) external onlyRole(ADMIN_ROLE) {
+        require(newCap >= totalCrossChainSupply + totalReservedQuota, "GlobalSupplyRegistry: cap < allocated supply");
+        uint256 oldCap = globalCap;
+        globalCap = newCap;
+        emit CapUpdated(oldCap, newCap);
+    }
+
+    /**
+     * @notice Set default options/refund for quota updates
+     */
+    function setQuotaUpdateOptions(bytes calldata options, address refundAddress) external onlyRole(ADMIN_ROLE) {
+        require(refundAddress != address(0), "GlobalSupplyRegistry: refund zero");
+        quotaUpdateOptions = options;
+        quotaUpdateRefundAddress = refundAddress;
+        emit QuotaUpdateOptionsSet(options, refundAddress);
+    }
+
+    function withdrawETH(address to, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(to != address(0), "GlobalSupplyRegistry: zero address");
+        (bool ok, ) = to.call{value: amount}("");
+        require(ok, "GlobalSupplyRegistry: transfer failed");
+    }
+
+    /**
+     * @notice Update chain quota (admin recovery)
+     */
+    function setChainQuota(uint32 chainId, uint256 newQuota) external onlyRole(ADMIN_ROLE) {
+        uint256 oldQuota = chainQuota[chainId];
+        uint256 newTotalReserved = totalReservedQuota;
+        if (newQuota > oldQuota) {
+            newTotalReserved += (newQuota - oldQuota);
+        } else if (oldQuota > newQuota) {
+            newTotalReserved -= (oldQuota - newQuota);
+        }
+        require(totalCrossChainSupply + newTotalReserved <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+
+        totalReservedQuota = newTotalReserved;
+        chainQuota[chainId] = newQuota;
+        emit ChainQuotaUpdated(chainId, oldQuota, newQuota, totalReservedQuota);
+    }
+
+    /**
+     * @notice Re-seed chain supply and quota in one call (admin recovery)
+     * @param chainId Chain ID to reseed
+     * @param newSupply Corrected supply for that chain
+     * @param newQuota Corrected remaining quota for that chain
+     * @param newNonce New nonce to set (should be higher than any pending messages)
+     * @dev Ensures supply + quota remain consistent with global cap
+     */
+    function reseedChainSupplyAndQuota(
+        uint32 chainId,
+        uint256 newSupply,
+        uint256 newQuota,
+        uint256 newNonce
+    ) external onlyRole(ADMIN_ROLE) {
+        uint256 oldSupply = chainSupply[chainId];
+        uint256 oldQuota = chainQuota[chainId];
+
+        uint256 newTotalSupply = totalCrossChainSupply - oldSupply + newSupply;
+        uint256 newTotalReserved = totalReservedQuota;
+        if (newQuota > oldQuota) {
+            newTotalReserved += (newQuota - oldQuota);
+        } else if (oldQuota > newQuota) {
+            newTotalReserved -= (oldQuota - newQuota);
+        }
+
+        require(newTotalSupply + newTotalReserved <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+
+        chainSupply[chainId] = newSupply;
+        totalCrossChainSupply = newTotalSupply;
+
+        chainQuota[chainId] = newQuota;
+        totalReservedQuota = newTotalReserved;
+
+        chainNonce[chainId] = newNonce;
+
+        emit ChainReseeded(chainId, oldSupply, newSupply);
+        emit ChainQuotaUpdated(chainId, oldQuota, newQuota, totalReservedQuota);
+        emit SupplyUpdated(chainId, newSupply > oldSupply ? newSupply - oldSupply : oldSupply - newSupply, newSupply, totalCrossChainSupply);
+    }
+    
+    /**
+     * @notice Re-seed chain supply for error correction (admin only)
+     * @param chainId Chain ID to reseed
+     * @param newSupply Corrected supply for that chain
+     * @param newNonce New nonce to set (should be higher than any pending messages)
+     * @dev SECURITY FIX: Allows admin to correct seeding errors
+     * @dev SECURITY FIX: Resets nonce to prevent replay attacks after reseed
+     */
+    function reseedChainSupply(uint32 chainId, uint256 newSupply, uint256 newNonce) external onlyRole(ADMIN_ROLE) {
+        uint256 oldSupply = chainSupply[chainId];
+        
+        // Calculate new total
+        uint256 newTotal = totalCrossChainSupply - oldSupply + newSupply;
+        require(newTotal + totalReservedQuota <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+        
+        chainSupply[chainId] = newSupply;
+        totalCrossChainSupply = newTotal;
+        
+        // SECURITY FIX: Reset nonce to prevent replay attacks with old messages
+        chainNonce[chainId] = newNonce;
+        
+        emit ChainReseeded(chainId, oldSupply, newSupply);
+        emit SupplyUpdated(chainId, newSupply > oldSupply ? newSupply - oldSupply : oldSupply - newSupply, newSupply, totalCrossChainSupply);
+    }
+    
+    /**
+     * @notice Get current nonce for a chain
+     * @param chainId Chain ID to query
+     * @return Current nonce for the chain
+     */
+    function getChainNonce(uint32 chainId) external view returns (uint256) {
+        return chainNonce[chainId];
+    }
+    
+    /**
+     * @notice Force accept next supply update for a chain (admin recovery)
+     * @param chainId Chain ID to reset nonce for
+     * @dev SECURITY FIX: Allows recovery from out-of-order message scenarios
+     * @dev Advances nonce by 1 to accept the next update and reject older in-flight messages
+     * @dev Use with caution - may still allow some out-of-order messages depending on timing
+     */
+    function resetChainNonce(uint32 chainId) external onlyRole(ADMIN_ROLE) {
+        uint256 oldNonce = chainNonce[chainId];
+        uint256 newNonce = oldNonce + 1;
+        chainNonce[chainId] = newNonce;
+        emit ChainNonceReset(chainId, oldNonce);
+        emit ChainNonceAdvanced(chainId, oldNonce, newNonce);
+    }
+    
+    /**
+     * @notice Force synchronize supply from a chain (bypass LayerZero)
+     * @param chainId Chain ID
+     * @param newSupply New supply value
+     * @param minNonce Optional minimum nonce to set (0 to keep current)
+     * @dev SECURITY FIX: Emergency recovery when LZ messages are stuck/lost
+     * @dev SECURITY FIX: Optionally sets minNonce to reject old in-flight messages
+     */
+    function forceSupplySync(uint32 chainId, uint256 newSupply, uint256 minNonce) external onlyRole(ADMIN_ROLE) {
+        uint256 oldSupply = chainSupply[chainId];
+        uint256 newTotal = totalCrossChainSupply - oldSupply + newSupply;
+        require(newTotal + totalReservedQuota <= globalCap, "GlobalSupplyRegistry: would exceed cap");
+        
+        chainSupply[chainId] = newSupply;
+        totalCrossChainSupply = newTotal;
+        
+        // SECURITY FIX: Optionally update nonce to reject old in-flight messages
+        if (minNonce > chainNonce[chainId]) {
+            chainNonce[chainId] = minNonce;
+        }
+        
+        emit SupplyUpdated(chainId, newSupply > oldSupply ? newSupply - oldSupply : oldSupply - newSupply, newSupply, totalCrossChainSupply);
+    }
+    
+    event ChainNonceReset(uint32 indexed chainId, uint256 oldNonce);
+    event ChainNonceAdvanced(uint32 indexed chainId, uint256 oldNonce, uint256 newNonce);
+    bytes public quotaUpdateOptions;
+    address public quotaUpdateRefundAddress;
+}
+
+/* ==== token/contracts/Groth16Verifier.sol ==== */
+// SPDX-License-Identifier: GPL-3.0
+/*
+    Copyright 2021 0KIMS association.
+
+    This file is generated with [snarkJS](https://github.com/iden3/snarkjs).
+
+    snarkJS is a free software: you can redistribute it and/or modify it
+    under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    snarkJS is distributed in the hope that it will be useful, but WITHOUT
+    ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+    or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public
+    License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with snarkJS. If not, see <https://www.gnu.org/licenses/>.
+*/
+
+pragma solidity >=0.7.0 <0.9.0;
+
+contract Groth16Verifier {
+    // Scalar field size
+    uint256 constant r    = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
+    // Base field size
+    uint256 constant q   = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
+
+    // Verification Key data
+    uint256 constant alphax  = 20204274784919461237350545693374047662011361776184292352758021978812142013768;
+    uint256 constant alphay  = 14766942955384332895717418919563004252443987555539881433578870578604063856475;
+    uint256 constant betax1  = 12122756475979105677165100671608898692682284228066688018538334138491764191768;
+    uint256 constant betax2  = 19737238637885464048590398018715223726584075838741746896600301636668772188830;
+    uint256 constant betay1  = 13975048763863948680248490247196733872368345542866138451027289455939235931306;
+    uint256 constant betay2  = 17427299430688052152945293323092001136806167911852118991327984711722438006308;
+    uint256 constant gammax1 = 11559732032986387107991004021392285783925812861821192530917403151452391805634;
+    uint256 constant gammax2 = 10857046999023057135944570762232829481370756359578518086990519993285655852781;
+    uint256 constant gammay1 = 4082367875863433681332203403145435568316851327593401208105741076214120093531;
+    uint256 constant gammay2 = 8495653923123431417604973247489272438418190587263600148770280649306958101930;
+    uint256 constant deltax1 = 11410356562192725099336453547928611767713835277021205830787159620910854030269;
+    uint256 constant deltax2 = 15878354970216345917397803636189766778990695983936230742675408657419042919716;
+    uint256 constant deltay1 = 7590046972774756201892430182208212501297526054085525837579076962654644267521;
+    uint256 constant deltay2 = 21387066073205647349573621196961205903065500756703765676665458011784227343788;
+
+    
+    uint256 constant IC0x = 5707967065802721062934692504702581671797411798274605953415834609513992253251;
+    uint256 constant IC0y = 15701822486410557584082427813023825602992957365202289644035557564207189945843;
+    
+    uint256 constant IC1x = 1308276857383178845535419123023392152741734332087032621418041637066975303848;
+    uint256 constant IC1y = 18203602839516764554168081764261885971609482754352790119126756079984496045539;
+    
+    uint256 constant IC2x = 6905909620782527149493992292742388408761594532773845280368445743533168628152;
+    uint256 constant IC2y = 16756176569539328863028438342633032975374108941242339174497876726941869119135;
+    
+    uint256 constant IC3x = 14206325619013010320017789309800728555526743542815454236146833655648242247926;
+    uint256 constant IC3y = 13207643167765170018912035518493792603339597387572180915108980602415896541652;
+    
+ 
+    // Memory data
+    uint16 constant pVk = 0;
+    uint16 constant pPairing = 128;
+
+    uint16 constant pLastMem = 896;
+
+    function verifyProof(uint[2] calldata _pA, uint[2][2] calldata _pB, uint[2] calldata _pC, uint[3] calldata _pubSignals) public view returns (bool) {
+        assembly {
+            function checkField(v) {
+                if iszero(lt(v, r)) {
+                    mstore(0, 0)
+                    return(0, 0x20)
+                }
+            }
+            
+            // G1 function to multiply a G1 value(x,y) to value in an address
+            function g1_mulAccC(pR, x, y, s) {
+                let success
+                let mIn := mload(0x40)
+                mstore(mIn, x)
+                mstore(add(mIn, 32), y)
+                mstore(add(mIn, 64), s)
+
+                success := staticcall(sub(gas(), 2000), 7, mIn, 96, mIn, 64)
+
+                if iszero(success) {
+                    mstore(0, 0)
+                    return(0, 0x20)
+                }
+
+                mstore(add(mIn, 64), mload(pR))
+                mstore(add(mIn, 96), mload(add(pR, 32)))
+
+                success := staticcall(sub(gas(), 2000), 6, mIn, 128, pR, 64)
+
+                if iszero(success) {
+                    mstore(0, 0)
+                    return(0, 0x20)
+                }
+            }
+
+            function checkPairing(pA, pB, pC, pubSignals, pMem) -> isOk {
+                let _pPairing := add(pMem, pPairing)
+                let _pVk := add(pMem, pVk)
+
+                mstore(_pVk, IC0x)
+                mstore(add(_pVk, 32), IC0y)
+
+                // Compute the linear combination vk_x
+                
+                g1_mulAccC(_pVk, IC1x, IC1y, calldataload(add(pubSignals, 0)))
+                
+                g1_mulAccC(_pVk, IC2x, IC2y, calldataload(add(pubSignals, 32)))
+                
+                g1_mulAccC(_pVk, IC3x, IC3y, calldataload(add(pubSignals, 64)))
+                
+
+                // -A
+                mstore(_pPairing, calldataload(pA))
+                mstore(add(_pPairing, 32), mod(sub(q, calldataload(add(pA, 32))), q))
+
+                // B
+                mstore(add(_pPairing, 64), calldataload(pB))
+                mstore(add(_pPairing, 96), calldataload(add(pB, 32)))
+                mstore(add(_pPairing, 128), calldataload(add(pB, 64)))
+                mstore(add(_pPairing, 160), calldataload(add(pB, 96)))
+
+                // alpha1
+                mstore(add(_pPairing, 192), alphax)
+                mstore(add(_pPairing, 224), alphay)
+
+                // beta2
+                mstore(add(_pPairing, 256), betax1)
+                mstore(add(_pPairing, 288), betax2)
+                mstore(add(_pPairing, 320), betay1)
+                mstore(add(_pPairing, 352), betay2)
+
+                // vk_x
+                mstore(add(_pPairing, 384), mload(add(pMem, pVk)))
+                mstore(add(_pPairing, 416), mload(add(pMem, add(pVk, 32))))
+
+
+                // gamma2
+                mstore(add(_pPairing, 448), gammax1)
+                mstore(add(_pPairing, 480), gammax2)
+                mstore(add(_pPairing, 512), gammay1)
+                mstore(add(_pPairing, 544), gammay2)
+
+                // C
+                mstore(add(_pPairing, 576), calldataload(pC))
+                mstore(add(_pPairing, 608), calldataload(add(pC, 32)))
+
+                // delta2
+                mstore(add(_pPairing, 640), deltax1)
+                mstore(add(_pPairing, 672), deltax2)
+                mstore(add(_pPairing, 704), deltay1)
+                mstore(add(_pPairing, 736), deltay2)
+
+
+                let success := staticcall(sub(gas(), 2000), 8, _pPairing, 768, _pPairing, 0x20)
+
+                isOk := and(success, mload(_pPairing))
+            }
+
+            let pMem := mload(0x40)
+            mstore(0x40, add(pMem, pLastMem))
+
+            // Validate that all evaluations ∈ F
+            
+            checkField(calldataload(add(_pubSignals, 0)))
+            
+            checkField(calldataload(add(_pubSignals, 32)))
+            
+            checkField(calldataload(add(_pubSignals, 64)))
+            
+
+            // Validate all evaluations
+            let isValid := checkPairing(_pA, _pB, _pC, _pubSignals, pMem)
+
+            mstore(0, isValid)
+             return(0, 0x20)
+         }
+     }
+ }
+
+/* ==== token/contracts/IGlobalSupplyRegistry.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+/**
+ * @title IGlobalSupplyRegistry
+ * @notice Interface for global supply tracking across chains
+ */
+interface IGlobalSupplyRegistry {
+    /**
+     * @notice Record a mint on the hub chain
+     * @param amount Amount minted
+     */
+    function recordMint(uint256 amount) external;
+
+    /**
+     * @notice Record a burn on the hub chain
+     * @param amount Amount burned
+     */
+    function recordBurn(uint256 amount) external;
+
+    /**
+     * @notice Check if minting would exceed global cap
+     * @param amount Amount to mint
+     * @return true if minting is allowed
+     */
+    function canMint(uint256 amount) external view returns (bool);
+
+    /**
+     * @notice Get total supply across all chains
+     * @return Total cross-chain supply
+     */
+    function getGlobalSupply() external view returns (uint256);
+}
+
+
+/* ==== token/contracts/LiquidStakingVault.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+
+/**
+ * @notice Interface for DualPoolStaking contract
+ * @dev SECURITY FIX: Use typed interface instead of low-level calls
+ */
+interface IDualPoolStaking {
+    function stakeToUserPool(uint256 amount, address user) external;
+    function unstakeFromUserPool(uint256 amount, address user) external;
+    function getUserPoolTotalStaked() external view returns (uint256);
+    function harvestRewards(address user) external;
+    function pendingRewards(address user) external view returns (uint256);
+}
+
+/**
+ * @title LiquidStakingVault
+ * @notice ERC-4626 vault for liquid staking in the user pool
+ * @dev Mints lsMYNT shares for user pool staking
+ * @dev Shares are fully transferrable (liquid staking)
+ * @dev SECURITY FIX: All stakes are attributed to the vault address (not individual users)
+ *      This allows shares to be transferred while maintaining correct stake accounting
+ * @dev Auto-compounds rewards
+ */
+contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    
+    // Dual pool staking contract
+    address public dualPoolStaking;
+    
+    // SECURITY FIX: Track vault-specific deposits to fix totalAssets calculation
+    uint256 public totalVaultDeposits;
+    
+    // Events
+    event StakingContractUpdated(address indexed newStakingContract);
+    event RewardsCompounded(uint256 amount);
+    event VaultDeposit(address indexed user, uint256 amount);
+    event VaultWithdraw(address indexed user, uint256 amount);
+    
+    constructor(
+        address _asset,
+        address _dualPoolStaking,
+        address admin
+    ) ERC4626(IERC20(_asset)) ERC20("Liquid Staked Myntis", "lsMYNT") {
+        require(_asset != address(0), "Invalid asset");
+        require(_asset.code.length > 0, "Asset not a contract");
+        require(_dualPoolStaking != address(0), "Invalid staking");
+        require(_dualPoolStaking.code.length > 0, "Staking not a contract");
+        require(admin != address(0), "Invalid admin");
+        dualPoolStaking = _dualPoolStaking;
+        _grantRole(ADMIN_ROLE, admin);
+    }
+    
+    /**
+     * @notice Update the dual pool staking contract address
+     * @param _dualPoolStaking New staking contract address
+     */
+    function setDualPoolStaking(address _dualPoolStaking) external onlyRole(ADMIN_ROLE) {
+        require(_dualPoolStaking != address(0), "Invalid staking");
+        require(_dualPoolStaking.code.length > 0, "Staking not a contract");
+        dualPoolStaking = _dualPoolStaking;
+        emit StakingContractUpdated(_dualPoolStaking);
+    }
+    
+    /**
+     * @notice Deposit assets and stake in user pool
+     * @param assets Amount of assets to deposit
+     * @param receiver Address to receive shares
+     * @return shares Amount of shares minted
+     * @dev SECURITY FIX: Stakes to vault address, not individual user
+     */
+    function deposit(uint256 assets, address receiver) 
+        public 
+        override 
+        nonReentrant 
+        returns (uint256 shares) 
+    {
+        _harvestPendingRewards();
+        shares = super.deposit(assets, receiver);
+        
+        // SECURITY FIX: Stake to vault address (address(this)), not individual user
+        // This allows shares to be transferred and still redeemable
+        _stakeInUserPool(assets);
+        
+        return shares;
+    }
+    
+    /**
+     * @notice Mint shares and stake in user pool
+     * @param shares Amount of shares to mint
+     * @param receiver Address to receive shares
+     * @return assets Amount of assets deposited
+     * @dev SECURITY FIX: Stakes to vault address, not individual user
+     */
+    function mint(uint256 shares, address receiver) 
+        public 
+        override 
+        nonReentrant 
+        returns (uint256 assets) 
+    {
+        _harvestPendingRewards();
+        assets = super.mint(shares, receiver);
+        
+        // SECURITY FIX: Stake to vault address (address(this)), not individual user
+        _stakeInUserPool(assets);
+        
+        return assets;
+    }
+    
+    /**
+     * @notice Withdraw assets and unstake from user pool
+     * @param assets Amount of assets to withdraw
+     * @param receiver Address to receive assets
+     * @param owner Address that owns the shares
+     * @return shares Amount of shares burned
+     * @dev SECURITY FIX: Unstakes from vault's position, not individual user
+     */
+    function withdraw(uint256 assets, address receiver, address owner)
+        public 
+        override 
+        nonReentrant 
+        returns (uint256 shares) 
+    {
+        _harvestPendingRewards();
+        // SECURITY FIX: Unstake from vault's position (not individual owner)
+        _unstakeFromUserPool(assets);
+        
+        shares = super.withdraw(assets, receiver, owner);
+        
+        return shares;
+    }
+    
+    /**
+     * @notice Redeem shares and unstake from user pool
+     * @param shares Amount of shares to redeem
+     * @param receiver Address to receive assets
+     * @param owner Address that owns the shares
+     * @return assets Amount of assets withdrawn
+     * @dev SECURITY FIX: Unstakes from vault's position for correct share transferability
+     */
+    function redeem(uint256 shares, address receiver, address owner)
+        public 
+        override 
+        nonReentrant 
+        returns (uint256 assets) 
+    {
+        _harvestPendingRewards();
+        // Calculate assets first
+        assets = previewRedeem(shares);
+        
+        // SECURITY FIX: Unstake from vault's position (not individual owner)
+        _unstakeFromUserPool(assets);
+        
+        // Then burn shares and transfer assets
+        uint256 actualAssets = super.redeem(shares, receiver, owner);
+        
+        // Verify the amounts match
+        require(actualAssets == assets, "Asset mismatch after redeem");
+        
+        return assets;
+    }
+    
+    /**
+     * @notice Harvest staking rewards for the vault
+     * @dev SECURITY FIX: Harvests rewards from DualPoolStaking to vault balance
+     * @dev Anyone can call this to harvest rewards on behalf of all share holders
+     * @return harvested Amount of rewards harvested
+     */
+    function harvestVaultRewards() external nonReentrant returns (uint256 harvested) {
+        uint256 balanceBefore = IERC20(asset()).balanceOf(address(this));
+        
+        // Harvest rewards from staking contract (rewards sent to vault)
+        IDualPoolStaking(dualPoolStaking).harvestRewards(address(this));
+        
+        uint256 balanceAfter = IERC20(asset()).balanceOf(address(this));
+        harvested = balanceAfter - balanceBefore;
+        
+        emit RewardsCompounded(harvested);
+        return harvested;
+    }
+    
+    /**
+     * @notice Get pending rewards for the vault
+     * @return Pending rewards that can be harvested
+     */
+    function pendingVaultRewards() external view returns (uint256) {
+        return IDualPoolStaking(dualPoolStaking).pendingRewards(address(this));
+    }
+    
+    /**
+     * @notice Compound rewards by harvesting and re-staking
+     * @dev Harvests rewards and re-stakes them to increase share value
+     * @return compounded Amount of rewards compounded
+     */
+    function compoundRewards() external nonReentrant returns (uint256 compounded) {
+        uint256 balanceBefore = IERC20(asset()).balanceOf(address(this));
+        
+        // Harvest rewards
+        IDualPoolStaking(dualPoolStaking).harvestRewards(address(this));
+        
+        uint256 harvested = IERC20(asset()).balanceOf(address(this)) - balanceBefore;
+        
+        // Re-stake harvested rewards if any
+        if (harvested > 0) {
+            _stakeInUserPool(harvested);
+            compounded = harvested;
+        }
+        
+        emit RewardsCompounded(compounded);
+        return compounded;
+    }
+    
+    /**
+     * @notice Get the total assets managed by this vault
+     * @return Total assets (including staked amount + pending rewards)
+     * @dev SECURITY FIX: Uses vault-specific tracking instead of total pool stake
+     */
+    function totalAssets() public view override returns (uint256) {
+        // Get idle balance in vault
+        uint256 idle = IERC20(asset()).balanceOf(address(this));
+        
+        // SECURITY FIX: Include pending rewards to prevent share-price dilution
+        uint256 pending = IDualPoolStaking(dualPoolStaking).pendingRewards(address(this));
+        
+        // SECURITY FIX: Use vault-specific deposit tracking
+        // This ensures correct share pricing in multi-vault scenarios
+        return idle + totalVaultDeposits + pending;
+    }
+    
+    /**
+     * @notice Get the conversion rate from assets to shares
+     * @param assets Amount of assets
+     * @return shares Amount of shares
+     */
+    function convertToShares(uint256 assets) public view override returns (uint256) {
+        return super.convertToShares(assets);
+    }
+    
+    /**
+     * @notice Get the conversion rate from shares to assets
+     * @param shares Amount of shares
+     * @return assets Amount of assets
+     */
+    function convertToAssets(uint256 shares) public view override returns (uint256) {
+        return super.convertToAssets(shares);
+    }
+    
+    /**
+     * @notice Preview the amount of shares for a deposit
+     * @param assets Amount of assets to deposit
+     * @return shares Amount of shares that would be minted
+     */
+    function previewDeposit(uint256 assets) public view override returns (uint256) {
+        return super.previewDeposit(assets);
+    }
+    
+    /**
+     * @notice Preview the amount of assets for a mint
+     * @param shares Amount of shares to mint
+     * @return assets Amount of assets that would be deposited
+     */
+    function previewMint(uint256 shares) public view override returns (uint256) {
+        return super.previewMint(shares);
+    }
+    
+    /**
+     * @notice Preview the amount of shares for a withdrawal
+     * @param assets Amount of assets to withdraw
+     * @return shares Amount of shares that would be burned
+     */
+    function previewWithdraw(uint256 assets) public view override returns (uint256) {
+        return super.previewWithdraw(assets);
+    }
+    
+    /**
+     * @notice Preview the amount of assets for a redemption
+     * @param shares Amount of shares to redeem
+     * @return assets Amount of assets that would be withdrawn
+     */
+    function previewRedeem(uint256 shares) public view override returns (uint256) {
+        return super.previewRedeem(shares);
+    }
+    
+    /**
+     * @notice Decimals offset for virtual share protection
+     * @dev SECURITY FIX: Protects against ERC-4626 first-depositor inflation attack
+     * @dev Adds virtual assets/shares to prevent share price manipulation
+     * @return Decimal offset (3 = 1000x virtual multiplier)
+     */
+    function _decimalsOffset() internal pure override returns (uint8) {
+        return 3; // Provides protection against inflation attacks
+    }
+    
+    // Internal functions
+    
+    /**
+     * @notice Stake assets in user pool for the vault
+     * @param amount Amount to stake
+     * @dev SECURITY FIX: Stakes to vault address (address(this)) for share transferability
+     * @dev All deposits are pooled under the vault's ownership in DualPoolStaking
+     */
+    function _stakeInUserPool(uint256 amount) internal {
+        // Approve dual pool staking to spend assets
+        IERC20(asset()).approve(dualPoolStaking, amount);
+        
+        // SECURITY FIX: Stake to vault address (address(this))
+        // This ensures any share holder can redeem since the vault owns the stake
+        IDualPoolStaking(dualPoolStaking).stakeToUserPool(amount, address(this));
+        
+        // Reset approval to 0 after staking
+        IERC20(asset()).approve(dualPoolStaking, 0);
+        
+        // Track vault deposits
+        totalVaultDeposits += amount;
+        emit VaultDeposit(address(this), amount);
+    }
+
+    /**
+     * @notice Unstake assets from vault's user pool position
+     * @param amount Amount to unstake
+     * @dev SECURITY FIX: Unstakes from vault's position for share transferability
+     */
+    function _unstakeFromUserPool(uint256 amount) internal {
+        // SECURITY FIX: Unstake from vault's position (address(this))
+        IDualPoolStaking(dualPoolStaking).unstakeFromUserPool(amount, address(this));
+        
+        // Track vault withdrawals
+        totalVaultDeposits -= amount;
+        emit VaultWithdraw(address(this), amount);
+    }
+
+    /**
+     * @notice Harvest pending rewards before share price calculations
+     * @dev Keeps share pricing fair for deposits/withdrawals without a keeper
+     */
+    function _harvestPendingRewards() internal {
+        IDualPoolStaking(dualPoolStaking).harvestRewards(address(this));
+    }
+}
+
+/* ==== token/contracts/Myntis.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {OFT} from "@layerzerolabs/oft-evm/contracts/OFT.sol";
+import {IOFT} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IGlobalSupplyRegistry} from "./IGlobalSupplyRegistry.sol";
+
+/**
+ * @title Myntis
+ * @notice Canonical omnichain MYNT token - LayerZero V2 OFT
+ * @dev Standard LayerZero V2 OFT with cross-chain bridging
+ * @dev 1B total supply: 800M emissions + 200M immediate allocation
+ * @dev Hub token on Base, spoke tokens on other chains
+ * 
+ * Features:
+ * - Standard OFT send/receive with automatic burn/mint
+ * - Shared decimals (6) for cross-chain compatibility  
+ * - Configurable burn fee on source chain (no double-fee on cross-chain)
+ * - Global supply registry integration
+ * - Pausable cross-chain operations
+ * 
+ * LayerZero V2 Best Practices:
+ * - Properly overrides _debit/_credit with correct return values
+ * - Respects slippage protection after fee application
+ * - Uses OApp's built-in Ownable (no duplicate inheritance)
+ * - Implements IOFT interface correctly
+ */
+contract Myntis is OFT, Pausable {
+    // ============ Roles ============
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
+    
+    // ============ Supply Constants ============
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18; // 1B tokens
+    uint256 public constant EMISSIONS_ALLOCATION = 800_000_000 * 1e18; // 800M for emissions
+    uint256 public constant IMMEDIATE_ALLOCATION = 200_000_000 * 1e18; // 200M immediate
+    uint256 public constant MAX_MIGRATION_AMOUNT = 15_000_000 * 1e18; // 15M cap
+    
+    // ============ State ============
+    uint256 public totalMintedEmissions;
+    uint256 public totalMintedImmediate;
+    
+    // Role management
+    mapping(bytes32 => mapping(address => bool)) private _roles;
+    
+    // Fee state (in basis points, 100 = 1%)
+    // NOTE: Only burnFee is used (applied in _debit on source chain)
+    // No mintFee to prevent double-fee on cross-chain transfers
+    uint256 public burnFee;
+    address public feeRecipient;
+    
+    // Global supply registry
+    IGlobalSupplyRegistry public globalSupplyRegistry;
+    
+    // Migration state
+    bool public migrationComplete;
+    uint256 public totalMigrated;
+    
+    // Contract metadata URI (ERC-7572) - for token logo, description, etc.
+    string public contractURI;
+    
+    // ============ Events ============
+    event EmissionsMinted(address indexed to, uint256 amount, uint256 totalEmissions);
+    event ImmediateMinted(address indexed to, uint256 amount, uint256 totalImmediate);
+    event BurnFeeUpdated(uint256 oldFee, uint256 newFee);
+    event FeeRecipientUpdated(address oldRecipient, address newRecipient);
+    event GlobalSupplyRegistryUpdated(address indexed previousRegistry, address indexed newRegistry);
+    event RoleGranted(bytes32 indexed role, address indexed account);
+    event RoleRevoked(bytes32 indexed role, address indexed account);
+    event BalanceMigrated(address indexed recipient, uint256 amount);
+    event MigrationCompleted(uint256 totalMigrated);
+    event ContractURIUpdated(string oldURI, string newURI);
+    
+    // ============ Errors ============
+    error ExceedsMaxSupply();
+    error ExceedsEmissionsAllocation();
+    error ExceedsImmediateAllocation();
+    error ZeroAddress();
+    error ZeroAmount();
+    error GlobalCapExceeded();
+    error FeeTooHigh();
+    error Unauthorized();
+    error MigrationAlreadyComplete();
+    error ExceedsMigrationCap();
+    error LengthMismatch();
+    
+    // ============ Modifiers ============
+    
+    modifier onlyRole(bytes32 role) {
+        if (!hasRole(role, msg.sender) && msg.sender != owner()) revert Unauthorized();
+        _;
+    }
+    
+    /**
+     * @notice Constructor for Myntis OFT
+     * @param _lzEndpoint LayerZero V2 endpoint address
+     * @param _delegate Admin/owner address (OApp delegate)
+     * @dev OFT already inherits Ownable via OAppCore - delegate is passed to OFT which
+     *      handles Ownable initialization in its inheritance chain
+     */
+    constructor(
+        address _lzEndpoint,
+        address _delegate
+    ) OFT("Myntis", "MYNT", _lzEndpoint, _delegate) Ownable(_delegate) {
+        if (_delegate == address(0)) revert ZeroAddress();
+        if (_lzEndpoint == address(0)) revert ZeroAddress();
+        
+        feeRecipient = _delegate;
+        burnFee = 0;
+
+        // Grant roles to delegate
+        _roles[MINTER_ROLE][_delegate] = true;
+        _roles[PAUSER_ROLE][_delegate] = true;
+        
+        emit RoleGranted(MINTER_ROLE, _delegate);
+        emit RoleGranted(PAUSER_ROLE, _delegate);
+    }
+    
+    // ============ Role Management ============
+    
+    function hasRole(bytes32 role, address account) public view returns (bool) {
+        return _roles[role][account];
+    }
+    
+    function grantRole(bytes32 role, address account) external onlyOwner {
+        if (account == address(0)) revert ZeroAddress();
+        _roles[role][account] = true;
+        emit RoleGranted(role, account);
+    }
+    
+    function revokeRole(bytes32 role, address account) external onlyOwner {
+        _roles[role][account] = false;
+        emit RoleRevoked(role, account);
+    }
+    
+    // ============ OFT Overrides (LayerZero V2 Best Practices) ============
+    
+    /**
+     * @notice Override _debit to add pause check and burn fees
+     * @dev CRITICAL: Returns correct values after fee application
+     * @dev Burns tokens from sender before cross-chain send
+     * @param _from Address to debit from
+     * @param _amountLD Amount in local decimals
+     * @param _minAmountLD Minimum amount after fees (slippage protection)
+     * @param _dstEid Destination endpoint ID
+     * @return amountSentLD Actual amount sent (after dust removal)
+     * @return amountReceivedLD Amount that will be received on destination (after fees)
+     */
+    function _debit(
+        address _from,
+        uint256 _amountLD,
+        uint256 _minAmountLD,
+        uint32 _dstEid
+    ) internal virtual override whenNotPaused returns (uint256 amountSentLD, uint256 amountReceivedLD) {
+        // Get dust-removed amounts from base implementation
+        (amountSentLD, ) = _debitView(_amountLD, _minAmountLD, _dstEid);
+        
+        // Calculate fee on the amount being sent
+        uint256 fee = (amountSentLD * burnFee) / 10000;
+        
+        // Amount received on destination is amount sent minus fee
+        amountReceivedLD = amountSentLD - fee;
+        
+        // CRITICAL: Check slippage AFTER fee application
+        // Uses IOFT.SlippageExceeded from LayerZero
+        if (amountReceivedLD < _minAmountLD) {
+            revert IOFT.SlippageExceeded(amountReceivedLD, _minAmountLD);
+        }
+        
+        // Transfer fee to recipient (if any)
+        if (fee > 0 && feeRecipient != address(0)) {
+            _transfer(_from, feeRecipient, fee);
+        }
+        
+        // Burn the net amount (what will be minted on destination)
+        _burn(_from, amountReceivedLD);
+        
+        // Record burn in global registry
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordBurn(amountReceivedLD);
+        }
+        
+        // Return correct values: amountSentLD is total taken from user, amountReceivedLD is what arrives
+        return (amountSentLD, amountReceivedLD);
+    }
+    
+    /**
+     * @notice Override _credit to add pause check and supply cap
+     * @dev CRITICAL: Checks MAX_SUPPLY to prevent exceeding 1B via cross-chain
+     * @dev Mints tokens to recipient on cross-chain receive
+     * @dev NOTE: No fee applied here - fee is already deducted in _debit on source chain
+     *      to prevent double-fee charging on cross-chain transfers
+     * @param _to Address to credit
+     * @param _amountLD Amount in local decimals (from source chain, already net of burnFee)
+     * @param _srcEid Source endpoint ID
+     * @return amountReceivedLD Amount actually credited (same as input, no additional fee)
+     */
+    function _credit(
+        address _to,
+        uint256 _amountLD,
+        uint32 _srcEid
+    ) internal virtual override whenNotPaused returns (uint256 amountReceivedLD) {
+        // Handle zero address (LayerZero standard)
+        if (_to == address(0x0)) _to = address(0xdead);
+        
+        // No fee applied here - burnFee was already applied in _debit on source chain
+        // This prevents double-fee charging on cross-chain transfers
+        amountReceivedLD = _amountLD;
+        
+        // CRITICAL: Check MAX_SUPPLY before minting
+        if (totalSupply() + amountReceivedLD > MAX_SUPPLY) {
+            revert ExceedsMaxSupply();
+        }
+        
+        // Check global cap if registry is set
+        if (address(globalSupplyRegistry) != address(0)) {
+            if (!globalSupplyRegistry.canMint(amountReceivedLD)) revert GlobalCapExceeded();
+        }
+        
+        // Mint full amount to recipient (fee was already taken on source chain)
+        _mint(_to, amountReceivedLD);
+        
+        // Record mint in global registry
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordMint(amountReceivedLD);
+        }
+        
+        return amountReceivedLD;
+    }
+    
+    /**
+     * @notice Override _debitView to include fee in quote calculation
+     * @dev Provides accurate quote including fees for UI/frontend
+     */
+    function _debitView(
+        uint256 _amountLD,
+        uint256 _minAmountLD,
+        uint32 _dstEid
+    ) internal view virtual override returns (uint256 amountSentLD, uint256 amountReceivedLD) {
+        // Get base dust-removed amount
+        (amountSentLD, amountReceivedLD) = super._debitView(_amountLD, _minAmountLD, _dstEid);
+        
+        // Apply burn fee to get actual received amount
+        uint256 fee = (amountSentLD * burnFee) / 10000;
+        amountReceivedLD = amountSentLD - fee;
+        
+        // Note: Base _debitView already checks minAmountLD, but that's before fees
+        // The actual check with fees happens in _debit()
+    }
+    
+    // ============ Minting Functions ============
+    
+    /**
+     * @notice Mint tokens from emissions allocation (for staking rewards)
+     * @dev Only MINTER_ROLE can call (Emissions contract)
+     * @param _to Recipient address
+     * @param _amount Amount to mint
+     */
+    function mint(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) whenNotPaused {
+        _mintEmissions(_to, _amount);
+    }
+    
+    /**
+     * @notice Mint tokens from emissions allocation (alias for compatibility)
+     */
+    function mintEmissions(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) whenNotPaused {
+        _mintEmissions(_to, _amount);
+    }
+    
+    /**
+     * @notice Mint tokens from immediate allocation (team, treasury, etc.)
+     * @dev Only owner can call
+     * @param _to Recipient address  
+     * @param _amount Amount to mint
+     */
+    function mintImmediate(address _to, uint256 _amount) external onlyOwner whenNotPaused {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (totalMintedImmediate + _amount > IMMEDIATE_ALLOCATION) revert ExceedsImmediateAllocation();
+        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            if (!globalSupplyRegistry.canMint(_amount)) revert GlobalCapExceeded();
+        }
+        
+        totalMintedImmediate += _amount;
+        _mint(_to, _amount);
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordMint(_amount);
+        }
+        
+        emit ImmediateMinted(_to, _amount, totalMintedImmediate);
+    }
+    
+    // ============ Migration Functions ============
+    
+    /**
+     * @notice Migrate token balances from old contract (one-time operation)
+     * @dev Only owner can call. Used to migrate ~12.8M tokens from old contract.
+     * @dev Counts migrated tokens against emissions allocation to preserve tokenomics.
+     * @param recipients Array of recipient addresses
+     * @param amounts Array of amounts to mint to each recipient
+     */
+    function migrateMint(
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external onlyOwner {
+        if (migrationComplete) revert MigrationAlreadyComplete();
+        if (recipients.length != amounts.length) revert LengthMismatch();
+        
+        for (uint256 i = 0; i < recipients.length; i++) {
+            if (recipients[i] == address(0)) revert ZeroAddress();
+            if (amounts[i] == 0) continue; // Skip zero amounts
+
+            totalMigrated += amounts[i];
+            if (totalMigrated > MAX_MIGRATION_AMOUNT) revert ExceedsMigrationCap();
+            
+            if (totalSupply() + amounts[i] > MAX_SUPPLY) revert ExceedsMaxSupply();
+            if (totalMintedEmissions + amounts[i] > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
+
+            if (address(globalSupplyRegistry) != address(0)) {
+                if (!globalSupplyRegistry.canMint(amounts[i])) revert GlobalCapExceeded();
+                globalSupplyRegistry.recordMint(amounts[i]);
+            }
+            
+            totalMintedEmissions += amounts[i];
+            _mint(recipients[i], amounts[i]);
+            
+            emit BalanceMigrated(recipients[i], amounts[i]);
+        }
+    }
+    
+    /**
+     * @notice Complete the migration and prevent further migration mints
+     * @dev Only owner can call. Should be called after all balances are migrated.
+     */
+    function completeMigration() external onlyOwner {
+        if (migrationComplete) revert MigrationAlreadyComplete();
+        migrationComplete = true;
+        emit MigrationCompleted(totalMintedEmissions);
+    }
+    
+    /**
+     * @notice Burn tokens from sender's balance
+     * @param _amount Amount to burn
+     */
+    function burn(uint256 _amount) external whenNotPaused {
+        if (_amount == 0) revert ZeroAmount();
+        _burn(msg.sender, _amount);
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordBurn(_amount);
+        }
+    }
+    
+    /**
+     * @notice Burn tokens from specified address (with approval)
+     * @param _from Address to burn from
+     * @param _amount Amount to burn
+     */
+    function burnFrom(address _from, uint256 _amount) external whenNotPaused {
+        if (_amount == 0) revert ZeroAmount();
+        _spendAllowance(_from, msg.sender, _amount);
+        _burn(_from, _amount);
+        
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordBurn(_amount);
+        }
+    }
+    
+    // ============ Admin Functions ============
+    
+    function pause() external onlyRole(PAUSER_ROLE) {
+        _pause();
+    }
+    
+    function unpause() external onlyRole(PAUSER_ROLE) {
+        _unpause();
+    }
+    
+    function setBurnFee(uint256 _newFee) external onlyOwner {
+        if (_newFee > 1000) revert FeeTooHigh(); // Max 10%
+        uint256 oldFee = burnFee;
+        burnFee = _newFee;
+        emit BurnFeeUpdated(oldFee, _newFee);
+    }
+    
+    function setFeeRecipient(address _newRecipient) external onlyOwner {
+        if (_newRecipient == address(0)) revert ZeroAddress();
+        address oldRecipient = feeRecipient;
+        feeRecipient = _newRecipient;
+        emit FeeRecipientUpdated(oldRecipient, _newRecipient);
+    }
+    
+    function setGlobalSupplyRegistry(address _registry) external onlyOwner {
+        if (_registry == address(0)) revert ZeroAddress();
+        require(_registry.code.length > 0, "Registry must be a contract");
+        address previous = address(globalSupplyRegistry);
+        globalSupplyRegistry = IGlobalSupplyRegistry(_registry);
+        emit GlobalSupplyRegistryUpdated(previous, _registry);
+    }
+    
+    /**
+     * @notice Set the contract metadata URI (ERC-7572)
+     * @param _contractURI URI pointing to JSON metadata (logo, description, etc.)
+     * @dev Can be IPFS, HTTPS, or data URI. Example: "ipfs://Qm..." or "https://myntis.com/metadata.json"
+     * @dev JSON format: { "name": "Myntis", "symbol": "MYNT", "image": "ipfs://...", "description": "..." }
+     */
+    function setContractURI(string calldata _contractURI) external onlyOwner {
+        string memory oldURI = contractURI;
+        contractURI = _contractURI;
+        emit ContractURIUpdated(oldURI, _contractURI);
+    }
+    
+    // ============ View Functions ============
+    
+    function remainingEmissions() external view returns (uint256) {
+        return EMISSIONS_ALLOCATION - totalMintedEmissions;
+    }
+    
+    function remainingImmediate() external view returns (uint256) {
+        return IMMEDIATE_ALLOCATION - totalMintedImmediate;
+    }
+    
+    function isHub() external pure returns (bool) {
+        return true;
+    }
+    
+    function getContractInfo() external view returns (
+        string memory name_,
+        string memory symbol_,
+        uint256 totalSupply_,
+        uint256 maxSupply_,
+        uint256 emissionsMinted_,
+        uint256 immediateMinted_,
+        bool paused_
+    ) {
+        return (
+            name(),
+            symbol(),
+            totalSupply(),
+            MAX_SUPPLY,
+            totalMintedEmissions,
+            totalMintedImmediate,
+            paused()
+        );
+    }
+
+    function _mintEmissions(address _to, uint256 _amount) internal {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (totalMintedEmissions + _amount > EMISSIONS_ALLOCATION) revert ExceedsEmissionsAllocation();
+        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        
+        // Check global supply cap
+        if (address(globalSupplyRegistry) != address(0)) {
+            if (!globalSupplyRegistry.canMint(_amount)) revert GlobalCapExceeded();
+        }
+        
+        totalMintedEmissions += _amount;
+        _mint(_to, _amount);
+        
+        // Record in global registry
+        if (address(globalSupplyRegistry) != address(0)) {
+            globalSupplyRegistry.recordMint(_amount);
+        }
+        
+        emit EmissionsMinted(_to, _amount, totalMintedEmissions);
+    }
+}
+
+/* ==== token/contracts/MyntisOFTSpoke.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import { OFT } from "@layerzerolabs/oft-evm/contracts/OFT.sol";
+import {
+    MessagingParams,
+    MessagingReceipt,
+    MessagingFee
+} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Pausable } from "@openzeppelin/contracts/utils/Pausable.sol";
+import { AccessControl } from "@openzeppelin/contracts/access/AccessControl.sol";
+
+/**
+ * @title MyntisOFTSpoke
+ * @notice Spoke-side Myntis OFT token for non-hub chains
+ * @dev Proper LayerZero V2 OFT implementation
+ * @dev Compatible with MyntisOFT hub on Base
+ * 
+ * Key differences from Hub:
+ * - MINTER_ROLE allows SpokeDistributor to mint tokens for claims
+ * - AccessControl for role-based permissions
+ * - Same OFT standard = full compatibility
+ */
+contract MyntisOFTSpoke is OFT, Pausable, AccessControl {
+    
+    // ============ Roles ============
+    bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    
+    // ============ State ============
+    uint32 public immutable hubChainEid;   // LayerZero EID of hub chain (Base)
+    uint32 public immutable localChainEid; // LayerZero EID of this spoke chain
+
+    struct SupplyUpdate {
+        uint32 chainId;
+        uint256 supplyDelta;
+        uint256 newTotalSupply;
+        uint256 nonce;
+    }
+
+    struct QuotaRequest {
+        uint32 chainId;
+        uint256 requestedQuota;
+        uint256 newTotalSupply;
+        uint256 nonce;
+        uint256 consumedQuota;
+    }
+
+    // Registry + quota tracking
+    uint256 public supplyUpdateNonce;
+    uint256 public mintQuota;
+    address public quotaReceiver;
+    uint256 public quotaReceiverUpdateDelay;
+    address public pendingQuotaReceiver;
+    uint256 public pendingQuotaReceiverEta;
+    uint256 public quotaConsumedSinceLastRequest;
+    uint256 public pendingQuotaRequestNonce;
+    uint256 public pendingQuotaConsumed;
+    bytes32 public registryPeer; // GlobalSupplyRegistry address on hub chain
+
+    // Optional auto-reporting of supply updates
+    bool public autoReportSupply;
+    bytes public supplyUpdateOptions;
+    address public supplyUpdateRefundAddress;
+    
+    // SECURITY FIX: Track total emergency mints
+    uint256 public totalEmergencyMinted;
+    bool public enforceSupplyReporting;
+    uint256 public maxQuotaIncrease;
+    
+    // ============ Constants ============
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 1e18; // 1B global cap
+    uint256 public constant EMERGENCY_MINT_LIMIT = 1_000_000 * 1e18; // 1M per tx limit
+    uint256 public constant MAX_TOTAL_EMERGENCY = 10_000_000 * 1e18; // 10M lifetime cap
+    
+    // ============ Events ============
+    event EmergencyMint(address indexed to, uint256 amount, string reason);
+    event EmergencyBurn(address indexed from, uint256 amount, string reason);
+    event SupplyChangeRequiresReporting(uint256 newTotalSupply, uint32 hubChainEid);
+    event SupplyUpdateSkipped(uint32 indexed chainId, uint256 totalSupply, uint256 requiredFee, uint256 availableBalance);
+    event SupplyUpdateOptionsSet(bytes options, address refundAddress);
+    event AutoReportSupplyUpdated(bool enabled);
+    event MintQuotaIncreased(uint256 amount, uint256 newQuota);
+    event MintQuotaUsed(uint256 amount, uint256 remainingQuota);
+    event QuotaReceiverUpdated(address indexed oldReceiver, address indexed newReceiver);
+    event QuotaReceiverUpdateScheduled(address indexed newReceiver, uint256 eta);
+    event QuotaReceiverUpdateDelayUpdated(uint256 oldDelay, uint256 newDelay);
+    event PendingQuotaRequestCleared(uint256 nonce, uint256 consumed);
+    event MaxQuotaIncreaseUpdated(uint256 oldValue, uint256 newValue);
+    event SupplyReportingEnforcedUpdated(bool enabled);
+    
+    // ============ Errors ============
+    error ZeroAddress();
+    error ZeroAmount();
+    error ExceedsEmergencyLimit();
+    error ExceedsTotalEmergencyLimit();
+    error ExceedsMaxSupply();
+    error InvalidEndpoint();
+    error RegistryNotSet();
+    error InvalidQuotaReceiver();
+    error UnauthorizedQuotaReceiver();
+    error InvalidQuotaNonce();
+    error InsufficientFee(uint256 required, uint256 provided);
+    error InsufficientReportingFee(uint256 required, uint256 available);
+    error QuotaExceeded(uint256 requested, uint256 available);
+    error QuotaIncreaseTooLarge(uint256 requested, uint256 max);
+    error PendingQuotaRequest(uint256 nonce);
+    error NoPendingQuotaRequest();
+    error NoPendingQuotaReceiver();
+    error QuotaReceiverUpdateNotReady(uint256 eta);
+    error SupplyReportingDisabled();
+    error SupplyReportingConfigMissing();
+
+    uint8 public constant MSG_SUPPLY_UPDATE = 1;
+    uint8 public constant MSG_QUOTA_REQUEST = 2;
+    
+    /**
+     * @notice Constructor for MyntisOFTSpoke
+     * @param _lzEndpoint LayerZero V2 endpoint address on this chain
+     * @param _delegate Admin/owner address
+     * @param _hubChainEid LayerZero EID of the hub chain (Base)
+     */
+    constructor(
+        address _lzEndpoint,
+        address _delegate,
+        uint32 _hubChainEid,
+        uint32 _localChainEid
+    ) OFT("Myntis", "MYNT", _lzEndpoint, _delegate) Ownable(_delegate) {
+        if (_lzEndpoint == address(0)) revert InvalidEndpoint();
+        if (_delegate == address(0)) revert ZeroAddress();
+        if (_hubChainEid == 0 || _localChainEid == 0) revert InvalidEndpoint();
+        hubChainEid = _hubChainEid;
+        localChainEid = _localChainEid;
+        
+        // Grant admin role to delegate for role management
+        _grantRole(DEFAULT_ADMIN_ROLE, _delegate);
+        quotaReceiverUpdateDelay = 1 days;
+        enforceSupplyReporting = true;
+        maxQuotaIncrease = 50_000_000 * 1e18;
+    }
+    
+    // ============ Minting (MINTER_ROLE) ============
+    
+    /**
+     * @notice Mint tokens - used by SpokeDistributor for reward claims
+     * @dev Requires MINTER_ROLE (granted to SpokeDistributor)
+     * @param _to Recipient address
+     * @param _amount Amount to mint
+     */
+    function mint(address _to, uint256 _amount) external onlyRole(MINTER_ROLE) whenNotPaused {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        _consumeQuota(_amount);
+        _mint(_to, _amount);
+        _notifySupplyChange();
+    }
+    
+    // ============ Emergency Functions (Admin Only) ============
+    
+    /**
+     * @notice Emergency mint - ONLY for bridge recovery scenarios
+     * @dev Should almost never be used - OFT handles minting automatically
+     * @dev Limited to 1M tokens per transaction and 10M total lifetime
+     * @dev SECURITY FIX: Added global cap and supply reporting
+     * @param _to Recipient address
+     * @param _amount Amount to mint (max 1M per tx, 10M total)
+     * @param _reason Reason for emergency mint (logged)
+     */
+    function emergencyMint(
+        address _to, 
+        uint256 _amount, 
+        string calldata _reason
+    ) external onlyOwner {
+        if (_to == address(0)) revert ZeroAddress();
+        if (_amount == 0) revert ZeroAmount();
+        if (_amount > EMERGENCY_MINT_LIMIT) revert ExceedsEmergencyLimit();
+        if (totalSupply() + _amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        
+        // SECURITY FIX: Check lifetime cap
+        if (totalEmergencyMinted + _amount > MAX_TOTAL_EMERGENCY) {
+            revert ExceedsTotalEmergencyLimit();
+        }
+        
+        // SECURITY FIX: Track total emergency mints
+        totalEmergencyMinted += _amount;
+        _consumeQuota(_amount);
+        _mint(_to, _amount);
+        emit EmergencyMint(_to, _amount, _reason);
+
+        // SECURITY FIX: Emit supply change for registry sync
+        _notifySupplyChange();
+    }
+    
+    /**
+     * @notice Emergency burn from owner's own balance
+     * @dev Only owner can burn their own tokens in emergency
+     * @dev Cannot burn from other addresses (security)
+     * @param _amount Amount to burn
+     * @param _reason Reason for emergency burn (logged)
+     */
+    function emergencyBurn(
+        uint256 _amount, 
+        string calldata _reason
+    ) external onlyOwner {
+        if (_amount == 0) revert ZeroAmount();
+        
+        _burn(msg.sender, _amount);
+        emit EmergencyBurn(msg.sender, _amount, _reason);
+        _notifySupplyChange();
+    }
+    
+    // ============ User Functions ============
+    
+    /**
+     * @notice Burn tokens from sender's balance
+     * @param _amount Amount to burn
+     */
+    function burn(uint256 _amount) external whenNotPaused {
+        _burn(msg.sender, _amount);
+        _notifySupplyChange();
+    }
+    
+    /**
+     * @notice Burn tokens from specified address (with approval)
+     * @param _from Address to burn from
+     * @param _amount Amount to burn
+     */
+    function burnFrom(address _from, uint256 _amount) external whenNotPaused {
+        _spendAllowance(_from, msg.sender, _amount);
+        _burn(_from, _amount);
+        _notifySupplyChange();
+    }
+
+    // ============ Registry / Quota Config ============
+
+    function setRegistryPeer(bytes32 _registryPeer) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        registryPeer = _registryPeer;
+    }
+
+    function setSupplyUpdateOptions(bytes calldata options, address refundAddress) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (refundAddress == address(0)) revert ZeroAddress();
+        supplyUpdateOptions = options;
+        supplyUpdateRefundAddress = refundAddress;
+        emit SupplyUpdateOptionsSet(options, refundAddress);
+    }
+
+    function setAutoReportSupply(bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        autoReportSupply = enabled;
+        emit AutoReportSupplyUpdated(enabled);
+    }
+
+    function setEnforceSupplyReporting(bool enabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        enforceSupplyReporting = enabled;
+        emit SupplyReportingEnforcedUpdated(enabled);
+    }
+
+    function setMaxQuotaIncrease(uint256 newMax) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        require(newMax > 0, "Max quota increase zero");
+        uint256 oldValue = maxQuotaIncrease;
+        maxQuotaIncrease = newMax;
+        emit MaxQuotaIncreaseUpdated(oldValue, newMax);
+    }
+
+    function setQuotaReceiverUpdateDelay(uint256 newDelay) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        uint256 oldDelay = quotaReceiverUpdateDelay;
+        quotaReceiverUpdateDelay = newDelay;
+        emit QuotaReceiverUpdateDelayUpdated(oldDelay, newDelay);
+    }
+
+    function setQuotaReceiver(address _quotaReceiver) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (_quotaReceiver == address(0)) revert ZeroAddress();
+        if (_quotaReceiver.code.length == 0) revert InvalidQuotaReceiver();
+
+        if (quotaReceiver == address(0) || quotaReceiverUpdateDelay == 0) {
+            address oldReceiver = quotaReceiver;
+            quotaReceiver = _quotaReceiver;
+            pendingQuotaReceiver = address(0);
+            pendingQuotaReceiverEta = 0;
+            emit QuotaReceiverUpdated(oldReceiver, _quotaReceiver);
+            return;
+        }
+
+        pendingQuotaReceiver = _quotaReceiver;
+        pendingQuotaReceiverEta = block.timestamp + quotaReceiverUpdateDelay;
+        emit QuotaReceiverUpdateScheduled(_quotaReceiver, pendingQuotaReceiverEta);
+    }
+
+    function executeQuotaReceiverUpdate() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        address newReceiver = pendingQuotaReceiver;
+        if (newReceiver == address(0)) revert NoPendingQuotaReceiver();
+        if (block.timestamp < pendingQuotaReceiverEta) {
+            revert QuotaReceiverUpdateNotReady(pendingQuotaReceiverEta);
+        }
+        address oldReceiver = quotaReceiver;
+        quotaReceiver = newReceiver;
+        pendingQuotaReceiver = address(0);
+        pendingQuotaReceiverEta = 0;
+        emit QuotaReceiverUpdated(oldReceiver, newReceiver);
+    }
+
+    // ============ Registry / Quota Actions ============
+
+    function reportSupplyUpdate(
+        bytes calldata options,
+        address refundAddress
+    ) public payable returns (MessagingReceipt memory receipt) {
+        if (registryPeer == bytes32(0)) revert RegistryNotSet();
+        if (refundAddress == address(0)) revert ZeroAddress();
+
+        uint256 currentSupply = totalSupply();
+        supplyUpdateNonce++;
+
+        SupplyUpdate memory update = SupplyUpdate({
+            chainId: localChainEid,
+            supplyDelta: 0,
+            newTotalSupply: currentSupply,
+            nonce: supplyUpdateNonce
+        });
+
+        bytes memory payload = abi.encode(MSG_SUPPLY_UPDATE, update);
+        MessagingParams memory params = MessagingParams({
+            dstEid: hubChainEid,
+            receiver: registryPeer,
+            message: payload,
+            options: options,
+            payInLzToken: false
+        });
+
+        MessagingFee memory fee = endpoint.quote(params, msg.sender);
+        if (msg.value < fee.nativeFee) revert InsufficientFee(fee.nativeFee, msg.value);
+        receipt = endpoint.send{value: msg.value}(params, refundAddress);
+    }
+
+    function requestMintQuota(
+        uint256 requestedQuota,
+        bytes calldata options,
+        address refundAddress
+    ) external payable returns (MessagingReceipt memory receipt) {
+        if (registryPeer == bytes32(0)) revert RegistryNotSet();
+        if (requestedQuota == 0) revert ZeroAmount();
+        if (refundAddress == address(0)) revert ZeroAddress();
+        if (pendingQuotaRequestNonce != 0) revert PendingQuotaRequest(pendingQuotaRequestNonce);
+
+        uint256 currentSupply = totalSupply();
+        supplyUpdateNonce++;
+
+        QuotaRequest memory request = QuotaRequest({
+            chainId: localChainEid,
+            requestedQuota: requestedQuota,
+            newTotalSupply: currentSupply,
+            nonce: supplyUpdateNonce,
+            consumedQuota: quotaConsumedSinceLastRequest
+        });
+
+        bytes memory payload = abi.encode(MSG_QUOTA_REQUEST, request);
+        MessagingParams memory params = MessagingParams({
+            dstEid: hubChainEid,
+            receiver: registryPeer,
+            message: payload,
+            options: options,
+            payInLzToken: false
+        });
+
+        MessagingFee memory fee = endpoint.quote(params, msg.sender);
+        if (msg.value < fee.nativeFee) revert InsufficientFee(fee.nativeFee, msg.value);
+        receipt = endpoint.send{value: msg.value}(params, refundAddress);
+
+        pendingQuotaRequestNonce = supplyUpdateNonce;
+        pendingQuotaConsumed = quotaConsumedSinceLastRequest;
+    }
+
+    function increaseMintQuota(uint256 amount) external {
+        if (msg.sender != quotaReceiver) revert UnauthorizedQuotaReceiver();
+        if (amount > maxQuotaIncrease) revert QuotaIncreaseTooLarge(amount, maxQuotaIncrease);
+        mintQuota += amount;
+        emit MintQuotaIncreased(amount, mintQuota);
+    }
+
+    function confirmQuotaRequest(uint256 nonce) external {
+        if (msg.sender != quotaReceiver) revert UnauthorizedQuotaReceiver();
+        if (nonce != pendingQuotaRequestNonce) revert InvalidQuotaNonce();
+        if (pendingQuotaConsumed > 0 && quotaConsumedSinceLastRequest >= pendingQuotaConsumed) {
+            quotaConsumedSinceLastRequest -= pendingQuotaConsumed;
+        } else {
+            quotaConsumedSinceLastRequest = 0;
+        }
+        pendingQuotaRequestNonce = 0;
+        pendingQuotaConsumed = 0;
+    }
+
+    function clearPendingQuotaRequest() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (pendingQuotaRequestNonce == 0) revert NoPendingQuotaRequest();
+        uint256 oldNonce = pendingQuotaRequestNonce;
+        uint256 oldConsumed = pendingQuotaConsumed;
+        pendingQuotaRequestNonce = 0;
+        pendingQuotaConsumed = 0;
+        emit PendingQuotaRequestCleared(oldNonce, oldConsumed);
+    }
+    
+    // ============ Pause Functions ============
+    
+    function pause() external onlyOwner {
+        _pause();
+    }
+    
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+    
+    // ============ View Functions ============
+    
+    /**
+     * @notice Get spoke contract info
+     */
+    function getContractInfo() external view returns (
+        string memory name_,
+        string memory symbol_,
+        uint256 totalSupply_,
+        uint32 hubEid_,
+        uint32 localEid_,
+        bool paused_
+    ) {
+        return (
+            name(),
+            symbol(),
+            totalSupply(),
+            hubChainEid,
+            localChainEid,
+            paused()
+        );
+    }
+    
+    /**
+     * @notice Check if this is a hub or spoke
+     * @return isHub Always false for spoke contracts
+     */
+    function isHub() external pure returns (bool) {
+        return false;
+    }
+    
+    // ============ Override for Pausable ============
+    
+    /**
+     * @notice Override _debit to check pause state before cross-chain send
+     */
+    function _debit(
+        address _from,
+        uint256 _amountLD,
+        uint256 _minAmountLD,
+        uint32 _dstEid
+    ) internal virtual override whenNotPaused returns (uint256 amountSentLD, uint256 amountReceivedLD) {
+        (amountSentLD, amountReceivedLD) = super._debit(_from, _amountLD, _minAmountLD, _dstEid);
+        _notifySupplyChange();
+        return (amountSentLD, amountReceivedLD);
+    }
+    
+    /**
+     * @notice Override _credit to check pause state before receiving cross-chain
+     */
+    function _credit(
+        address _to,
+        uint256 _amountLD,
+        uint32 _srcEid
+    ) internal virtual override whenNotPaused returns (uint256 amountReceivedLD) {
+        if (totalSupply() + _amountLD > MAX_SUPPLY) {
+            revert ExceedsMaxSupply();
+        }
+        amountReceivedLD = super._credit(_to, _amountLD, _srcEid);
+        _notifySupplyChange();
+        return amountReceivedLD;
+    }
+
+    function _consumeQuota(uint256 amount) internal {
+        if (amount > mintQuota) {
+            revert QuotaExceeded(amount, mintQuota);
+        }
+        mintQuota -= amount;
+        quotaConsumedSinceLastRequest += amount;
+        emit MintQuotaUsed(amount, mintQuota);
+    }
+
+    function _notifySupplyChange() internal {
+        if (registryPeer == bytes32(0)) return;
+        if (enforceSupplyReporting && !autoReportSupply) {
+            revert SupplyReportingDisabled();
+        }
+        emit SupplyChangeRequiresReporting(totalSupply(), hubChainEid);
+        _maybeAutoReportSupply();
+    }
+
+    function _maybeAutoReportSupply() internal {
+        if (!autoReportSupply) return;
+        if (registryPeer == bytes32(0)) return;
+        if (supplyUpdateRefundAddress == address(0)) {
+            if (enforceSupplyReporting) revert SupplyReportingConfigMissing();
+            return;
+        }
+
+        uint256 currentSupply = totalSupply();
+        supplyUpdateNonce++;
+
+        SupplyUpdate memory update = SupplyUpdate({
+            chainId: localChainEid,
+            supplyDelta: 0,
+            newTotalSupply: currentSupply,
+            nonce: supplyUpdateNonce
+        });
+
+        bytes memory payload = abi.encode(MSG_SUPPLY_UPDATE, update);
+        MessagingParams memory params = MessagingParams({
+            dstEid: hubChainEid,
+            receiver: registryPeer,
+            message: payload,
+            options: supplyUpdateOptions,
+            payInLzToken: false
+        });
+
+        uint256 nativeFee = endpoint.quote(params, address(this)).nativeFee;
+        if (address(this).balance < nativeFee) {
+            if (enforceSupplyReporting) {
+                revert InsufficientReportingFee(nativeFee, address(this).balance);
+            }
+            emit SupplyUpdateSkipped(localChainEid, currentSupply, nativeFee, address(this).balance);
+            return;
+        }
+        endpoint.send{value: nativeFee}(params, supplyUpdateRefundAddress);
+    }
+    
+    // ============ Override for AccessControl ============
+    
+    /**
+     * @notice Override supportsInterface to support AccessControl
+     */
+    function supportsInterface(bytes4 interfaceId) public view virtual override(AccessControl) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+}
+
+/* ==== token/contracts/SimpleProxy.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+
+/**
+ * @title SimpleProxy
+ * @notice Simple wrapper around ERC1967Proxy for easy deployment
+ */
+contract SimpleProxy is ERC1967Proxy {
+    constructor(address implementation, bytes memory data) 
+        ERC1967Proxy(implementation, data) 
+    {}
+}
+
+/* ==== token/contracts/SpokeDistributor.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+
+/**
+ * @title ISpokeToken
+ * @notice Interface for spoke token minting
+ * @dev SECURITY FIX: Typed interface for safer minting
+ */
+interface ISpokeToken {
+    function mint(address to, uint256 amount) external;
+    function balanceOf(address account) external view returns (uint256);
+}
+
+/**
+ * @title SpokeDistributor
+ * @notice Spoke-side Merkle distributor for reward claims
+ * @dev Cross-chain safety via chainId in Merkle leaf (not global nullifier)
+ * @dev SECURITY FIX: Uses typed interface for spoke token
+ * @dev Mints tokens on claim (spoke-side minting model)
+ */
+contract SpokeDistributor is AccessControl, ReentrancyGuard {
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    bytes32 public constant PROVIDER_ROLE = keccak256("PROVIDER_ROLE");
+    
+    // SECURITY FIX: Use typed interface for spoke token
+    ISpokeToken public immutable spokeToken;
+    
+    // Claim tracking - prevent same-chain replay attacks
+    // Cross-chain protection via chainId in Merkle leaf
+    mapping(bytes32 => bool) public nullifiers;
+    mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
+    
+    // SECURITY FIX: Provider balance tracking (mirrors MerkleDistributor pattern)
+    mapping(address => uint256) public providerBalance;
+    mapping(address => uint256) public lockedBalance;
+    
+    // Provider Merkle roots
+    struct SpokeMerkleRoot {
+        bytes32 root;
+        uint256 expiry;
+        bool closed;
+        uint256 totalClaimable;
+        uint256 claimedAmount;
+    }
+    
+    mapping(address => SpokeMerkleRoot[]) public providerMerkleRoots;
+    
+    // Constants
+    uint256 public constant MIN_EXPIRY_DURATION = 1 days;
+    uint256 public constant EPOCH_GRACE_PERIOD = 2 days;
+    uint256 public constant CLOSE_DELAY = 1 hours; // SECURITY FIX: Delay after grace period
+    uint256 public constant MAX_BATCH_SIZE = 20; // SECURITY FIX: Prevent gas griefing
+    
+    // Events
+    event MerkleRootSubmitted(address indexed provider, uint256 rootIndex, bytes32 root, uint256 expiry, uint256 totalClaimable);
+    event RewardsClaimed(address indexed user, address indexed provider, uint256 rootIndex, uint256 amount, bytes32 nullifier);
+    event EpochClosed(address indexed provider, uint256 rootIndex);
+    event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
+    event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
+
+    constructor(
+        address _spokeToken,
+        address admin
+    ) {
+        require(_spokeToken != address(0), "invalid spoke token");
+        require(admin != address(0), "invalid admin");
+        
+        spokeToken = ISpokeToken(_spokeToken);
+        
+        _grantRole(ADMIN_ROLE, admin);
+    }
+
+    /**
+     * @notice Submit Merkle root for an epoch
+     * @dev Only providers can submit roots
+     * @dev SECURITY FIX: Requires provider to have sufficient balance (locked)
+     */
+    function submitMerkleRoot(
+        bytes32 root,
+        uint256 expiry,
+        uint256 totalClaimableAmount
+    ) external onlyRole(PROVIDER_ROLE) nonReentrant {
+        require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
+        require(totalClaimableAmount > 0, "zero claimable");
+        
+        // SECURITY FIX: Require provider has sufficient balance
+        require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
+        
+        // Lock the balance for this epoch
+        providerBalance[msg.sender] -= totalClaimableAmount;
+        lockedBalance[msg.sender] += totalClaimableAmount;
+
+        providerMerkleRoots[msg.sender].push(SpokeMerkleRoot({
+            root: root,
+            expiry: expiry,
+            closed: false,
+            totalClaimable: totalClaimableAmount,
+            claimedAmount: 0
+        }));
+        
+        emit MerkleRootSubmitted(msg.sender, providerMerkleRoots[msg.sender].length - 1, root, expiry, totalClaimableAmount);
+        emit LockedBalanceUpdated(msg.sender, lockedBalance[msg.sender]);
+    }
+    
+    /**
+     * @notice Add balance for a provider (hub should transfer tokens to spoke)
+     * @param provider Provider address
+     * @param amount Amount to add
+     * @dev Called by admin after verifying tokens were bridged
+     */
+    function addProviderBalance(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(amount > 0, "zero amount");
+        require(provider != address(0), "invalid provider");
+        providerBalance[provider] += amount;
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+    }
+
+    /**
+     * @notice Claim rewards using Merkle proof with nullifier verification
+     * @dev Prevents double-claiming across chains via GlobalNullifier
+     */
+    function claim(
+        address provider,
+        uint256 rootIndex,
+        uint256 amount,
+        bytes32[] calldata merkleProof,
+        bytes32 nullifier
+    ) external nonReentrant {
+        _claim(msg.sender, provider, rootIndex, amount, merkleProof, nullifier);
+    }
+
+    function _claim(
+        address claimant,
+        address provider,
+        uint256 rootIndex,
+        uint256 amount,
+        bytes32[] calldata merkleProof,
+        bytes32 nullifier
+    ) internal {
+        require(provider != address(0), "invalid provider");
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        require(amount > 0, "zero amount");
+        require(!claimed[provider][rootIndex][claimant], "already claimed");
+        bytes32 expectedNullifier = keccak256(abi.encode(claimant, amount, block.chainid, provider, rootIndex));
+        require(nullifier == expectedNullifier, "invalid nullifier");
+        require(!nullifiers[nullifier], "nullifier already used");
+
+        SpokeMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
+        require(!e.closed, "epoch closed");
+
+        // Verify Merkle proof with chainId to prevent cross-chain proof reuse
+        bytes32 leaf = keccak256(abi.encode(claimant, amount, block.chainid));
+        require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
+
+        // Ensure enough balance for this epoch
+        require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
+        
+        // Mark as claimed locally
+        claimed[provider][rootIndex][claimant] = true;
+        nullifiers[nullifier] = true;
+        e.claimedAmount += amount;
+        
+        // SECURITY FIX: Update lockedBalance
+        lockedBalance[provider] -= amount;
+        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
+
+        // SECURITY FIX: Use typed interface and verify mint
+        uint256 balBefore = spokeToken.balanceOf(claimant);
+        spokeToken.mint(claimant, amount);
+        uint256 balAfter = spokeToken.balanceOf(claimant);
+        require(balAfter >= balBefore + amount, "mint verification failed");
+
+        emit RewardsClaimed(claimant, provider, rootIndex, amount, nullifier);
+    }
+
+    /**
+     * @notice Batch claim rewards
+     * @dev SECURITY FIX: Limited to MAX_BATCH_SIZE to prevent gas griefing
+     */
+    function batchClaim(
+        address[] calldata providers,
+        uint256[] calldata rootIndices,
+        uint256[] calldata amounts,
+        bytes32[][] calldata proofs,
+        bytes32[] calldata nullifierList
+    ) external nonReentrant {
+        // SECURITY FIX: Limit batch size to prevent gas griefing
+        require(providers.length <= MAX_BATCH_SIZE, "Batch too large");
+        require(
+            providers.length == rootIndices.length &&
+            rootIndices.length == amounts.length &&
+            amounts.length == proofs.length &&
+            proofs.length == nullifierList.length,
+            "Arrays length mismatch"
+        );
+
+        for (uint256 i = 0; i < providers.length; i++) {
+            _claim(msg.sender, providers[i], rootIndices[i], amounts[i], proofs[i], nullifierList[i]);
+        }
+    }
+
+    /**
+     * @notice Close an epoch and return unclaimed funds
+     * @dev Only admin can close epochs
+     * @dev SECURITY FIX: Returns unclaimed balance to provider
+     * @dev SECURITY FIX: Added CLOSE_DELAY for consistency with other distributors
+     */
+    function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        SpokeMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        require(!e.closed, "already closed");
+        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD + CLOSE_DELAY, "close delay not over");
+        
+        e.closed = true;
+        
+        // SECURITY FIX: Return unclaimed balance to provider
+        if (e.totalClaimable > e.claimedAmount) {
+            uint256 unclaimed = e.totalClaimable - e.claimedAmount;
+            lockedBalance[provider] -= unclaimed;
+            providerBalance[provider] += unclaimed;
+            emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+        }
+        
+        emit EpochClosed(provider, rootIndex);
+    }
+    
+    /**
+     * @notice Get provider's available balance
+     */
+    function getProviderBalance(address provider) external view returns (uint256) {
+        return providerBalance[provider];
+    }
+    
+    /**
+     * @notice Get provider's locked balance
+     */
+    function getLockedBalance(address provider) external view returns (uint256) {
+        return lockedBalance[provider];
+    }
+
+    /**
+     * @notice Check if user has claimed from specific epoch
+     */
+    function hasClaimed(address provider, uint256 rootIndex, address user) external view returns (bool) {
+        return claimed[provider][rootIndex][user];
+    }
+
+    /**
+     * @notice Check if nullifier has been used
+     */
+    function isNullifierUsed(bytes32 nullifier) external view returns (bool) {
+        return nullifiers[nullifier];
+    }
+
+    /**
+     * @notice Get epoch info
+     */
+    function getEpochInfo(address provider, uint256 rootIndex) external view returns (
+        bytes32 root,
+        uint256 expiry,
+        bool closed,
+        uint256 totalClaimable,
+        uint256 claimedAmount
+    ) {
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        SpokeMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        return (e.root, e.expiry, e.closed, e.totalClaimable, e.claimedAmount);
+    }
+}
+
+/* ==== token/contracts/SpokeQuotaReceiver.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {
+    ILayerZeroEndpointV2,
+    Origin
+} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+
+interface ISpokeQuotaToken {
+    function increaseMintQuota(uint256 amount) external;
+    function confirmQuotaRequest(uint256 nonce) external;
+}
+
+/**
+ * @title SpokeQuotaReceiver
+ * @notice Receives quota updates from GlobalSupplyRegistry via LayerZero
+ */
+contract SpokeQuotaReceiver is AccessControl {
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+
+    uint8 public constant MSG_QUOTA_UPDATE = 3;
+
+    ILayerZeroEndpointV2 public immutable endpoint;
+    uint32 public immutable hubChainId;
+    bytes32 public registryPeer;
+    address public spokeToken;
+    uint256 public lastQuotaNonce;
+
+    event RegistryPeerUpdated(bytes32 indexed oldPeer, bytes32 indexed newPeer);
+    event SpokeTokenUpdated(address indexed oldToken, address indexed newToken);
+    event QuotaReceived(uint256 amount, uint256 newNonce);
+
+    struct QuotaUpdate {
+        uint32 chainId;
+        uint256 grantedQuota;
+        uint256 nonce;
+    }
+
+    constructor(
+        address _endpoint,
+        uint32 _hubChainId,
+        bytes32 _registryPeer,
+        address _spokeToken,
+        address admin
+    ) {
+        require(_endpoint != address(0), "SpokeQuotaReceiver: endpoint zero");
+        require(_hubChainId != 0, "SpokeQuotaReceiver: hub chain zero");
+        require(_registryPeer != bytes32(0), "SpokeQuotaReceiver: registry peer zero");
+        require(_spokeToken != address(0), "SpokeQuotaReceiver: spoke token zero");
+        require(_spokeToken.code.length > 0, "SpokeQuotaReceiver: spoke token not contract");
+        require(admin != address(0), "SpokeQuotaReceiver: admin zero");
+
+        endpoint = ILayerZeroEndpointV2(_endpoint);
+        hubChainId = _hubChainId;
+        registryPeer = _registryPeer;
+        spokeToken = _spokeToken;
+
+        _grantRole(ADMIN_ROLE, admin);
+    }
+
+    function setRegistryPeer(bytes32 _registryPeer) external onlyRole(ADMIN_ROLE) {
+        require(_registryPeer != bytes32(0), "SpokeQuotaReceiver: registry peer zero");
+        bytes32 oldPeer = registryPeer;
+        registryPeer = _registryPeer;
+        emit RegistryPeerUpdated(oldPeer, _registryPeer);
+    }
+
+    function setSpokeToken(address _spokeToken) external onlyRole(ADMIN_ROLE) {
+        require(_spokeToken != address(0), "SpokeQuotaReceiver: spoke token zero");
+        require(_spokeToken.code.length > 0, "SpokeQuotaReceiver: spoke token not contract");
+        address oldToken = spokeToken;
+        spokeToken = _spokeToken;
+        emit SpokeTokenUpdated(oldToken, _spokeToken);
+    }
+
+    function lzReceive(
+        Origin calldata origin,
+        address receiver,
+        bytes32 /* guid */,
+        bytes calldata message,
+        bytes calldata /* extraData */
+    ) external payable {
+        require(msg.sender == address(endpoint), "SpokeQuotaReceiver: invalid endpoint");
+        require(receiver == address(this), "SpokeQuotaReceiver: invalid receiver");
+        require(origin.srcEid == hubChainId, "SpokeQuotaReceiver: invalid source");
+        require(origin.sender == registryPeer, "SpokeQuotaReceiver: invalid peer");
+
+        uint8 msgType;
+        assembly {
+            msgType := byte(31, calldataload(message.offset))
+        }
+        require(msgType == MSG_QUOTA_UPDATE, "SpokeQuotaReceiver: invalid msg type");
+
+        (, QuotaUpdate memory update) = abi.decode(message, (uint8, QuotaUpdate));
+        require(update.chainId == uint32(block.chainid), "SpokeQuotaReceiver: chain mismatch");
+        require(update.nonce > lastQuotaNonce, "SpokeQuotaReceiver: stale quota");
+
+        lastQuotaNonce = update.nonce;
+        ISpokeQuotaToken(spokeToken).increaseMintQuota(update.grantedQuota);
+        // Acknowledge the request so the spoke can roll its consumed counter forward.
+        try ISpokeQuotaToken(spokeToken).confirmQuotaRequest(update.nonce) {} catch {}
+        emit QuotaReceived(update.grantedQuota, update.nonce);
+    }
+}
+
+/* ==== token/contracts/ZKMerkleDistributor.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+
+/**
+ * @notice Interface for Groth16 verifier contract generated by snarkjs
+ */
+interface IGroth16Verifier {
+    function verifyProof(
+        uint256[2] calldata a,
+        uint256[2][2] calldata b,
+        uint256[2] calldata c,
+        uint256[3] calldata input
+    ) external view returns (bool);
+}
+
+/**
+ * @title ZKMerkleDistributor
+ * @notice Provider-side ZK-verified Merkle distributor for reward claims
+ * @dev Providers submit Merkle roots with ZK proofs proving honest reward calculation
+ * @dev Users claim with simple Merkle proofs (no user-side ZK required)
+ * 
+ * Architecture:
+ * - Provider generates ONE ZK proof per epoch proving:
+ *   1. AI scores/multipliers are within valid bounds
+ *   2. Total reward amount is reasonable
+ *   3. Batch data commitment binds to Merkle root
+ * - Users claim with standard Merkle proofs (~50k gas vs ~280k with user ZK)
+ * - Privacy: Hides provider's AI strategy, not individual user addresses
+ */
+contract ZKMerkleDistributor is AccessControl, ReentrancyGuard {
+    using SafeERC20 for IERC20;
+
+    bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
+    bytes32 public constant PROVIDER_ROLE = keccak256("PROVIDER_ROLE");
+    
+    // Token contract
+    IERC20 public immutable token;
+    
+    // ZK verifier contract (for provider batch proofs)
+    IGroth16Verifier public batchVerifier;
+    
+    // Provider balances and locked amounts
+    // providerBalance: tokens available for new epochs
+    // lockedBalance: tokens reserved for active epochs
+    mapping(address => uint256) public providerBalance;
+    mapping(address => uint256) public lockedBalance;
+    
+    // OPTION B: Staking contract authorized to fund provider balances
+    address public stakingContract;
+    
+    // Epoch management
+    struct EpochMerkleRoot {
+        bytes32 root;
+        uint256 expiry;
+        bool closed;
+        uint256 totalClaimable;
+        uint256 claimedAmount;
+        bool providerProofVerified; // Whether provider's ZK proof was verified
+        bytes32 batchHash; // Hash of batch data for verification
+    }
+    
+    mapping(address => EpochMerkleRoot[]) public providerMerkleRoots;
+    mapping(address => mapping(uint256 => mapping(address => bool))) public claimed;
+    
+    // Slash recipient (receives tokens when provider is slashed)
+    address public slashRecipient;
+    
+    // Constants
+    uint256 public constant MIN_EXPIRY_DURATION = 1 days;
+    uint256 public constant EPOCH_GRACE_PERIOD = 2 days;
+    uint256 public constant CLOSE_DELAY = 1 hours;
+    uint256 public constant MAX_BATCH_SIZE = 50; // Batch claim limit
+
+    // Verifier update timelock (governance hardening)
+    uint256 public verifierUpdateDelay;
+    address public pendingBatchVerifier;
+    uint256 public pendingBatchVerifierEta;
+    
+    // Events
+    event ProviderBalanceUpdated(address indexed provider, uint256 newBalance);
+    event MerkleRootSubmitted(
+        address indexed provider, 
+        uint256 rootIndex, 
+        bytes32 root, 
+        uint256 expiry, 
+        uint256 totalClaimable,
+        bytes32 batchHash
+    );
+    event RewardsClaimed(
+        address indexed user, 
+        address indexed provider, 
+        uint256 rootIndex, 
+        uint256 amount
+    );
+    event EpochClosed(address indexed provider, uint256 rootIndex);
+    event ProviderSlashed(address indexed provider, uint256 amount);
+    event LockedBalanceUpdated(address indexed provider, uint256 newLockedBalance);
+    event StakingContractUpdated(address indexed stakingContract);
+    event SlashRecipientUpdated(address indexed oldRecipient, address indexed newRecipient);
+    event BatchVerifierUpdated(address indexed oldVerifier, address indexed newVerifier);
+    event BatchVerifierUpdateScheduled(address indexed newVerifier, uint256 eta);
+    event VerifierUpdateDelayUpdated(uint256 oldDelay, uint256 newDelay);
+    
+    constructor(address _token, address _batchVerifier, address admin) {
+        require(_token != address(0), "Invalid token address");
+        require(_batchVerifier != address(0), "Invalid verifier address");
+        require(admin != address(0), "Invalid admin address");
+        
+        token = IERC20(_token);
+        batchVerifier = IGroth16Verifier(_batchVerifier);
+        _grantRole(ADMIN_ROLE, admin);
+        verifierUpdateDelay = 1 days;
+    }
+
+    /**
+     * @notice Update the ZK verifier contract (admin only)
+     * @param _batchVerifier New verifier address
+     */
+    function setBatchVerifier(address _batchVerifier) external onlyRole(ADMIN_ROLE) {
+        require(_batchVerifier != address(0), "Invalid verifier address");
+        if (verifierUpdateDelay == 0) {
+            _applyBatchVerifier(_batchVerifier);
+            return;
+        }
+
+        pendingBatchVerifier = _batchVerifier;
+        pendingBatchVerifierEta = block.timestamp + verifierUpdateDelay;
+        emit BatchVerifierUpdateScheduled(_batchVerifier, pendingBatchVerifierEta);
+    }
+
+    /**
+     * @notice Schedule or execute verifier updates with a delay
+     */
+    function executeBatchVerifierUpdate() external onlyRole(ADMIN_ROLE) {
+        require(pendingBatchVerifier != address(0), "No pending verifier");
+        require(block.timestamp >= pendingBatchVerifierEta, "Verifier update not ready");
+        _applyBatchVerifier(pendingBatchVerifier);
+        pendingBatchVerifier = address(0);
+        pendingBatchVerifierEta = 0;
+    }
+
+    /**
+     * @notice Update verifier delay (0 = immediate)
+     */
+    function setVerifierUpdateDelay(uint256 newDelay) external onlyRole(ADMIN_ROLE) {
+        uint256 oldDelay = verifierUpdateDelay;
+        verifierUpdateDelay = newDelay;
+        emit VerifierUpdateDelayUpdated(oldDelay, newDelay);
+    }
+
+    function _applyBatchVerifier(address _batchVerifier) internal {
+        address oldVerifier = address(batchVerifier);
+        batchVerifier = IGroth16Verifier(_batchVerifier);
+        emit BatchVerifierUpdated(oldVerifier, _batchVerifier);
+    }
+    
+    /**
+     * @notice Set the slash recipient address
+     * @param _slashRecipient Address to receive slashed tokens
+     */
+    function setSlashRecipient(address _slashRecipient) external onlyRole(ADMIN_ROLE) {
+        require(_slashRecipient != address(0), "invalid slash recipient");
+        address oldRecipient = slashRecipient;
+        slashRecipient = _slashRecipient;
+        emit SlashRecipientUpdated(oldRecipient, _slashRecipient);
+    }
+    
+    /**
+     * @notice Set the staking contract authorized to fund provider balances
+     * @param _stakingContract Staking contract address
+     * @dev OPTION B: Staking contract can call notifyRewardWithTransfer
+     */
+    function setStakingContract(address _stakingContract) external onlyRole(ADMIN_ROLE) {
+        require(_stakingContract != address(0), "invalid staking");
+        stakingContract = _stakingContract;
+        emit StakingContractUpdated(_stakingContract);
+    }
+    
+    /**
+     * @notice Add balance for a provider (admin/emergency funding)
+     * @param provider Provider address
+     * @param amount Amount to add
+     * @dev HUB CHAIN ARCHITECTURE:
+     *      - Tokens are held in this contract (NOT burned)
+     *      - providerBalance tracks how much provider can distribute
+     *      - Users claim via transfer from contract holdings
+     *      - For spoke chains, use SpokeDistributor which mints tokens
+     */
+    function addProviderBalance(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(amount > 0, "zero amount");
+        require(provider != address(0), "invalid provider");
+        
+        // Transfer tokens from sender to this contract and HOLD them
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
+        // Update accounting (tokens are held in contract for claims)
+        providerBalance[provider] += amount;
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+    }
+    
+    /**
+     * @notice Notify reward with token transfer (OPTION B: staking-authorized funding)
+     * @param provider Provider address to fund
+     * @param amount Amount to add to provider balance
+     * @dev Only stakingContract can call this to fund provider balances automatically
+     * @dev Staking contract must approve tokens before calling
+     */
+    function notifyRewardWithTransfer(address provider, uint256 amount) external {
+        require(msg.sender == stakingContract, "unauthorised notifier");
+        require(amount > 0, "zero amount");
+        require(provider != address(0), "invalid provider");
+        
+        // Pull tokens from staking contract
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
+        // Update provider balance
+        providerBalance[provider] += amount;
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+    }
+    
+    /**
+     * @notice Deposit tokens to fund your own provider balance
+     * @param amount Amount to deposit
+     * @dev Allows providers to deposit their harvested rewards without needing ADMIN_ROLE
+     * @dev Provider must approve this contract first, then call depositBalance
+     * @dev HUB CHAIN: Tokens are held in contract (NOT burned)
+     */
+    function depositBalance(uint256 amount) external onlyRole(PROVIDER_ROLE) {
+        require(amount > 0, "zero amount");
+        
+        // Transfer tokens from provider to this contract
+        token.safeTransferFrom(msg.sender, address(this), amount);
+        
+        // Update accounting for the calling provider
+        providerBalance[msg.sender] += amount;
+        emit ProviderBalanceUpdated(msg.sender, providerBalance[msg.sender]);
+    }
+    
+    /**
+     * @notice Submit Merkle root with provider ZK proof
+     * @param claimMerkleRoot Merkle root for user claims (keccak256)
+     * @param expiry Expiry timestamp
+     * @param totalClaimableAmount Total claimable amount
+     * @param proofA Groth16 proof component A
+     * @param proofB Groth16 proof component B
+     * @param proofC Groth16 proof component C
+     * @param publicInputs Public inputs [zkMerkleRoot, totalAmount, batchHash]
+     * @dev Provider's ZK proof proves:
+     *      - AI scores/multipliers are within valid bounds (0-100, 10-10000)
+     *      - Total amount equals sum of individual amounts
+     *      - Batch hash commits to all batch data
+     * @dev claimMerkleRoot (keccak256) is separate from zkMerkleRoot (Poseidon)
+     *      - zkMerkleRoot in publicInputs[0] is verified by ZK proof
+     *      - claimMerkleRoot is stored for user claims with keccak256 proofs
+     */
+    function submitMerkleRoot(
+        bytes32 claimMerkleRoot,
+        uint256 expiry,
+        uint256 totalClaimableAmount,
+        uint256[2] calldata proofA,
+        uint256[2][2] calldata proofB,
+        uint256[2] calldata proofC,
+        uint256[3] calldata publicInputs
+    ) external nonReentrant onlyRole(PROVIDER_ROLE) {
+        require(providerBalance[msg.sender] >= totalClaimableAmount, "Insufficient balance for claims");
+        require(expiry > block.timestamp + MIN_EXPIRY_DURATION, "expiry too soon");
+        require(totalClaimableAmount > 0, "zero claimable");
+        
+        // Verify public inputs match submitted values
+        // publicInputs[0] = zkMerkleRoot (Poseidon hash - verified by ZK proof)
+        // publicInputs[1] = totalAmount
+        // publicInputs[2] = batchHash
+        // NOTE: claimMerkleRoot (keccak256) is separate from zkMerkleRoot (Poseidon)
+        // The ZK proof verifies aggregate batch statistics, claimMerkleRoot is for user claims
+        require(publicInputs[1] == totalClaimableAmount, "Amount mismatch");
+        
+        // ACTUALLY VERIFY THE ZK PROOF
+        bool proofValid = batchVerifier.verifyProof(proofA, proofB, proofC, publicInputs);
+        require(proofValid, "Invalid batch ZK proof");
+        
+        // Lock the balance for this epoch
+        providerBalance[msg.sender] -= totalClaimableAmount;
+        lockedBalance[msg.sender] += totalClaimableAmount;
+        
+        providerMerkleRoots[msg.sender].push(EpochMerkleRoot({
+            root: claimMerkleRoot,  // keccak256 root for user claims
+            expiry: expiry,
+            closed: false,
+            totalClaimable: totalClaimableAmount,
+            claimedAmount: 0,
+            providerProofVerified: true,
+            batchHash: bytes32(publicInputs[2])
+        }));
+        
+        emit MerkleRootSubmitted(
+            msg.sender, 
+            providerMerkleRoots[msg.sender].length - 1, 
+            claimMerkleRoot,
+            expiry, 
+            totalClaimableAmount,
+            bytes32(publicInputs[2])
+        );
+    }
+    
+    /**
+     * @notice Claim rewards with Merkle proof
+     * @param provider Provider address
+     * @param rootIndex Merkle root index
+     * @param amount Claim amount
+     * @param merkleProof Merkle proof
+     * @dev Users only need Merkle proof, no ZK proof required
+     * @dev Gas cost: ~50k (vs ~280k with user ZK)
+     */
+    function claim(
+        address provider,
+        uint256 rootIndex,
+        uint256 amount,
+        bytes32[] calldata merkleProof
+    ) external nonReentrant {
+        _claim(msg.sender, provider, rootIndex, amount, merkleProof);
+    }
+    
+    /**
+     * @notice Internal claim function
+     * @dev Merkle leaf includes chainId: keccak256(user, amount, chainId)
+     * @dev This prevents cross-chain double-claims by design
+     */
+    function _claim(
+        address claimant,
+        address provider,
+        uint256 rootIndex,
+        uint256 amount,
+        bytes32[] calldata merkleProof
+    ) internal {
+        require(provider != address(0), "invalid provider");
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        require(amount > 0, "zero amount");
+        require(!claimed[provider][rootIndex][claimant], "already claimed");
+        
+        EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        require(block.timestamp <= e.expiry + EPOCH_GRACE_PERIOD, "expired or grace period passed");
+        require(!e.closed, "epoch closed");
+        require(e.providerProofVerified, "provider proof not verified");
+        
+        // Verify Merkle proof with chainId in leaf
+        // This prevents cross-chain double-claims - proof only valid on this chain
+        bytes32 leaf = keccak256(abi.encode(claimant, amount, block.chainid));
+        require(MerkleProof.verify(merkleProof, e.root, leaf), "invalid proof");
+        
+        // Ensure enough locked balance for this specific epoch
+        require(e.totalClaimable >= e.claimedAmount + amount, "epoch balance exhausted");
+        
+        // Update state
+        claimed[provider][rootIndex][claimant] = true;
+        e.claimedAmount += amount;
+        lockedBalance[provider] -= amount;
+        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
+        
+        // Transfer tokens
+        token.safeTransfer(claimant, amount);
+        
+        emit RewardsClaimed(claimant, provider, rootIndex, amount);
+    }
+    
+    /**
+     * @notice Batch claim rewards from multiple epochs
+     * @param providers Provider addresses
+     * @param rootIndices Merkle root indices
+     * @param amounts Claim amounts
+     * @param merkleProofs Merkle proofs
+     * @dev Limited to MAX_BATCH_SIZE to prevent gas griefing
+     */
+    function batchClaim(
+        address[] calldata providers,
+        uint256[] calldata rootIndices,
+        uint256[] calldata amounts,
+        bytes32[][] calldata merkleProofs
+    ) external nonReentrant {
+        require(providers.length <= MAX_BATCH_SIZE, "Batch too large");
+        require(
+            providers.length == rootIndices.length &&
+            rootIndices.length == amounts.length &&
+            amounts.length == merkleProofs.length,
+            "Arrays length mismatch"
+        );
+        
+        for (uint256 i = 0; i < providers.length; i++) {
+            _claim(
+                msg.sender,
+                providers[i], 
+                rootIndices[i], 
+                amounts[i], 
+                merkleProofs[i]
+            );
+        }
+    }
+    
+    /**
+     * @notice Close an epoch - unclaimed tokens returned to provider balance
+     * @param provider Provider address
+     * @param rootIndex Merkle root index
+     * @dev HUB CHAIN ARCHITECTURE:
+     *      - Tokens are held in contract
+     *      - Unclaimed tokens are returned to providerBalance for future epochs
+     */
+    function closeEpoch(address provider, uint256 rootIndex) external onlyRole(ADMIN_ROLE) {
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        require(!e.closed, "already closed");
+        require(block.timestamp > e.expiry + EPOCH_GRACE_PERIOD + CLOSE_DELAY, "close delay not over");
+        
+        e.closed = true;
+        
+        // Return unclaimed tokens to provider's available balance
+        if (e.totalClaimable > e.claimedAmount) {
+            uint256 unclaimed = e.totalClaimable - e.claimedAmount;
+            lockedBalance[provider] -= unclaimed;
+            providerBalance[provider] += unclaimed; // Return to available balance
+            emit LockedBalanceUpdated(provider, lockedBalance[provider]);
+            emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+        }
+        
+        emit EpochClosed(provider, rootIndex);
+    }
+    
+    /**
+     * @notice Slash a provider's balance and transfer tokens to slash recipient
+     * @param provider Provider address
+     * @param amount Amount to slash
+     * @dev HUB CHAIN ARCHITECTURE:
+     *      - Tokens are held in contract
+     *      - Slashing transfers tokens from provider's balance to slash recipient
+     */
+    function slashProvider(address provider, uint256 amount) external onlyRole(ADMIN_ROLE) {
+        require(slashRecipient != address(0), "slash recipient not set");
+        uint256 available = providerBalance[provider] + lockedBalance[provider];
+        require(amount <= available, "insufficient balance");
+
+        uint256 remaining = amount;
+
+        if (providerBalance[provider] >= remaining) {
+            providerBalance[provider] -= remaining;
+            remaining = 0;
+        } else {
+            remaining -= providerBalance[provider];
+            providerBalance[provider] = 0;
+        }
+
+        if (remaining > 0) {
+            EpochMerkleRoot[] storage epochs = providerMerkleRoots[provider];
+            for (uint256 i = epochs.length; i > 0 && remaining > 0; i--) {
+                EpochMerkleRoot storage e = epochs[i - 1];
+                if (e.closed) continue;
+                uint256 unclaimed = e.totalClaimable - e.claimedAmount;
+                if (unclaimed == 0) continue;
+                uint256 slashAmount = remaining < unclaimed ? remaining : unclaimed;
+                e.totalClaimable -= slashAmount;
+                lockedBalance[provider] -= slashAmount;
+                remaining -= slashAmount;
+            }
+        }
+
+        require(remaining == 0, "insufficient locked balance");
+
+        // Transfer slashed tokens to recipient
+        token.safeTransfer(slashRecipient, amount);
+
+        emit ProviderSlashed(provider, amount);
+        emit ProviderBalanceUpdated(provider, providerBalance[provider]);
+        emit LockedBalanceUpdated(provider, lockedBalance[provider]);
+    }
+    
+    /**
+     * @notice Get provider's available balance
+     * @param provider Provider address
+     * @return Available balance
+     */
+    function getProviderBalance(address provider) external view returns (uint256) {
+        return providerBalance[provider];
+    }
+    
+    /**
+     * @notice Get provider's locked balance
+     * @param provider Provider address
+     * @return Locked balance
+     */
+    function getLockedBalance(address provider) external view returns (uint256) {
+        return lockedBalance[provider];
+    }
+    
+    /**
+     * @notice Get epoch info
+     * @param provider Provider address
+     * @param rootIndex Merkle root index
+     * @return root Merkle root
+     * @return expiry Expiry timestamp
+     * @return closed Whether epoch is closed
+     * @return totalClaimable Total claimable amount
+     * @return claimedAmount Amount already claimed
+     * @return providerProofVerified Whether provider ZK proof was verified
+     * @return batchHash Batch hash from ZK proof
+     */
+    function getEpochInfo(address provider, uint256 rootIndex) external view returns (
+        bytes32 root,
+        uint256 expiry,
+        bool closed,
+        uint256 totalClaimable,
+        uint256 claimedAmount,
+        bool providerProofVerified,
+        bytes32 batchHash
+    ) {
+        require(rootIndex < providerMerkleRoots[provider].length, "bad index");
+        EpochMerkleRoot storage e = providerMerkleRoots[provider][rootIndex];
+        return (e.root, e.expiry, e.closed, e.totalClaimable, e.claimedAmount, e.providerProofVerified, e.batchHash);
+    }
+    
+    /**
+     * @notice Check if user has claimed from specific epoch
+     * @param provider Provider address
+     * @param rootIndex Merkle root index
+     * @param user User address
+     * @return True if user has claimed
+     */
+    function hasClaimed(address provider, uint256 rootIndex, address user) external view returns (bool) {
+        return claimed[provider][rootIndex][user];
+    }
+    
+    /**
+     * @notice Get number of epochs for a provider
+     * @param provider Provider address
+     * @return Number of epochs
+     */
+    function getEpochCount(address provider) external view returns (uint256) {
+        return providerMerkleRoots[provider].length;
+    }
+}
+
+/* ==== token/contracts/mocks/EmissionsRevertMock.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+contract EmissionsRevertMock {
+    function initializeNewProvider(address) external pure {
+        revert("init revert");
+    }
+
+    function harvest(address) external pure {
+        revert("harvest revert");
+    }
+}
+
+/* ==== token/contracts/mocks/LayerZeroEndpointMock.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {
+    MessagingParams,
+    MessagingReceipt,
+    MessagingFee,
+    Origin
+} from "@layerzerolabs/lz-evm-protocol-v2/contracts/interfaces/ILayerZeroEndpointV2.sol";
+
+interface ILzReceiver {
+    function lzReceive(
+        Origin calldata _origin,
+        address _receiver,
+        bytes32 _guid,
+        bytes calldata _message,
+        bytes calldata _extraData
+    ) external payable;
+}
+
+/**
+ * @title LayerZeroEndpointMock
+ * @notice Minimal mock used by tests; does not perform real messaging.
+ */
+contract LayerZeroEndpointMock {
+    uint32 public immutable eid;
+    mapping(uint32 => address) public remotes;
+    address public delegate;
+    uint256 public nativeFee;
+
+    constructor(uint32 _eid) {
+        eid = _eid;
+    }
+
+    function setRemote(uint32 _eid, address _remote) external {
+        remotes[_eid] = _remote;
+    }
+
+    function setDelegate(address _delegate) external {
+        delegate = _delegate;
+    }
+
+    function quote(MessagingParams calldata, address) external view returns (MessagingFee memory) {
+        return MessagingFee({nativeFee: nativeFee, lzTokenFee: 0});
+    }
+
+    function send(
+        MessagingParams calldata params,
+        address
+    ) external payable returns (MessagingReceipt memory) {
+        bytes32 guid = keccak256(
+            abi.encode(params.dstEid, params.receiver, params.message, block.number, msg.sender)
+        );
+        return MessagingReceipt({
+            guid: guid,
+            nonce: 0,
+            fee: MessagingFee({nativeFee: 0, lzTokenFee: 0})
+        });
+    }
+
+    function setNativeFee(uint256 fee) external {
+        nativeFee = fee;
+    }
+
+    function deliver(address receiver, Origin calldata origin, bytes calldata message) external {
+        ILzReceiver(receiver).lzReceive(origin, receiver, bytes32(0), message, "");
+    }
+}
+
+/* ==== token/contracts/mocks/MockDualPoolStaking.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+contract MockDualPoolStaking {
+    IERC20 public immutable token;
+    uint256 public userPoolTotal;
+    mapping(address => uint256) public staked;
+    uint256 public pendingRewardsValue;
+
+    constructor(address _token) {
+        token = IERC20(_token);
+    }
+
+    function setPendingRewards(uint256 amount) external {
+        pendingRewardsValue = amount;
+    }
+
+    function stakeToUserPool(uint256 amount, address user) external {
+        userPoolTotal += amount;
+        staked[user] += amount;
+        token.transferFrom(msg.sender, address(this), amount);
+    }
+
+    function unstakeFromUserPool(uint256 amount, address user) external {
+        require(staked[user] >= amount, "insufficient stake");
+        staked[user] -= amount;
+        userPoolTotal -= amount;
+        token.transfer(msg.sender, amount);
+    }
+
+    function getUserPoolTotalStaked() external view returns (uint256) {
+        return userPoolTotal;
+    }
+
+    function harvestRewards(address user) external {
+        if (pendingRewardsValue > 0) {
+            token.transfer(user, pendingRewardsValue);
+            pendingRewardsValue = 0;
+        }
+    }
+
+    function pendingRewards(address) external view returns (uint256) {
+        return pendingRewardsValue;
+    }
+}
+
+/* ==== token/contracts/mocks/MockERC20.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+
+contract MockERC20 is ERC20 {
+    constructor(string memory name_, string memory symbol_) ERC20(name_, symbol_) {}
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
+
+/* ==== token/contracts/mocks/MockGroth16Verifier.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+/**
+ * @title MockGroth16Verifier
+ * @notice Test-only verifier that always returns true.
+ */
+contract MockGroth16Verifier {
+    bool public shouldVerify = true;
+
+    function setShouldVerify(bool value) external {
+        shouldVerify = value;
+    }
+
+    function verifyProof(
+        uint256[2] calldata,
+        uint256[2][2] calldata,
+        uint256[2] calldata,
+        uint256[3] calldata
+    ) external view returns (bool) {
+        return shouldVerify;
+    }
+}
+
+/* ==== token/contracts/mocks/MockMyntisToken.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+/**
+ * @notice Minimal token mock for EmissionsContract coverage.
+ */
+contract MockMyntisToken {
+    uint256 public totalSupply;
+    mapping(address => uint256) public balanceOf;
+
+    function mint(address to, uint256 amount) external {
+        totalSupply += amount;
+        balanceOf[to] += amount;
+    }
+
+    function setTotalSupply(uint256 amount) external {
+        totalSupply = amount;
+    }
+}
+
+/* ==== token/contracts/mocks/MockStakingPool.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+/**
+ * @notice Minimal mock staking pool for EmissionsContract and vault tests.
+ */
+contract MockStakingPool {
+    IERC20 public immutable token;
+
+    uint256 public totalStaked;
+    uint256 public providerPoolStaked;
+
+    mapping(address => uint256) public stakeOf;
+    mapping(address => uint256) public rewardDebtOf;
+
+    uint256 public notifyCount;
+    address public lastNotifyProvider;
+    uint256 public lastNotifyAmount;
+
+    uint256 public syncCount;
+
+    address public emissionsContract;
+
+    constructor(address _token) {
+        token = IERC20(_token);
+    }
+
+    function setEmissionsContract(address _emissions) external {
+        emissionsContract = _emissions;
+    }
+
+    function setTotals(uint256 _totalStaked, uint256 _providerPoolStaked) external {
+        totalStaked = _totalStaked;
+        providerPoolStaked = _providerPoolStaked;
+    }
+
+    function setProvider(address provider, uint256 stake, uint256 rewardDebt) external {
+        stakeOf[provider] = stake;
+        rewardDebtOf[provider] = rewardDebt;
+    }
+
+    function getTotalStaked() external view returns (uint256) {
+        return totalStaked;
+    }
+
+    function getProviderPoolStaked() external view returns (uint256) {
+        return providerPoolStaked;
+    }
+
+    function getProviderInfo(address provider) external view returns (uint256 stake, uint256 rewardDebt) {
+        return (stakeOf[provider], rewardDebtOf[provider]);
+    }
+
+    function notifyReward(address provider, uint256 amount) external {
+        notifyCount += 1;
+        lastNotifyProvider = provider;
+        lastNotifyAmount = amount;
+    }
+
+    function syncEmissions() external returns (uint256 totalRewards_) {
+        syncCount += 1;
+        return token.balanceOf(address(this));
+    }
+
+    function callInitializeNewProvider(address provider) external {
+        require(emissionsContract != address(0), "emissions not set");
+        (bool ok,) = emissionsContract.call(
+            abi.encodeWithSignature("initializeNewProvider(address)", provider)
+        );
+        require(ok, "initializeNewProvider failed");
+    }
+
+    function callHarvest(address provider) external {
+        require(emissionsContract != address(0), "emissions not set");
+        (bool ok,) = emissionsContract.call(
+            abi.encodeWithSignature("harvest(address)", provider)
+        );
+        require(ok, "harvest failed");
+    }
+}
+
+/* ==== token/contracts/mocks/MyntisHarness.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+import {Myntis} from "../Myntis.sol";
+
+/**
+ * @notice Test harness for Myntis internal functions.
+ */
+contract MyntisHarness is Myntis {
+    constructor(address _lzEndpoint, address _delegate) Myntis(_lzEndpoint, _delegate) {}
+
+    function exposedDebit(
+        address from,
+        uint256 amount,
+        uint256 minAmount,
+        uint32 dstEid
+    ) external returns (uint256 amountSent, uint256 amountReceived) {
+        return _debit(from, amount, minAmount, dstEid);
+    }
+
+    function exposedCredit(
+        address to,
+        uint256 amount,
+        uint32 srcEid
+    ) external returns (uint256 amountReceived) {
+        return _credit(to, amount, srcEid);
+    }
+
+    function exposedDebitView(
+        uint256 amount,
+        uint256 minAmount,
+        uint32 dstEid
+    ) external view returns (uint256 amountSent, uint256 amountReceived) {
+        return _debitView(amount, minAmount, dstEid);
+    }
+}
+
+/* ==== token/contracts/mocks/ProxyImports.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+// This file exists solely to ensure Hardhat compiles proxy artifacts
+// used in tests (ProxyAdmin and TransparentUpgradeableProxy).
+import "@openzeppelin/contracts/proxy/transparent/ProxyAdmin.sol";
+import "@openzeppelin/contracts/proxy/transparent/TransparentUpgradeableProxy.sol";
+
+/* ==== token/contracts/mocks/QuotaReceiverMock.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+interface ISpokeQuotaToken {
+    function increaseMintQuota(uint256 amount) external;
+    function confirmQuotaRequest(uint256 nonce) external;
+}
+
+contract QuotaReceiverMock {
+    function increaseQuota(address token, uint256 amount) external {
+        ISpokeQuotaToken(token).increaseMintQuota(amount);
+    }
+
+    function confirmQuota(address token, uint256 nonce) external {
+        ISpokeQuotaToken(token).confirmQuotaRequest(nonce);
+    }
+}
+
+/* ==== token/contracts/mocks/SpokeQuotaTokenMock.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+contract SpokeQuotaTokenMock {
+    uint256 public quota;
+    uint256 public lastConfirmed;
+    bool public shouldRevertConfirm;
+
+    function setRevertConfirm(bool enabled) external {
+        shouldRevertConfirm = enabled;
+    }
+
+    function increaseMintQuota(uint256 amount) external {
+        quota += amount;
+    }
+
+    function confirmQuotaRequest(uint256 nonce) external {
+        if (shouldRevertConfirm) {
+            revert("confirm revert");
+        }
+        lastConfirmed = nonce;
+    }
+}
+
+/* ==== token/contracts/mocks/SpokeTokenNoMint.sol ==== */
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.22;
+
+contract SpokeTokenNoMint {
+    mapping(address => uint256) private balances;
+
+    function mint(address, uint256) external {
+        // Intentionally no-op to trigger mint verification failure.
+    }
+
+    function balanceOf(address account) external view returns (uint256) {
+        return balances[account];
+    }
+}
+

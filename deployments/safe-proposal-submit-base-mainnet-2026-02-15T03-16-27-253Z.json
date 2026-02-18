@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-02-15T03:16:27.253Z",
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "safeAddress": "0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B",
+  "serviceUrl": "https://safe-transaction-base.safe.global",
+  "proposalFile": "deployments/multisig-proposal-base-mainnet-staking-rewarddebt-sync-2026-02-15T03-09-14-256Z.json",
+  "startNonce": 9,
+  "results": [
+    {
+      "index": 1,
+      "description": "DualPoolStaking.upgradeToAndCall(newImpl, reinitializeV4SyncRewardDebt(3 accounts))",
+      "nonce": 9,
+      "safeTxHash": "0x6965863ad2fd0757d85920691907b438c18b9e63ac902a8c225850f64386865f",
+      "to": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "status": "proposed",
+      "responseStatus": 201,
+      "responseBody": ""
+    }
+  ]
+}

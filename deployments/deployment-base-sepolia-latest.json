@@ -1,0 +1,18 @@
+{
+  "myntis": "0xC5aA7e0992EEDf67f5096Cb629152267cEDf2875",
+  "myntisImplementation": "0xC5aA7e0992EEDf67f5096Cb629152267cEDf2875",
+  "emissionsContract": "0x07D28cA0ccAE70e992A1a1Dd310443bb96C81979",
+  "dualPoolStaking": "0xc8B635C09161CA61005143630B3002B4FA335770",
+  "dualPoolStakingImplementation": "0xf80D159e64400E9aCAAb625e285F556d79E9Ac70",
+  "groth16Verifier": "0x50F0B152DD8A9115B37A12F48524148f39E12C89",
+  "zkMerkleDistributor": "0x198Bf984C5757947A0a88C901f12371A5ad3e000",
+  "zkMerkleDistributorImplementation": "0x198Bf984C5757947A0a88C901f12371A5ad3e000",
+  "globalSupplyRegistry": "0xAea0e9d9c7a38860361d836C3ba3f70f66d4D1A1",
+  "liquidStakingVault": "0x99466736A2285Ca2BE0279C1f2c7757533ebc0cd",
+  "liquidStakingVaultImplementation": "0x99466736A2285Ca2BE0279C1f2c7757533ebc0cd",
+  "network": "base-sepolia",
+  "chainId": 84532,
+  "deployer": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+  "timestamp": "2026-02-08T01:35:17.548Z",
+  "gasUsed": "0"
+}

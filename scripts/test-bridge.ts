@@ -1,6 +1,6 @@
 import { ethers } from "hardhat";
 
-// Manual encoding of LZ options (ExecutorLzReceiveOption with 200k gas)
+// Manual encoding of LZ options (ExecutorLzReceiveOption with 400k gas)
 // Format: 0x0003 (version) + 0x01 (type: lzReceive) + length + gas (16 bytes) + value (16 bytes)
 function buildLzReceiveOption(gasLimit: bigint, nativeValue: bigint = 0n): string {
   // Option type 1 = lzReceive
@@ -16,7 +16,7 @@ function buildLzReceiveOption(gasLimit: bigint, nativeValue: bigint = 0n): strin
 async function main() {
   const [signer] = await ethers.getSigners();
   
-  const token = await ethers.getContractAt("Myntis", "0xEb4fD5Ef1Be46567f82FCc34C4c4EEeAd7e1A3A8");
+  const token = await ethers.getContractAt("Myntis", "0x599016bF00eE23d531223c6285C92aa0cAC278EF");
   
   const ETH_SEPOLIA_EID = 40161;
   const amountToSend = ethers.parseEther("100");
@@ -25,9 +25,11 @@ async function main() {
   console.log("From:", signer.address);
   console.log("Amount:", ethers.formatEther(amountToSend), "MYNT");
   console.log("Balance:", ethers.formatEther(await token.balanceOf(signer.address)), "MYNT");
+  const peer = await token.peers(ETH_SEPOLIA_EID);
+  console.log("Peer bytes32:", peer);
   
   // Build proper extraOptions with gas limit for destination chain
-  const extraOptions = buildLzReceiveOption(200000n, 0n);
+  const extraOptions = "0x0003";
   
   console.log("\nExtra options (hex):", extraOptions);
   
@@ -43,8 +45,22 @@ async function main() {
   };
   
   console.log("\nGetting quote...");
-  const [nativeFee] = await token.quoteSend(sendParam, false);
-  console.log("Native fee:", ethers.formatEther(nativeFee), "ETH");
+  let nativeFee: bigint;
+  try {
+    [nativeFee] = await token.quoteSend(sendParam, false);
+    console.log("Native fee:", ethers.formatEther(nativeFee), "ETH");
+  } catch (error: any) {
+    console.error("quoteSend failed:", error?.shortMessage || error?.message || error);
+    if (error?.data) {
+      try {
+        const decoded = token.interface.parseError(error.data);
+        console.error("Decoded error:", decoded?.name, decoded?.args);
+      } catch {
+        // ignore decode errors
+      }
+    }
+    throw error;
+  }
   
   console.log("\nSending tokens...");
   const tx = await token.send(

@@ -73,7 +73,8 @@ async function main() {
   const spokeToken = await MyntisOFTSpoke.deploy(
     ETH_SEPOLIA_LZ_ENDPOINT,
     deployer.address,
-    BASE_SEPOLIA_EID
+    BASE_SEPOLIA_EID,
+    ETH_SEPOLIA_EID
   );
   await spokeToken.waitForDeployment();
   deployed.MyntisOFTSpoke = await spokeToken.getAddress();
@@ -82,7 +83,7 @@ async function main() {
   await delay(30000);
   await verifyContract(
     deployed.MyntisOFTSpoke, 
-    [ETH_SEPOLIA_LZ_ENDPOINT, deployer.address, BASE_SEPOLIA_EID],
+    [ETH_SEPOLIA_LZ_ENDPOINT, deployer.address, BASE_SEPOLIA_EID, ETH_SEPOLIA_EID],
     "contracts/MyntisOFTSpoke.sol:MyntisOFTSpoke"
   );
 

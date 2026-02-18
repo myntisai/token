@@ -1,0 +1,66 @@
+{
+  "generatedAt": "2026-02-14T21:37:07.910Z",
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "multisig": "0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B",
+  "deployment": {
+    "myntis": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+    "myntisImplementation": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+    "emissionsContract": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+    "dualPoolStaking": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+    "dualPoolStakingImplementation": "0xbebB59857bE6D1C05A0FB66a6E9721F1ba10c345",
+    "groth16Verifier": "0x19559C2D4C7c50Bf3D8852b6ecfC0185d3E9796c",
+    "zkMerkleDistributor": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+    "zkMerkleDistributorImplementation": "0xfF52fdA700CaF238F9fE3bea3091E863aA00EADc",
+    "globalSupplyRegistry": "0xdFb3b8107B33d54BAe402a76BbA1432668B2D896",
+    "liquidStakingVault": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+    "liquidStakingVaultImplementation": "0x019cB2AA19465Ca1e140AbeADF13320414031C6B",
+    "network": "base-mainnet",
+    "chainId": 8453,
+    "deployer": "0x26A942e30505DF986c16fa9f1CbeEeAe9ad325B6",
+    "timestamp": "2026-02-08T04:32:48.860Z",
+    "gasUsed": "0"
+  },
+  "oldEmissionsAddress": "0x803f9694bE31D3ACe5792C21ab9F72b69838C0e0",
+  "newEmissionsAddress": "0x7086792971b623462B6C1d1263Ac73b0761ADDB9",
+  "deployedNewEmissionsTx": "0xe8373e12b911acc06ec235dcf9b0f16da3716bfad36563aff09aaf6f55a4d394",
+  "migrationSnapshot": {
+    "mintedEmissions": "1665379249112125824228100",
+    "accountedEmissions": "1665379249112125824228100",
+    "accRewardPerShare": "256905798394179",
+    "startTime": "1770524987",
+    "lastRewardTime": "1771104689",
+    "providerDebtCount": 0
+  },
+  "notes": [
+    "Run this script immediately before creating the Safe proposal to reduce state drift.",
+    "If old emissions can still be harvested before cutover, regenerate proposal data at execution time.",
+    "Provider debt arrays can be empty when DualPoolStaking remains the canonical pending-reward source."
+  ],
+  "transactions": [
+    {
+      "to": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "value": "0",
+      "data": "0x2f2ff15d9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a60000000000000000000000007086792971b623462b6c1d1263ac73b0761addb9",
+      "description": "Myntis.grantRole(MINTER_ROLE, newEmissions)"
+    },
+    {
+      "to": "0x7086792971b623462B6C1d1263Ac73b0761ADDB9",
+      "value": "0",
+      "data": "0x2d72f4ef0000000000000000000000000000000000000000000160a863d6b60e58aadb040000000000000000000000000000000000000000000160a863d6b60e58aadb040000000000000000000000000000000000000000000000000000e9a78adaa143000000000000000000000000000000000000000000000000000000006988113b000000000000000000000000000000000000000000000000000000006990e9b100000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "description": "Emissions.initializeMigration(snapshotFromOldEmissions)"
+    },
+    {
+      "to": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "value": "0",
+      "data": "0xa9c353340000000000000000000000007086792971b623462b6c1d1263ac73b0761addb9",
+      "description": "DualPoolStaking.setEmissionsContract(newEmissions)"
+    },
+    {
+      "to": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+      "value": "0",
+      "data": "0xd547741f9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6000000000000000000000000803f9694be31d3ace5792c21ab9f72b69838c0e0",
+      "description": "Myntis.revokeRole(MINTER_ROLE, oldEmissions)"
+    }
+  ]
+}

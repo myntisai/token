@@ -9,23 +9,18 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
  * Deploy spoke-side claim system (SpokeDistributor)
  * 
  * This script deploys SpokeDistributor on a spoke chain and wires it to:
- * - The spoke token (MyntisSpokeOFT)
- * - The hub's GlobalNullifier contract
+ * - The spoke token (MyntisOFTSpoke)
  * 
  * Prerequisites:
- * - MyntisSpokeOFT must be deployed on this spoke chain
- * - GlobalNullifier must be deployed on hub chain (Base)
- * - This SpokeDistributor address must be registered in GlobalNullifier (see register-spoke-in-nullifier.ts)
+ * - MyntisOFTSpoke must be deployed on this spoke chain
  */
 
 interface DeploymentResult {
     network: string;
     chainId: number;
-    hubChainId: number;
     contracts: {
         spokeDistributor: string;
         spokeToken: string;
-        hubGlobalNullifier: string;
     };
     deployer: string;
     timestamp: string;
@@ -55,31 +50,21 @@ async function main() {
 
     // Get required addresses from environment
     const spokeTokenAddress = process.env.SPOKE_TOKEN_ADDRESS;
-    const hubGlobalNullifierAddress = process.env.HUB_GLOBAL_NULLIFIER_ADDRESS;
-    const hubChainId = process.env.HUB_CHAIN_ID ? parseInt(process.env.HUB_CHAIN_ID) : 8453; // Base mainnet default
     
     if (!spokeTokenAddress) {
         console.error("❌ SPOKE_TOKEN_ADDRESS not set in environment");
         process.exit(1);
     }
     
-    if (!hubGlobalNullifierAddress) {
-        console.error("❌ HUB_GLOBAL_NULLIFIER_ADDRESS not set in environment");
-        process.exit(1);
-    }
-    
     console.log(`📋 Configuration:`);
     console.log(`   Spoke Token: ${spokeTokenAddress}`);
-    console.log(`   Hub GlobalNullifier: ${hubGlobalNullifierAddress}`);
-    console.log(`   Hub Chain ID: ${hubChainId}\n`);
+    console.log(`   Admin: ${deployer.address}\n`);
 
     // Deploy SpokeDistributor
     console.log("📝 Deploying SpokeDistributor...");
     
     const SpokeDistributor = await ethers.getContractFactory("SpokeDistributor");
     const spokeDistributor = await SpokeDistributor.deploy(
-        hubChainId,
-        hubGlobalNullifierAddress,
         spokeTokenAddress,
         deployer.address  // admin
     );
@@ -90,7 +75,7 @@ async function main() {
 
     // Grant MINTER_ROLE to SpokeDistributor on the spoke token
     console.log("🔧 Granting MINTER_ROLE to SpokeDistributor on spoke token...");
-    const spokeToken = await ethers.getContractAt("MyntisSpokeOFT", spokeTokenAddress);
+    const spokeToken = await ethers.getContractAt("MyntisOFTSpoke", spokeTokenAddress);
     const MINTER_ROLE = await spokeToken.MINTER_ROLE();
     
     const grantTx = await spokeToken.grantRole(MINTER_ROLE, spokeDistributorAddress);
@@ -106,11 +91,9 @@ async function main() {
     const deploymentResult: DeploymentResult = {
         network: networkName,
         chainId,
-        hubChainId,
         contracts: {
             spokeDistributor: spokeDistributorAddress,
             spokeToken: spokeTokenAddress,
-            hubGlobalNullifier: hubGlobalNullifierAddress,
         },
         deployer: deployer.address,
         timestamp: new Date().toISOString(),
@@ -126,21 +109,15 @@ async function main() {
     console.log("═══════════════════════════════════════════════════════════");
     console.log(`Network:           ${networkName}`);
     console.log(`Chain ID:          ${chainId}`);
-    console.log(`Hub Chain ID:      ${hubChainId}`);
     console.log(`SpokeDistributor:  ${spokeDistributorAddress}`);
     console.log(`Spoke Token:       ${spokeTokenAddress}`);
-    console.log(`Hub Nullifier:     ${hubGlobalNullifierAddress}`);
     console.log(`Deployer:          ${deployer.address}`);
     console.log("═══════════════════════════════════════════════════════════\n");
 
     console.log("📋 Next Steps:");
-    console.log("1. Register this SpokeDistributor in the hub's GlobalNullifier:");
-    console.log(`   Run: npx hardhat run scripts/register-spoke-in-nullifier.ts --network base`);
-    console.log(`   With: SPOKE_DISTRIBUTOR_ADDRESS=${spokeDistributorAddress}`);
-    console.log(`   And:  SPOKE_CHAIN_ID=${chainId}`);
-    console.log("\n2. Verify contract:");
-    console.log(`   npx hardhat verify --network ${networkName} ${spokeDistributorAddress} ${hubChainId} ${hubGlobalNullifierAddress} ${spokeTokenAddress} ${deployer.address}`);
-    console.log("\n3. Test claim flow on spoke chain");
+    console.log("1. Verify contract:");
+    console.log(`   npx hardhat verify --network ${networkName} ${spokeDistributorAddress} ${spokeTokenAddress} ${deployer.address}`);
+    console.log("\n2. Test claim flow on spoke chain");
     
     return deploymentResult;
 }

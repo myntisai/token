@@ -30,7 +30,6 @@ interface IDualPoolStaking {
  */
 contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
     bytes32 public constant ADMIN_ROLE = DEFAULT_ADMIN_ROLE;
-    bytes32 public constant STAKING_ROLE = keccak256("STAKING_ROLE");
     
     // Dual pool staking contract
     address public dualPoolStaking;
@@ -49,9 +48,13 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         address _dualPoolStaking,
         address admin
     ) ERC4626(IERC20(_asset)) ERC20("Liquid Staked Myntis", "lsMYNT") {
+        require(_asset != address(0), "Invalid asset");
+        require(_asset.code.length > 0, "Asset not a contract");
+        require(_dualPoolStaking != address(0), "Invalid staking");
+        require(_dualPoolStaking.code.length > 0, "Staking not a contract");
+        require(admin != address(0), "Invalid admin");
         dualPoolStaking = _dualPoolStaking;
         _grantRole(ADMIN_ROLE, admin);
-        _grantRole(STAKING_ROLE, _dualPoolStaking);
     }
     
     /**
@@ -59,6 +62,8 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
      * @param _dualPoolStaking New staking contract address
      */
     function setDualPoolStaking(address _dualPoolStaking) external onlyRole(ADMIN_ROLE) {
+        require(_dualPoolStaking != address(0), "Invalid staking");
+        require(_dualPoolStaking.code.length > 0, "Staking not a contract");
         dualPoolStaking = _dualPoolStaking;
         emit StakingContractUpdated(_dualPoolStaking);
     }
@@ -76,6 +81,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 shares) 
     {
+        _harvestPendingRewards();
         shares = super.deposit(assets, receiver);
         
         // SECURITY FIX: Stake to vault address (address(this)), not individual user
@@ -98,6 +104,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 assets) 
     {
+        _harvestPendingRewards();
         assets = super.mint(shares, receiver);
         
         // SECURITY FIX: Stake to vault address (address(this)), not individual user
@@ -120,6 +127,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 shares) 
     {
+        _harvestPendingRewards();
         // SECURITY FIX: Unstake from vault's position (not individual owner)
         _unstakeFromUserPool(assets);
         
@@ -142,6 +150,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         nonReentrant 
         returns (uint256 assets) 
     {
+        _harvestPendingRewards();
         // Calculate assets first
         assets = previewRedeem(shares);
         
@@ -216,9 +225,12 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         // Get idle balance in vault
         uint256 idle = IERC20(asset()).balanceOf(address(this));
         
+        // SECURITY FIX: Include pending rewards to prevent share-price dilution
+        uint256 pending = IDualPoolStaking(dualPoolStaking).pendingRewards(address(this));
+        
         // SECURITY FIX: Use vault-specific deposit tracking
         // This ensures correct share pricing in multi-vault scenarios
-        return idle + totalVaultDeposits;
+        return idle + totalVaultDeposits + pending;
     }
     
     /**
@@ -308,7 +320,7 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         totalVaultDeposits += amount;
         emit VaultDeposit(address(this), amount);
     }
-    
+
     /**
      * @notice Unstake assets from vault's user pool position
      * @param amount Amount to unstake
@@ -321,5 +333,13 @@ contract LiquidStakingVault is ERC4626, AccessControl, ReentrancyGuard {
         // Track vault withdrawals
         totalVaultDeposits -= amount;
         emit VaultWithdraw(address(this), amount);
+    }
+
+    /**
+     * @notice Harvest pending rewards before share price calculations
+     * @dev Keeps share pricing fair for deposits/withdrawals without a keeper
+     */
+    function _harvestPendingRewards() internal {
+        IDualPoolStaking(dualPoolStaking).harvestRewards(address(this));
     }
 }

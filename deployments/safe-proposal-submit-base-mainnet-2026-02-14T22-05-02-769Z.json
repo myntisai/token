@@ -1,0 +1,21 @@
+{
+  "generatedAt": "2026-02-14T22:05:02.769Z",
+  "network": "base-mainnet",
+  "chainId": 8453,
+  "safeAddress": "0x5c3c2ba37a73a371D4A3F41ed2663Af15B7b220B",
+  "serviceUrl": "https://safe-transaction-base.safe.global",
+  "proposalFile": "deployments/multisig-proposal-base-mainnet-staking-upgrade-2026-02-14T22-04-52-859Z.json",
+  "startNonce": 8,
+  "results": [
+    {
+      "index": 1,
+      "description": "DualPoolStaking.upgradeToAndCall(newImplementation, 0x)",
+      "nonce": 8,
+      "safeTxHash": "0xa409c7087337b7d785dbe443f778e2441f2150886c77e23e3ffe291fe7d1a618",
+      "to": "0x3CBA95f31B61d9FaAC54D3A8A7fbb926737BB57d",
+      "status": "proposed",
+      "responseStatus": 201,
+      "responseBody": ""
+    }
+  ]
+}
