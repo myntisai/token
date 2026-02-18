@@ -1,0 +1,1770 @@
+{
+  "generatedAt": "2026-02-18T23:03:08.159Z",
+  "networks": {
+    "base-sepolia": {
+      "network": "base-sepolia",
+      "rpc": "https://base-sepolia-rpc.publicnode.com",
+      "latestBlock": 37843401,
+      "trackedAddresses": [
+        "0x01ad9e797234026c61e523bc9bab2293ac140f6a",
+        "0x07d28ca0ccae70e992a1a1dd310443bb96c81979",
+        "0x198bf984c5757947a0a88c901f12371a5ad3e000",
+        "0x1a48bf090b02da27c0e60cb6659d4450904a846f",
+        "0x2b5a6b209ee8b0b118dd76092420c9b45f4e99cb",
+        "0x39a211de877c74a9e181e2253ede847bb4ec70cf",
+        "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3",
+        "0x599016bf00ee23d531223c6285c92aa0cac278ef",
+        "0x6dc42e62024f3f18d6fd91f662c19850c1bfd978",
+        "0x723754749830b533381775a22407fcec3597b052",
+        "0x74880966f4e89b86b3cda7b8eb34eb7e5413cc66",
+        "0x807833243f1aafd29e1b9acdb4d796987d0aa934",
+        "0x8b269fd6cf9df0914a41b32f0af4b3d18e76291d",
+        "0x8becec0ffbc93bbd94decaa9bbf7b2cfdd286d55",
+        "0x99466736a2285ca2be0279c1f2c7757533ebc0cd",
+        "0xaea0e9d9c7a38860361d836c3ba3f70f66d4d1a1",
+        "0xb7976bc67327ccd41435c5a555adbf8b987f8e1e",
+        "0xc5996a1ca8c4b558feefff2b403c09c9e1ae27cf",
+        "0xc5aa7e0992eedf67f5096cb629152267cedf2875",
+        "0xc8b635c09161ca61005143630b3002b4fa335770",
+        "0xe1efd4598cb371035f78dd3eb4151a7498f9dea4",
+        "0xebd5dd492db4ec069698acfcca34fc9dc400737d",
+        "0xf74df81441d120e4e4ef1c5bca9bcde6f44256c8"
+      ],
+      "tokenAnalyses": [
+        {
+          "tokenAddress": "0xE1eFd4598Cb371035F78dD3eb4151A7498F9dEa4",
+          "fromBlock": 34266198,
+          "toBlock": 37843401,
+          "symbol": "MYNT",
+          "decimals": 18,
+          "totalSupply": "9900000000000000000000",
+          "totalSupplyFmt": "9900.0",
+          "transferCount": 2,
+          "volumeTotal": "10100000000000000000000",
+          "volumeTotalFmt": "10100.0",
+          "mintCount": 1,
+          "mintTotal": "10000000000000000000000",
+          "mintTotalFmt": "10000.0",
+          "burnCount": 1,
+          "burnTotal": "100000000000000000000",
+          "burnTotalFmt": "100.0",
+          "topMintRecipients": [
+            {
+              "address": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+              "value": "10000000000000000000000",
+              "valueFmt": "10000.0"
+            }
+          ],
+          "topBurnSenders": [
+            {
+              "address": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+              "value": "100000000000000000000",
+              "valueFmt": "100.0"
+            }
+          ],
+          "topSenders": [
+            {
+              "address": "0x0000000000000000000000000000000000000000",
+              "value": "10000000000000000000000",
+              "valueFmt": "10000.0"
+            },
+            {
+              "address": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+              "value": "100000000000000000000",
+              "valueFmt": "100.0"
+            }
+          ],
+          "topReceivers": [
+            {
+              "address": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+              "value": "10000000000000000000000",
+              "valueFmt": "10000.0"
+            },
+            {
+              "address": "0x0000000000000000000000000000000000000000",
+              "value": "100000000000000000000",
+              "valueFmt": "100.0"
+            }
+          ],
+          "systemFlowIn": [],
+          "systemFlowOut": [],
+          "systemMatrix": [],
+          "currentBalancesTracked": {
+            "0xe1efd4598cb371035f78dd3eb4151a7498f9dea4": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x8becec0ffbc93bbd94decaa9bbf7b2cfdd286d55": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x39a211de877c74a9e181e2253ede847bb4ec70cf": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x1a48bf090b02da27c0e60cb6659d4450904a846f": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x01ad9e797234026c61e523bc9bab2293ac140f6a": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xb7976bc67327ccd41435c5a555adbf8b987f8e1e": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x74880966f4e89b86b3cda7b8eb34eb7e5413cc66": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x6dc42e62024f3f18d6fd91f662c19850c1bfd978": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xf74df81441d120e4e4ef1c5bca9bcde6f44256c8": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xebd5dd492db4ec069698acfcca34fc9dc400737d": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x599016bf00ee23d531223c6285c92aa0cac278ef": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc5996a1ca8c4b558feefff2b403c09c9e1ae27cf": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x807833243f1aafd29e1b9acdb4d796987d0aa934": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x2b5a6b209ee8b0b118dd76092420c9b45f4e99cb": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x8b269fd6cf9df0914a41b32f0af4b3d18e76291d": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc5aa7e0992eedf67f5096cb629152267cedf2875": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x07d28ca0ccae70e992a1a1dd310443bb96c81979": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc8b635c09161ca61005143630b3002b4fa335770": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x198bf984c5757947a0a88c901f12371a5ad3e000": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x99466736a2285ca2be0279c1f2c7757533ebc0cd": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x723754749830b533381775a22407fcec3597b052": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xaea0e9d9c7a38860361d836c3ba3f70f66d4d1a1": {
+              "value": "0",
+              "valueFmt": "0.0"
+            }
+          },
+          "myntisEvents": {
+            "balanceMigrated": {
+              "events": 0,
+              "recipients": 0,
+              "total": "0",
+              "txHashes": []
+            },
+            "migrationCompleted": {
+              "events": 0,
+              "totals": []
+            },
+            "emissionsMinted": {
+              "events": 0,
+              "total": "0"
+            },
+            "immediateMinted": {
+              "events": 1,
+              "total": "10000000000000000000000"
+            }
+          }
+        },
+        {
+          "tokenAddress": "0x8BEceC0fFbc93bBd94DEcaa9Bbf7b2CfDd286d55",
+          "fromBlock": 34494930,
+          "toBlock": 37843401,
+          "symbol": "MYNT",
+          "decimals": 18,
+          "totalSupply": "12834079654997463214896000",
+          "totalSupplyFmt": "12834079.654997463214896",
+          "transferCount": 35,
+          "volumeTotal": "12844471103177463214896000",
+          "volumeTotalFmt": "12844471.103177463214896",
+          "mintCount": 34,
+          "mintTotal": "12834079654997463214896000",
+          "mintTotalFmt": "12834079.654997463214896",
+          "burnCount": 0,
+          "burnTotal": "0",
+          "burnTotalFmt": "0.0",
+          "topMintRecipients": [
+            {
+              "address": "0x26b9c344a5245f7402f047f622f57be9e3975718",
+              "value": "3895706494165398274457500",
+              "valueFmt": "3895706.4941653982744575"
+            },
+            {
+              "address": "0xdf890da39bb3b7ad15a66d793ec4b3d804e9bb16",
+              "value": "2279806221233866224741976",
+              "valueFmt": "2279806.221233866224741976"
+            },
+            {
+              "address": "0x02bd8a85d52d58ab416a4d63daeff4c61d557c2d",
+              "value": "2093816726826197894953199",
+              "valueFmt": "2093816.726826197894953199"
+            },
+            {
+              "address": "0xe81a67087d1ff2932d0fedcdbb4eab4192de16fc",
+              "value": "1193372212703891232257176",
+              "valueFmt": "1193372.212703891232257176"
+            },
+            {
+              "address": "0x1303c39823d7e559674d45cd86da06eec6f5048b",
+              "value": "975672256402043779673290",
+              "valueFmt": "975672.25640204377967329"
+            },
+            {
+              "address": "0xe099e78733d8560f384f3720e95e764fa5d97bd4",
+              "value": "404398496101070158444711",
+              "valueFmt": "404398.496101070158444711"
+            },
+            {
+              "address": "0xae51542362c04dc0a2f85a806c78ade58e43221c",
+              "value": "346297925283366123574477",
+              "valueFmt": "346297.925283366123574477"
+            },
+            {
+              "address": "0x29eb3404d32e0670fedfc86597d90bfe0c0f4028",
+              "value": "345252533332100034920547",
+              "valueFmt": "345252.533332100034920547"
+            },
+            {
+              "address": "0xec431787af43ee294d8167821f7d26bcbf847e26",
+              "value": "236254502843842876885466",
+              "valueFmt": "236254.502843842876885466"
+            },
+            {
+              "address": "0x034179bee1022d5626526c71a5004cbfe200d0b6",
+              "value": "234042730447912140727489",
+              "valueFmt": "234042.730447912140727489"
+            },
+            {
+              "address": "0xdfed85e4dbc56bc8053ce394f2ea27a152fba2f1",
+              "value": "228357424755519278853029",
+              "valueFmt": "228357.424755519278853029"
+            },
+            {
+              "address": "0x3bfac7c5398aea13b567e321ed215c9a61ce1596",
+              "value": "155973173068290714976642",
+              "valueFmt": "155973.173068290714976642"
+            },
+            {
+              "address": "0x54400caf64e7249a6b92851297967021ee79bc13",
+              "value": "134085439065510385202875",
+              "valueFmt": "134085.439065510385202875"
+            },
+            {
+              "address": "0x0a45a0f5a2e46daa75f5a8cccc54b3ac84cdba27",
+              "value": "74889867367293011927674",
+              "valueFmt": "74889.867367293011927674"
+            },
+            {
+              "address": "0x0390f1c0f63ccb5b1091ab58d59e68c40f15d19a",
+              "value": "65453500281655937788784",
+              "valueFmt": "65453.500281655937788784"
+            },
+            {
+              "address": "0xd1c60b6f00bb9b344b9b5a3ebdf784bb5ba6d118",
+              "value": "33106485458066829149064",
+              "valueFmt": "33106.485458066829149064"
+            },
+            {
+              "address": "0xd7d46aa9ff207b3594f9ac3060f23230e2e682a5",
+              "value": "31992675236201559175221",
+              "valueFmt": "31992.675236201559175221"
+            },
+            {
+              "address": "0x5821323e067247bb4e9cb2c0b11a2ab81877f04c",
+              "value": "18386656416603273690028",
+              "valueFmt": "18386.656416603273690028"
+            },
+            {
+              "address": "0xb407ccb17e3866160c112b542df0cee6521848e3",
+              "value": "17043801780326932089276",
+              "valueFmt": "17043.801780326932089276"
+            },
+            {
+              "address": "0xa95748301d7c9c4a3169ef5a8264a5aceee1ab20",
+              "value": "14846061659412165514420",
+              "valueFmt": "14846.06165941216551442"
+            }
+          ],
+          "topBurnSenders": [],
+          "topSenders": [
+            {
+              "address": "0x0000000000000000000000000000000000000000",
+              "value": "12834079654997463214896000",
+              "valueFmt": "12834079.654997463214896"
+            },
+            {
+              "address": "0xe28a08771001acff23916779555e5ee53317af68",
+              "value": "10391448180000000000000",
+              "valueFmt": "10391.44818"
+            }
+          ],
+          "topReceivers": [
+            {
+              "address": "0x26b9c344a5245f7402f047f622f57be9e3975718",
+              "value": "3895706494165398274457500",
+              "valueFmt": "3895706.4941653982744575"
+            },
+            {
+              "address": "0xdf890da39bb3b7ad15a66d793ec4b3d804e9bb16",
+              "value": "2279806221233866224741976",
+              "valueFmt": "2279806.221233866224741976"
+            },
+            {
+              "address": "0x02bd8a85d52d58ab416a4d63daeff4c61d557c2d",
+              "value": "2093816726826197894953199",
+              "valueFmt": "2093816.726826197894953199"
+            },
+            {
+              "address": "0xe81a67087d1ff2932d0fedcdbb4eab4192de16fc",
+              "value": "1193372212703891232257176",
+              "valueFmt": "1193372.212703891232257176"
+            },
+            {
+              "address": "0x1303c39823d7e559674d45cd86da06eec6f5048b",
+              "value": "975672256402043779673290",
+              "valueFmt": "975672.25640204377967329"
+            },
+            {
+              "address": "0xe099e78733d8560f384f3720e95e764fa5d97bd4",
+              "value": "404398496101070158444711",
+              "valueFmt": "404398.496101070158444711"
+            },
+            {
+              "address": "0xae51542362c04dc0a2f85a806c78ade58e43221c",
+              "value": "346297925283366123574477",
+              "valueFmt": "346297.925283366123574477"
+            },
+            {
+              "address": "0x29eb3404d32e0670fedfc86597d90bfe0c0f4028",
+              "value": "345252533332100034920547",
+              "valueFmt": "345252.533332100034920547"
+            },
+            {
+              "address": "0xec431787af43ee294d8167821f7d26bcbf847e26",
+              "value": "236254502843842876885466",
+              "valueFmt": "236254.502843842876885466"
+            },
+            {
+              "address": "0x034179bee1022d5626526c71a5004cbfe200d0b6",
+              "value": "234042730447912140727489",
+              "valueFmt": "234042.730447912140727489"
+            },
+            {
+              "address": "0xdfed85e4dbc56bc8053ce394f2ea27a152fba2f1",
+              "value": "228357424755519278853029",
+              "valueFmt": "228357.424755519278853029"
+            },
+            {
+              "address": "0x3bfac7c5398aea13b567e321ed215c9a61ce1596",
+              "value": "155973173068290714976642",
+              "valueFmt": "155973.173068290714976642"
+            },
+            {
+              "address": "0x54400caf64e7249a6b92851297967021ee79bc13",
+              "value": "134085439065510385202875",
+              "valueFmt": "134085.439065510385202875"
+            },
+            {
+              "address": "0x0a45a0f5a2e46daa75f5a8cccc54b3ac84cdba27",
+              "value": "74889867367293011927674",
+              "valueFmt": "74889.867367293011927674"
+            },
+            {
+              "address": "0x0390f1c0f63ccb5b1091ab58d59e68c40f15d19a",
+              "value": "65453500281655937788784",
+              "valueFmt": "65453.500281655937788784"
+            },
+            {
+              "address": "0xd1c60b6f00bb9b344b9b5a3ebdf784bb5ba6d118",
+              "value": "33106485458066829149064",
+              "valueFmt": "33106.485458066829149064"
+            },
+            {
+              "address": "0xd7d46aa9ff207b3594f9ac3060f23230e2e682a5",
+              "value": "31992675236201559175221",
+              "valueFmt": "31992.675236201559175221"
+            },
+            {
+              "address": "0x5821323e067247bb4e9cb2c0b11a2ab81877f04c",
+              "value": "18386656416603273690028",
+              "valueFmt": "18386.656416603273690028"
+            },
+            {
+              "address": "0xb407ccb17e3866160c112b542df0cee6521848e3",
+              "value": "17043801780326932089276",
+              "valueFmt": "17043.801780326932089276"
+            },
+            {
+              "address": "0xa95748301d7c9c4a3169ef5a8264a5aceee1ab20",
+              "value": "14846061659412165514420",
+              "valueFmt": "14846.06165941216551442"
+            }
+          ],
+          "systemFlowIn": [],
+          "systemFlowOut": [],
+          "systemMatrix": [],
+          "currentBalancesTracked": {
+            "0xe1efd4598cb371035f78dd3eb4151a7498f9dea4": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x8becec0ffbc93bbd94decaa9bbf7b2cfdd286d55": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x39a211de877c74a9e181e2253ede847bb4ec70cf": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x1a48bf090b02da27c0e60cb6659d4450904a846f": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x01ad9e797234026c61e523bc9bab2293ac140f6a": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xb7976bc67327ccd41435c5a555adbf8b987f8e1e": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x74880966f4e89b86b3cda7b8eb34eb7e5413cc66": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x6dc42e62024f3f18d6fd91f662c19850c1bfd978": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xf74df81441d120e4e4ef1c5bca9bcde6f44256c8": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xebd5dd492db4ec069698acfcca34fc9dc400737d": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x599016bf00ee23d531223c6285c92aa0cac278ef": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc5996a1ca8c4b558feefff2b403c09c9e1ae27cf": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x807833243f1aafd29e1b9acdb4d796987d0aa934": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x2b5a6b209ee8b0b118dd76092420c9b45f4e99cb": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x8b269fd6cf9df0914a41b32f0af4b3d18e76291d": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc5aa7e0992eedf67f5096cb629152267cedf2875": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x07d28ca0ccae70e992a1a1dd310443bb96c81979": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc8b635c09161ca61005143630b3002b4fa335770": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x198bf984c5757947a0a88c901f12371a5ad3e000": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x99466736a2285ca2be0279c1f2c7757533ebc0cd": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x723754749830b533381775a22407fcec3597b052": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xaea0e9d9c7a38860361d836c3ba3f70f66d4d1a1": {
+              "value": "0",
+              "valueFmt": "0.0"
+            }
+          },
+          "myntisEvents": {
+            "balanceMigrated": {
+              "events": 34,
+              "recipients": 34,
+              "total": "12834079654997463214896000",
+              "txHashes": [
+                "0xda3c05e936c5cf7a9d1605b2b189831375879e2cc9586578928f1222c0038494"
+              ]
+            },
+            "migrationCompleted": {
+              "events": 1,
+              "totals": [
+                "12834079654997463214896000"
+              ]
+            },
+            "emissionsMinted": {
+              "events": 0,
+              "total": "0"
+            },
+            "immediateMinted": {
+              "events": 0,
+              "total": "0"
+            }
+          }
+        },
+        {
+          "tokenAddress": "0x599016bF00eE23d531223c6285C92aa0cAC278EF",
+          "fromBlock": 37189217,
+          "toBlock": 37843401,
+          "symbol": "MYNT",
+          "decimals": 18,
+          "totalSupply": "23933903348794757797289605",
+          "totalSupplyFmt": "23933903.348794757797289605",
+          "transferCount": 2270,
+          "volumeTotal": "26088678696720355343617194",
+          "volumeTotalFmt": "26088678.696720355343617194",
+          "mintCount": 805,
+          "mintTotal": "23934903348794757797289605",
+          "mintTotalFmt": "23934903.348794757797289605",
+          "burnCount": 10,
+          "burnTotal": "1000000000000000000000",
+          "burnTotalFmt": "1000.0",
+          "topMintRecipients": [
+            {
+              "address": "0x6255cfec19a346a5b0add66ef44f7c5740c12377",
+              "value": "5267545475166127029580470",
+              "valueFmt": "5267545.47516612702958047"
+            },
+            {
+              "address": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+              "value": "1915374844288412259394980",
+              "valueFmt": "1915374.84428841225939498"
+            },
+            {
+              "address": "0xca7735a6290f384c8a9394b0e3141fef89e6589d",
+              "value": "1720432262151761954174848",
+              "valueFmt": "1720432.262151761954174848"
+            },
+            {
+              "address": "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3",
+              "value": "1357388381531651999999999",
+              "valueFmt": "1357388.381531651999999999"
+            },
+            {
+              "address": "0x1303c39823d7e559674d45cd86da06eec6f5048b",
+              "value": "1270484071657074581314225",
+              "valueFmt": "1270484.071657074581314225"
+            },
+            {
+              "address": "0xec431787af43ee294d8167821f7d26bcbf847e26",
+              "value": "1268024793197198555597342",
+              "valueFmt": "1268024.793197198555597342"
+            },
+            {
+              "address": "0x0a45a0f5a2e46daa75f5a8cccc54b3ac84cdba27",
+              "value": "1110357468460613667017778",
+              "valueFmt": "1110357.468460613667017778"
+            },
+            {
+              "address": "0xdfed85e4dbc56bc8053ce394f2ea27a152fba2f1",
+              "value": "944233550490440711331788",
+              "valueFmt": "944233.550490440711331788"
+            },
+            {
+              "address": "0x06def79cb5f1b564aaf8de275070477889b98126",
+              "value": "567419844264215077860803",
+              "valueFmt": "567419.844264215077860803"
+            },
+            {
+              "address": "0xe099e78733d8560f384f3720e95e764fa5d97bd4",
+              "value": "498243822274606000116781",
+              "valueFmt": "498243.822274606000116781"
+            },
+            {
+              "address": "0xe66e51c61a0d89831e9b41f8de28fbff18c5e1f8",
+              "value": "472171798947508341100871",
+              "valueFmt": "472171.798947508341100871"
+            },
+            {
+              "address": "0xae51542362c04dc0a2f85a806c78ade58e43221c",
+              "value": "388808045892275135068729",
+              "valueFmt": "388808.045892275135068729"
+            },
+            {
+              "address": "0x29eb3404d32e0670fedfc86597d90bfe0c0f4028",
+              "value": "387762653941009046414799",
+              "valueFmt": "387762.653941009046414799"
+            },
+            {
+              "address": "0x034179bee1022d5626526c71a5004cbfe200d0b6",
+              "value": "386611859029983624938154",
+              "valueFmt": "386611.859029983624938154"
+            },
+            {
+              "address": "0xf8adfb263fd6682055941e6c16750d8d34bdeec0",
+              "value": "332389479022360773947988",
+              "valueFmt": "332389.479022360773947988"
+            },
+            {
+              "address": "0xe1aa231756b5bfcc35a31eddcfbdc20dbf106991",
+              "value": "328237439993294222395544",
+              "valueFmt": "328237.439993294222395544"
+            },
+            {
+              "address": "0x3bfac7c5398aea13b567e321ed215c9a61ce1596",
+              "value": "284859994204650221394173",
+              "valueFmt": "284859.994204650221394173"
+            },
+            {
+              "address": "0xdff6703e9e28de22d2ac59e062126f3d9205b539",
+              "value": "240638792599146528569578",
+              "valueFmt": "240638.792599146528569578"
+            },
+            {
+              "address": "0xe37b6509f8b15b05bf05cebc1b6dd4aefff37224",
+              "value": "237716029187205936640553",
+              "valueFmt": "237716.029187205936640553"
+            },
+            {
+              "address": "0x0062bd9a0263fc0cc0ae45cd49912cd9c62b0730",
+              "value": "226912703278995743424991",
+              "valueFmt": "226912.703278995743424991"
+            }
+          ],
+          "topBurnSenders": [
+            {
+              "address": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+              "value": "1000000000000000000000",
+              "valueFmt": "1000.0"
+            }
+          ],
+          "topSenders": [
+            {
+              "address": "0x0000000000000000000000000000000000000000",
+              "value": "23934903348794757797289605",
+              "valueFmt": "23934903.348794757797289605"
+            },
+            {
+              "address": "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3",
+              "value": "1186173433819126101031493",
+              "valueFmt": "1186173.433819126101031493"
+            },
+            {
+              "address": "0x807833243f1aafd29e1b9acdb4d796987d0aa934",
+              "value": "965601914106471445296096",
+              "valueFmt": "965601.914106471445296096"
+            },
+            {
+              "address": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+              "value": "2000000000000000000000",
+              "valueFmt": "2000.0"
+            }
+          ],
+          "topReceivers": [
+            {
+              "address": "0x6255cfec19a346a5b0add66ef44f7c5740c12377",
+              "value": "5423697403256185728868214",
+              "valueFmt": "5423697.403256185728868214"
+            },
+            {
+              "address": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+              "value": "2019011494749288760426473",
+              "valueFmt": "2019011.494749288760426473"
+            },
+            {
+              "address": "0xca7735a6290f384c8a9394b0e3141fef89e6589d",
+              "value": "1804950818479275725371264",
+              "valueFmt": "1804950.818479275725371264"
+            },
+            {
+              "address": "0x1303c39823d7e559674d45cd86da06eec6f5048b",
+              "value": "1368525378687797098801323",
+              "valueFmt": "1368525.378687797098801323"
+            },
+            {
+              "address": "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3",
+              "value": "1358388381531651999999999",
+              "valueFmt": "1358388.381531651999999999"
+            },
+            {
+              "address": "0xec431787af43ee294d8167821f7d26bcbf847e26",
+              "value": "1268024793197198555597342",
+              "valueFmt": "1268024.793197198555597342"
+            },
+            {
+              "address": "0x0a45a0f5a2e46daa75f5a8cccc54b3ac84cdba27",
+              "value": "1110357468460613667017778",
+              "valueFmt": "1110357.468460613667017778"
+            },
+            {
+              "address": "0x807833243f1aafd29e1b9acdb4d796987d0aa934",
+              "value": "1082536783358249600000000",
+              "valueFmt": "1082536.7833582496"
+            },
+            {
+              "address": "0xdfed85e4dbc56bc8053ce394f2ea27a152fba2f1",
+              "value": "944233550490440711331788",
+              "valueFmt": "944233.550490440711331788"
+            },
+            {
+              "address": "0x06def79cb5f1b564aaf8de275070477889b98126",
+              "value": "567419844264215077860803",
+              "valueFmt": "567419.844264215077860803"
+            },
+            {
+              "address": "0xacbe177685b442886c779f89132b85e05ecef86d",
+              "value": "512162932574599222576910",
+              "valueFmt": "512162.93257459922257691"
+            },
+            {
+              "address": "0xe099e78733d8560f384f3720e95e764fa5d97bd4",
+              "value": "498243822274606000116781",
+              "valueFmt": "498243.822274606000116781"
+            },
+            {
+              "address": "0xe66e51c61a0d89831e9b41f8de28fbff18c5e1f8",
+              "value": "472171798947508341100871",
+              "valueFmt": "472171.798947508341100871"
+            },
+            {
+              "address": "0xae51542362c04dc0a2f85a806c78ade58e43221c",
+              "value": "388808045892275135068729",
+              "valueFmt": "388808.045892275135068729"
+            },
+            {
+              "address": "0x29eb3404d32e0670fedfc86597d90bfe0c0f4028",
+              "value": "387762653941009046414799",
+              "valueFmt": "387762.653941009046414799"
+            },
+            {
+              "address": "0x034179bee1022d5626526c71a5004cbfe200d0b6",
+              "value": "386611859029983624938154",
+              "valueFmt": "386611.859029983624938154"
+            },
+            {
+              "address": "0xf8adfb263fd6682055941e6c16750d8d34bdeec0",
+              "value": "332389479022360773947988",
+              "valueFmt": "332389.479022360773947988"
+            },
+            {
+              "address": "0xe1aa231756b5bfcc35a31eddcfbdc20dbf106991",
+              "value": "328237439993294222395544",
+              "valueFmt": "328237.439993294222395544"
+            },
+            {
+              "address": "0x3bfac7c5398aea13b567e321ed215c9a61ce1596",
+              "value": "284859994204650221394173",
+              "valueFmt": "284859.994204650221394173"
+            },
+            {
+              "address": "0xe9513ddf1139cbc2a29285e8dd759447b16d33ac",
+              "value": "258443245418354674045776",
+              "valueFmt": "258443.245418354674045776"
+            }
+          ],
+          "systemFlowIn": [
+            {
+              "address": "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3",
+              "value": "1358388381531651999999999",
+              "valueFmt": "1358388.381531651999999999"
+            },
+            {
+              "address": "0x807833243f1aafd29e1b9acdb4d796987d0aa934",
+              "value": "1082536783358249600000000",
+              "valueFmt": "1082536.7833582496"
+            },
+            {
+              "address": "0xebd5dd492db4ec069698acfcca34fc9dc400737d",
+              "value": "42911120608909011494252",
+              "valueFmt": "42911.120608909011494252"
+            }
+          ],
+          "systemFlowOut": [
+            {
+              "address": "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3",
+              "value": "1186173433819126101031493",
+              "valueFmt": "1186173.433819126101031493"
+            },
+            {
+              "address": "0x807833243f1aafd29e1b9acdb4d796987d0aa934",
+              "value": "965601914106471445296096",
+              "valueFmt": "965601.914106471445296096"
+            }
+          ],
+          "systemMatrix": [
+            {
+              "address": "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3->0x807833243f1aafd29e1b9acdb4d796987d0aa934",
+              "value": "1082536783358249600000000",
+              "valueFmt": "1082536.7833582496"
+            }
+          ],
+          "currentBalancesTracked": {
+            "0xe1efd4598cb371035f78dd3eb4151a7498f9dea4": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x8becec0ffbc93bbd94decaa9bbf7b2cfdd286d55": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x39a211de877c74a9e181e2253ede847bb4ec70cf": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x1a48bf090b02da27c0e60cb6659d4450904a846f": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x01ad9e797234026c61e523bc9bab2293ac140f6a": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xb7976bc67327ccd41435c5a555adbf8b987f8e1e": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x74880966f4e89b86b3cda7b8eb34eb7e5413cc66": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x6dc42e62024f3f18d6fd91f662c19850c1bfd978": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xf74df81441d120e4e4ef1c5bca9bcde6f44256c8": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xebd5dd492db4ec069698acfcca34fc9dc400737d": {
+              "value": "42911120608909011494252",
+              "valueFmt": "42911.120608909011494252"
+            },
+            "0x599016bf00ee23d531223c6285c92aa0cac278ef": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc5996a1ca8c4b558feefff2b403c09c9e1ae27cf": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3": {
+              "value": "172214947712525898968506",
+              "valueFmt": "172214.947712525898968506"
+            },
+            "0x807833243f1aafd29e1b9acdb4d796987d0aa934": {
+              "value": "116934869251778154703904",
+              "valueFmt": "116934.869251778154703904"
+            },
+            "0x2b5a6b209ee8b0b118dd76092420c9b45f4e99cb": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x8b269fd6cf9df0914a41b32f0af4b3d18e76291d": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc5aa7e0992eedf67f5096cb629152267cedf2875": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x07d28ca0ccae70e992a1a1dd310443bb96c81979": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc8b635c09161ca61005143630b3002b4fa335770": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x198bf984c5757947a0a88c901f12371a5ad3e000": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x99466736a2285ca2be0279c1f2c7757533ebc0cd": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x723754749830b533381775a22407fcec3597b052": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xaea0e9d9c7a38860361d836c3ba3f70f66d4d1a1": {
+              "value": "0",
+              "valueFmt": "0.0"
+            }
+          },
+          "myntisEvents": {
+            "balanceMigrated": {
+              "events": 0,
+              "recipients": 0,
+              "total": "0",
+              "txHashes": []
+            },
+            "migrationCompleted": {
+              "events": 1,
+              "totals": [
+                "0"
+              ]
+            },
+            "emissionsMinted": {
+              "events": 714,
+              "total": "1357388381531651999999999"
+            },
+            "immediateMinted": {
+              "events": 91,
+              "total": "22577514967263105797289606"
+            }
+          }
+        },
+        {
+          "tokenAddress": "0xC5aA7e0992EEDf67f5096Cb629152267cEDf2875",
+          "fromBlock": 37363780,
+          "toBlock": 37843401,
+          "symbol": "MYNT",
+          "decimals": 18,
+          "totalSupply": "6004945712836123794400",
+          "totalSupplyFmt": "6004.9457128361237944",
+          "transferCount": 19,
+          "volumeTotal": "12559891425671523794400",
+          "volumeTotalFmt": "12559.8914256715237944",
+          "mintCount": 4,
+          "mintTotal": "6118945712836123794400",
+          "mintTotalFmt": "6118.9457128361237944",
+          "burnCount": 6,
+          "burnTotal": "114000000000000000000",
+          "burnTotalFmt": "114.0",
+          "topMintRecipients": [
+            {
+              "address": "0xc8b635c09161ca61005143630b3002b4fa335770",
+              "value": "4616945712836123794400",
+              "valueFmt": "4616.9457128361237944"
+            },
+            {
+              "address": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+              "value": "1502000000000000000000",
+              "valueFmt": "1502.0"
+            }
+          ],
+          "topBurnSenders": [
+            {
+              "address": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+              "value": "114000000000000000000",
+              "valueFmt": "114.0"
+            }
+          ],
+          "topSenders": [
+            {
+              "address": "0x0000000000000000000000000000000000000000",
+              "value": "6118945712836123794400",
+              "valueFmt": "6118.9457128361237944"
+            },
+            {
+              "address": "0xc8b635c09161ca61005143630b3002b4fa335770",
+              "value": "4616945712835400000000",
+              "valueFmt": "4616.9457128354"
+            },
+            {
+              "address": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+              "value": "1614000000000000000000",
+              "valueFmt": "1614.0"
+            },
+            {
+              "address": "0x99466736a2285ca2be0279c1f2c7757533ebc0cd",
+              "value": "200000000000000000000",
+              "valueFmt": "200.0"
+            },
+            {
+              "address": "0x198bf984c5757947a0a88c901f12371a5ad3e000",
+              "value": "10000000000000000000",
+              "valueFmt": "10.0"
+            }
+          ],
+          "topReceivers": [
+            {
+              "address": "0xc8b635c09161ca61005143630b3002b4fa335770",
+              "value": "5816945712836123794400",
+              "valueFmt": "5816.9457128361237944"
+            },
+            {
+              "address": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+              "value": "5551827498731000000000",
+              "valueFmt": "5551.827498731"
+            },
+            {
+              "address": "0x99466736a2285ca2be0279c1f2c7757533ebc0cd",
+              "value": "777118214104400000000",
+              "valueFmt": "777.1182141044"
+            },
+            {
+              "address": "0x198bf984c5757947a0a88c901f12371a5ad3e000",
+              "value": "300000000000000000000",
+              "valueFmt": "300.0"
+            },
+            {
+              "address": "0x0000000000000000000000000000000000000000",
+              "value": "114000000000000000000",
+              "valueFmt": "114.0"
+            }
+          ],
+          "systemFlowIn": [
+            {
+              "address": "0xc8b635c09161ca61005143630b3002b4fa335770",
+              "value": "5816945712836123794400",
+              "valueFmt": "5816.9457128361237944"
+            },
+            {
+              "address": "0x99466736a2285ca2be0279c1f2c7757533ebc0cd",
+              "value": "777118214104400000000",
+              "valueFmt": "777.1182141044"
+            },
+            {
+              "address": "0x198bf984c5757947a0a88c901f12371a5ad3e000",
+              "value": "300000000000000000000",
+              "valueFmt": "300.0"
+            }
+          ],
+          "systemFlowOut": [
+            {
+              "address": "0xc8b635c09161ca61005143630b3002b4fa335770",
+              "value": "4616945712835400000000",
+              "valueFmt": "4616.9457128354"
+            },
+            {
+              "address": "0x99466736a2285ca2be0279c1f2c7757533ebc0cd",
+              "value": "200000000000000000000",
+              "valueFmt": "200.0"
+            },
+            {
+              "address": "0x198bf984c5757947a0a88c901f12371a5ad3e000",
+              "value": "10000000000000000000",
+              "valueFmt": "10.0"
+            }
+          ],
+          "systemMatrix": [
+            {
+              "address": "0xc8b635c09161ca61005143630b3002b4fa335770->0x99466736a2285ca2be0279c1f2c7757533ebc0cd",
+              "value": "577118214104400000000",
+              "valueFmt": "577.1182141044"
+            },
+            {
+              "address": "0x99466736a2285ca2be0279c1f2c7757533ebc0cd->0xc8b635c09161ca61005143630b3002b4fa335770",
+              "value": "200000000000000000000",
+              "valueFmt": "200.0"
+            }
+          ],
+          "currentBalancesTracked": {
+            "0xe1efd4598cb371035f78dd3eb4151a7498f9dea4": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x8becec0ffbc93bbd94decaa9bbf7b2cfdd286d55": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x39a211de877c74a9e181e2253ede847bb4ec70cf": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x1a48bf090b02da27c0e60cb6659d4450904a846f": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x01ad9e797234026c61e523bc9bab2293ac140f6a": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xb7976bc67327ccd41435c5a555adbf8b987f8e1e": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x74880966f4e89b86b3cda7b8eb34eb7e5413cc66": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x6dc42e62024f3f18d6fd91f662c19850c1bfd978": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xf74df81441d120e4e4ef1c5bca9bcde6f44256c8": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xebd5dd492db4ec069698acfcca34fc9dc400737d": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x599016bf00ee23d531223c6285c92aa0cac278ef": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc5996a1ca8c4b558feefff2b403c09c9e1ae27cf": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x43495fbcd33235d9fcd4c2c7f8cb2444e463c9b3": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x807833243f1aafd29e1b9acdb4d796987d0aa934": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x2b5a6b209ee8b0b118dd76092420c9b45f4e99cb": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x8b269fd6cf9df0914a41b32f0af4b3d18e76291d": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc5aa7e0992eedf67f5096cb629152267cedf2875": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x07d28ca0ccae70e992a1a1dd310443bb96c81979": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xc8b635c09161ca61005143630b3002b4fa335770": {
+              "value": "1200000000000723794400",
+              "valueFmt": "1200.0000000007237944"
+            },
+            "0x198bf984c5757947a0a88c901f12371a5ad3e000": {
+              "value": "290000000000000000000",
+              "valueFmt": "290.0"
+            },
+            "0x99466736a2285ca2be0279c1f2c7757533ebc0cd": {
+              "value": "577118214104400000000",
+              "valueFmt": "577.1182141044"
+            },
+            "0x723754749830b533381775a22407fcec3597b052": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xaea0e9d9c7a38860361d836c3ba3f70f66d4d1a1": {
+              "value": "0",
+              "valueFmt": "0.0"
+            }
+          },
+          "myntisEvents": {
+            "balanceMigrated": {
+              "events": 0,
+              "recipients": 0,
+              "total": "0",
+              "txHashes": []
+            },
+            "migrationCompleted": {
+              "events": 0,
+              "totals": []
+            },
+            "emissionsMinted": {
+              "events": 1,
+              "total": "4616945712836123794400"
+            },
+            "immediateMinted": {
+              "events": 1,
+              "total": "1500000000000000000000"
+            }
+          }
+        }
+      ]
+    },
+    "base-mainnet": {
+      "network": "base-mainnet",
+      "rpc": "https://base-mainnet.g.alchemy.com/v2/<redacted>",
+      "latestBlock": 42333194,
+      "trackedAddresses": [
+        "0x019cb2aa19465ca1e140abeadf13320414031c6b",
+        "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6",
+        "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+        "0x47386e229d3d76962f339d5e93349724858f88ac",
+        "0x48bcd6177f958c26fcc8d8e4b8088936bd20541e",
+        "0x7086792971b623462b6c1d1263ac73b0761addb9",
+        "0x803f9694be31d3ace5792c21ab9f72b69838c0e0",
+        "0xdfb3b8107b33d54bae402a76bba1432668b2d896",
+        "0xfdf1aa6fe61675cab26e083f92ce9a7986beaf6f",
+        "0xff52fda700caf238f9fe3bea3091e863aa00eadc"
+      ],
+      "tokenAnalyses": [
+        {
+          "tokenAddress": "0x7629FD045E1462C9DCD580d0aF31db6D46c5AB47",
+          "fromBlock": 41867816,
+          "toBlock": 42333194,
+          "symbol": "MYNT",
+          "decimals": 18,
+          "totalSupply": "24724308693629691520180846",
+          "totalSupplyFmt": "24724308.693629691520180846",
+          "transferCount": 3676,
+          "volumeTotal": "30310537404637706335113266",
+          "volumeTotalFmt": "30310537.404637706335113266",
+          "mintCount": 1748,
+          "mintTotal": "24724308693629691520180846",
+          "mintTotalFmt": "24724308.693629691520180846",
+          "burnCount": 0,
+          "burnTotal": "0",
+          "burnTotalFmt": "0.0",
+          "topMintRecipients": [
+            {
+              "address": "0x6255cfec19a346a5b0add66ef44f7c5740c12377",
+              "value": "5423697403256185728868214",
+              "valueFmt": "5423697.403256185728868214"
+            },
+            {
+              "address": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+              "value": "2781196093353627599824700",
+              "valueFmt": "2781196.0933536275998247"
+            },
+            {
+              "address": "0xca7735a6290f384c8a9394b0e3141fef89e6589d",
+              "value": "1804950818479275725371264",
+              "valueFmt": "1804950.818479275725371264"
+            },
+            {
+              "address": "0x1303c39823d7e559674d45cd86da06eec6f5048b",
+              "value": "1368525378687797098801323",
+              "valueFmt": "1368525.378687797098801323"
+            },
+            {
+              "address": "0xec431787af43ee294d8167821f7d26bcbf847e26",
+              "value": "1268024793197198555597342",
+              "valueFmt": "1268024.793197198555597342"
+            },
+            {
+              "address": "0x0a45a0f5a2e46daa75f5a8cccc54b3ac84cdba27",
+              "value": "1110357468460613667017778",
+              "valueFmt": "1110357.468460613667017778"
+            },
+            {
+              "address": "0xdfed85e4dbc56bc8053ce394f2ea27a152fba2f1",
+              "value": "944233550490440711331788",
+              "valueFmt": "944233.550490440711331788"
+            },
+            {
+              "address": "0x06def79cb5f1b564aaf8de275070477889b98126",
+              "value": "567419844264215077860803",
+              "valueFmt": "567419.844264215077860803"
+            },
+            {
+              "address": "0xacbe177685b442886c779f89132b85e05ecef86d",
+              "value": "512162932574599222576910",
+              "valueFmt": "512162.93257459922257691"
+            },
+            {
+              "address": "0xe099e78733d8560f384f3720e95e764fa5d97bd4",
+              "value": "498243822274606000116781",
+              "valueFmt": "498243.822274606000116781"
+            },
+            {
+              "address": "0xe66e51c61a0d89831e9b41f8de28fbff18c5e1f8",
+              "value": "472171798947508341100871",
+              "valueFmt": "472171.798947508341100871"
+            },
+            {
+              "address": "0xae51542362c04dc0a2f85a806c78ade58e43221c",
+              "value": "388808045892275135068729",
+              "valueFmt": "388808.045892275135068729"
+            },
+            {
+              "address": "0x29eb3404d32e0670fedfc86597d90bfe0c0f4028",
+              "value": "387762653941009046414799",
+              "valueFmt": "387762.653941009046414799"
+            },
+            {
+              "address": "0x034179bee1022d5626526c71a5004cbfe200d0b6",
+              "value": "386611859029983624938154",
+              "valueFmt": "386611.859029983624938154"
+            },
+            {
+              "address": "0xf8adfb263fd6682055941e6c16750d8d34bdeec0",
+              "value": "332389479022360773947988",
+              "valueFmt": "332389.479022360773947988"
+            },
+            {
+              "address": "0xe1aa231756b5bfcc35a31eddcfbdc20dbf106991",
+              "value": "328237439993294222395544",
+              "valueFmt": "328237.439993294222395544"
+            },
+            {
+              "address": "0x3bfac7c5398aea13b567e321ed215c9a61ce1596",
+              "value": "284859994204650221394173",
+              "valueFmt": "284859.994204650221394173"
+            },
+            {
+              "address": "0xe9513ddf1139cbc2a29285e8dd759447b16d33ac",
+              "value": "258443245418354674045776",
+              "valueFmt": "258443.245418354674045776"
+            },
+            {
+              "address": "0xdff6703e9e28de22d2ac59e062126f3d9205b539",
+              "value": "240638792599146528569578",
+              "valueFmt": "240638.792599146528569578"
+            },
+            {
+              "address": "0xe37b6509f8b15b05bf05cebc1b6dd4aefff37224",
+              "value": "237716029187205936640553",
+              "valueFmt": "237716.029187205936640553"
+            }
+          ],
+          "topBurnSenders": [],
+          "topSenders": [
+            {
+              "address": "0x0000000000000000000000000000000000000000",
+              "value": "24724308693629691520180846",
+              "valueFmt": "24724308.693629691520180846"
+            },
+            {
+              "address": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+              "value": "2430669766106375797758093",
+              "valueFmt": "2430669.766106375797758093"
+            },
+            {
+              "address": "0x6255cfec19a346a5b0add66ef44f7c5740c12377",
+              "value": "2000500000000000000000000",
+              "valueFmt": "2000500.0"
+            },
+            {
+              "address": "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6",
+              "value": "667119522457288000000000",
+              "valueFmt": "667119.522457288"
+            },
+            {
+              "address": "0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+              "value": "465839422444351017174327",
+              "valueFmt": "465839.422444351017174327"
+            },
+            {
+              "address": "0xca7735a6290f384c8a9394b0e3141fef89e6589d",
+              "value": "17100000000000000000000",
+              "valueFmt": "17100.0"
+            },
+            {
+              "address": "0x019cb2aa19465ca1e140abeadf13320414031c6b",
+              "value": "5000000000000000000000",
+              "valueFmt": "5000.0"
+            }
+          ],
+          "topReceivers": [
+            {
+              "address": "0x6255cfec19a346a5b0add66ef44f7c5740c12377",
+              "value": "5423697403256185728868214",
+              "valueFmt": "5423697.403256185728868214"
+            },
+            {
+              "address": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+              "value": "2793296093353627599824700",
+              "valueFmt": "2793296.0933536275998247"
+            },
+            {
+              "address": "0xca7735a6290f384c8a9394b0e3141fef89e6589d",
+              "value": "2348047219117499466108181",
+              "valueFmt": "2348047.219117499466108181"
+            },
+            {
+              "address": "0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+              "value": "2107306768778938497758093",
+              "valueFmt": "2107306.768778938497758093"
+            },
+            {
+              "address": "0x41642111bcbd15cec86784fbdbdcb6b72e2118f1",
+              "value": "2000500000000000000000000",
+              "valueFmt": "2000500.0"
+            },
+            {
+              "address": "0x1303c39823d7e559674d45cd86da06eec6f5048b",
+              "value": "1368525378687797098801323",
+              "valueFmt": "1368525.378687797098801323"
+            },
+            {
+              "address": "0xec431787af43ee294d8167821f7d26bcbf847e26",
+              "value": "1268024793197198555597342",
+              "valueFmt": "1268024.793197198555597342"
+            },
+            {
+              "address": "0x0a45a0f5a2e46daa75f5a8cccc54b3ac84cdba27",
+              "value": "1110357468460613667017778",
+              "valueFmt": "1110357.468460613667017778"
+            },
+            {
+              "address": "0xdfed85e4dbc56bc8053ce394f2ea27a152fba2f1",
+              "value": "944233550490440711331788",
+              "valueFmt": "944233.550490440711331788"
+            },
+            {
+              "address": "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6",
+              "value": "845867710251050000000000",
+              "valueFmt": "845867.71025105"
+            },
+            {
+              "address": "0x06def79cb5f1b564aaf8de275070477889b98126",
+              "value": "567419844264215077860803",
+              "valueFmt": "567419.844264215077860803"
+            },
+            {
+              "address": "0xacbe177685b442886c779f89132b85e05ecef86d",
+              "value": "540236370779706951719809",
+              "valueFmt": "540236.370779706951719809"
+            },
+            {
+              "address": "0xe099e78733d8560f384f3720e95e764fa5d97bd4",
+              "value": "498243822274606000116781",
+              "valueFmt": "498243.822274606000116781"
+            },
+            {
+              "address": "0xe66e51c61a0d89831e9b41f8de28fbff18c5e1f8",
+              "value": "472171798947508341100871",
+              "valueFmt": "472171.798947508341100871"
+            },
+            {
+              "address": "0xae51542362c04dc0a2f85a806c78ade58e43221c",
+              "value": "388808045892275135068729",
+              "valueFmt": "388808.045892275135068729"
+            },
+            {
+              "address": "0x29eb3404d32e0670fedfc86597d90bfe0c0f4028",
+              "value": "387762653941009046414799",
+              "valueFmt": "387762.653941009046414799"
+            },
+            {
+              "address": "0x034179bee1022d5626526c71a5004cbfe200d0b6",
+              "value": "386611859029983624938154",
+              "valueFmt": "386611.859029983624938154"
+            },
+            {
+              "address": "0xf8adfb263fd6682055941e6c16750d8d34bdeec0",
+              "value": "332389479022360773947988",
+              "valueFmt": "332389.479022360773947988"
+            },
+            {
+              "address": "0xe1aa231756b5bfcc35a31eddcfbdc20dbf106991",
+              "value": "328237439993294222395544",
+              "valueFmt": "328237.439993294222395544"
+            },
+            {
+              "address": "0x3bfac7c5398aea13b567e321ed215c9a61ce1596",
+              "value": "284859994204650221394173",
+              "valueFmt": "284859.994204650221394173"
+            }
+          ],
+          "systemFlowIn": [
+            {
+              "address": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+              "value": "2793296093353627599824700",
+              "valueFmt": "2793296.0933536275998247"
+            },
+            {
+              "address": "0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+              "value": "2107306768778938497758093",
+              "valueFmt": "2107306.768778938497758093"
+            },
+            {
+              "address": "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6",
+              "value": "845867710251050000000000",
+              "valueFmt": "845867.71025105"
+            },
+            {
+              "address": "0x019cb2aa19465ca1e140abeadf13320414031c6b",
+              "value": "14513730339880000000000",
+              "valueFmt": "14513.73033988"
+            }
+          ],
+          "systemFlowOut": [
+            {
+              "address": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+              "value": "2430669766106375797758093",
+              "valueFmt": "2430669.766106375797758093"
+            },
+            {
+              "address": "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6",
+              "value": "667119522457288000000000",
+              "valueFmt": "667119.522457288"
+            },
+            {
+              "address": "0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+              "value": "465839422444351017174327",
+              "valueFmt": "465839.422444351017174327"
+            },
+            {
+              "address": "0x019cb2aa19465ca1e140abeadf13320414031c6b",
+              "value": "5000000000000000000000",
+              "valueFmt": "5000.0"
+            }
+          ],
+          "systemMatrix": [
+            {
+              "address": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d->0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+              "value": "1445187246321650497758093",
+              "valueFmt": "1445187.246321650497758093"
+            },
+            {
+              "address": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d->0x26a942e30505df986c16fa9f1cbeeeae9ad325b6",
+              "value": "835867710251050000000000",
+              "valueFmt": "835867.71025105"
+            },
+            {
+              "address": "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6->0xff52fda700caf238f9fe3bea3091e863aa00eadc",
+              "value": "662119522457288000000000",
+              "valueFmt": "662119.522457288"
+            },
+            {
+              "address": "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d->0x019cb2aa19465ca1e140abeadf13320414031c6b",
+              "value": "9513730339880000000000",
+              "valueFmt": "9513.73033988"
+            },
+            {
+              "address": "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6->0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+              "value": "5000000000000000000000",
+              "valueFmt": "5000.0"
+            },
+            {
+              "address": "0x019cb2aa19465ca1e140abeadf13320414031c6b->0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d",
+              "value": "5000000000000000000000",
+              "valueFmt": "5000.0"
+            }
+          ],
+          "currentBalancesTracked": {
+            "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d": {
+              "value": "362626327247251802066607",
+              "valueFmt": "362626.327247251802066607"
+            },
+            "0x7086792971b623462b6c1d1263ac73b0761addb9": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xff52fda700caf238f9fe3bea3091e863aa00eadc": {
+              "value": "1641467346334587480583766",
+              "valueFmt": "1641467.346334587480583766"
+            },
+            "0x019cb2aa19465ca1e140abeadf13320414031c6b": {
+              "value": "9513730339880000000000",
+              "valueFmt": "9513.73033988"
+            },
+            "0xdfb3b8107b33d54bae402a76bba1432668b2d896": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6": {
+              "value": "178748187793762000000000",
+              "valueFmt": "178748.187793762"
+            },
+            "0x47386e229d3d76962f339d5e93349724858f88ac": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x48bcd6177f958c26fcc8d8e4b8088936bd20541e": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xfdf1aa6fe61675cab26e083f92ce9a7986beaf6f": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x803f9694be31d3ace5792c21ab9f72b69838c0e0": {
+              "value": "0",
+              "valueFmt": "0.0"
+            }
+          },
+          "myntisEvents": {
+            "balanceMigrated": {
+              "events": 98,
+              "recipients": 92,
+              "total": "21943112600276063920356146",
+              "txHashes": [
+                "0xbef2847a5c3100c92e8b841626064c62a9a8c19cdb92580bf247baa5828c37f7",
+                "0x4ec6c454dba249c6633b32f062767ab81f412b17e3be488095cf1b70a3442007",
+                "0xebda138f7f4ef092fbd7b0c5fcc33cb4dae89d0cdf62fc8ca982a1d3207d1a91"
+              ]
+            },
+            "migrationCompleted": {
+              "events": 1,
+              "totals": [
+                "23059132387186261789306346"
+              ]
+            },
+            "emissionsMinted": {
+              "events": 1650,
+              "total": "2781196093353627599824700"
+            },
+            "immediateMinted": {
+              "events": 0,
+              "total": "0"
+            }
+          }
+        },
+        {
+          "tokenAddress": "0x0314e1274b9860E77d90E894D784cD24EeCbE479",
+          "fromBlock": 41866687,
+          "toBlock": 42333194,
+          "symbol": "MYNT",
+          "decimals": 18,
+          "totalSupply": "0",
+          "totalSupplyFmt": "0.0",
+          "transferCount": 0,
+          "volumeTotal": "0",
+          "volumeTotalFmt": "0.0",
+          "mintCount": 0,
+          "mintTotal": "0",
+          "mintTotalFmt": "0.0",
+          "burnCount": 0,
+          "burnTotal": "0",
+          "burnTotalFmt": "0.0",
+          "topMintRecipients": [],
+          "topBurnSenders": [],
+          "topSenders": [],
+          "topReceivers": [],
+          "systemFlowIn": [],
+          "systemFlowOut": [],
+          "systemMatrix": [],
+          "currentBalancesTracked": {
+            "0x3cba95f31b61d9faac54d3a8a7fbb926737bb57d": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x7086792971b623462b6c1d1263ac73b0761addb9": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xff52fda700caf238f9fe3bea3091e863aa00eadc": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x019cb2aa19465ca1e140abeadf13320414031c6b": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xdfb3b8107b33d54bae402a76bba1432668b2d896": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x26a942e30505df986c16fa9f1cbeeeae9ad325b6": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x47386e229d3d76962f339d5e93349724858f88ac": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x48bcd6177f958c26fcc8d8e4b8088936bd20541e": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0xfdf1aa6fe61675cab26e083f92ce9a7986beaf6f": {
+              "value": "0",
+              "valueFmt": "0.0"
+            },
+            "0x803f9694be31d3ace5792c21ab9f72b69838c0e0": {
+              "value": "0",
+              "valueFmt": "0.0"
+            }
+          },
+          "myntisEvents": {
+            "balanceMigrated": {
+              "events": 0,
+              "recipients": 0,
+              "total": "0",
+              "txHashes": []
+            },
+            "migrationCompleted": {
+              "events": 0,
+              "totals": []
+            },
+            "emissionsMinted": {
+              "events": 0,
+              "total": "0"
+            },
+            "immediateMinted": {
+              "events": 0,
+              "total": "0"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "migrationAnalysis": {
+    "snapshotInference": {
+      "snapshotFile": "migrations/base-sepolia-holders-snapshot-37378124.json",
+      "recipients": 92,
+      "total": "21760243737607178686863132",
+      "min": "42511120608909011494252",
+      "median": "52975567728180226364199",
+      "max": "5375846873994709709430588",
+      "floorTotal": "3911023096019629057471184",
+      "aboveFloor": "17849220641587549629391948",
+      "recipients40kTo50k": 40,
+      "totalFmt": "21760243.737607178686863132",
+      "minFmt": "42511.120608909011494252",
+      "medianFmt": "52975.567728180226364199",
+      "maxFmt": "5375846.873994709709430588",
+      "floorTotalFmt": "3911023.096019629057471184",
+      "aboveFloorFmt": "17849220.641587549629391948"
+    },
+    "mainnetPrimaryTokenBalanceMigrated": {
+      "events": 98,
+      "recipients": 92,
+      "total": "21943112600276063920356146",
+      "txHashes": [
+        "0xbef2847a5c3100c92e8b841626064c62a9a8c19cdb92580bf247baa5828c37f7",
+        "0x4ec6c454dba249c6633b32f062767ab81f412b17e3be488095cf1b70a3442007",
+        "0xebda138f7f4ef092fbd7b0c5fcc33cb4dae89d0cdf62fc8ca982a1d3207d1a91"
+      ]
+    },
+    "didMigrate": [
+      "Holder balances via Myntis.migrateMint on Base mainnet (captured as BalanceMigrated events where present).",
+      "One-time holder airdrop/migration snapshot from Base Sepolia holders into Base mainnet holder balances.",
+      "Mainnet token minting allocations tracked through ImmediateMinted and EmissionsMinted events."
+    ],
+    "didNotMigrate": [
+      "Legacy staking positions and per-user reward debt state.",
+      "Legacy emissions internal state in earlier waves (unless explicitly migrated via `initializeMigration` in that wave).",
+      "Legacy distributor epoch internals (open/closed epochs, locked claim states) outside explicit cutover handling.",
+      "Legacy Merkle proof/nullifier state across old distributor instances."
+    ]
+  }
+}

@@ -233,5 +233,4 @@ After testing the circuit and SDK:
 - `token/sdk/test_zk_proof_generation.ts` - SDK test script
 - `token/test/zk-proof-generation.test.ts` - Hardhat test
 - `token/test/zk-proof-end-to-end.test.ts` - End-to-end test
-- `token/ZK_PROOF_TESTING_GUIDE.md` - This guide
-
+- `token/docs/testing/ZK_PROOF_TESTING_GUIDE.md` - This guide

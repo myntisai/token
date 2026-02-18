@@ -57,13 +57,20 @@ npx hardhat test
 - `scripts/`: deployment, migration, verification, and diagnostics
 - `test/`: Hardhat test suites
 - `deployments/`: deployment snapshots and records
+- `docs/`: architecture, deployment, testing, and security notes
 - `zk-circuits/`: circuits and related setup artifacts
 - `sdk/`: proof-generation SDK utilities
 
 ## Security
 
 - See `SECURITY.md` for vulnerability reporting.
-- Audit snapshots and notes are tracked in `SECURITY_AUDIT_REPORT*.md`.
+- Audit snapshots and notes are tracked in `docs/security/audits/`.
+
+## Documentation
+
+- Start at `docs/README.md` for a full documentation index.
+- Deployment docs map: `docs/deployment/README.md`.
+- Keep root docs focused on open-source standards (`README.md`, `CONTRIBUTING.md`, `SECURITY.md`, `LICENSE`, `CODE_OF_CONDUCT.md`).
 
 ## Mainnet Freeze and Migration Records
 
@@ -74,7 +81,12 @@ npx hardhat test
 - Mainnet upgrade runbook (emissions + staking): `deployments/MAINNET_EMISSIONS_STAKING_UPGRADE_RUNBOOK.md`
 - Mainnet upgrade execution tracker: `deployments/MAINNET_UPGRADE_TRACKER.md`
 - Migration scope disclosure (holders migrated vs. protocol state): `deployments/MIGRATION_SCOPE_DISCLOSURE.md`
+- Migration and accounting narrative: `docs/deployment/MIGRATION_AND_ACCOUNTING_STORY.md`
+- Transfer/mint forensic report: `docs/deployment/FORENSIC_MIGRATION_TRANSFER_ANALYSIS.md`
+- Mainnet migration reconciliation artifact: `deployments/forensic-mainnet-migration-reconciliation.json`
 - Base Sepolia deployment artifact history: `deployments/BASE_SEPOLIA_DEPLOYMENT_HISTORY.md`
+- Base Sepolia deployer/block forensic report (`0x0904...` + `0x89...`): `docs/deployment/BASE_SEPOLIA_DEPLOYER_STORY.md`
+- Full chain-derived deployer scan (`0x0904...` + `0x89...`): `docs/deployment/BASE_SEPOLIA_DEPLOYER_SCAN_BLOCKSCOUT.md`
 
 ## Contributing
 
