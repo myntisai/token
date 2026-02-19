@@ -8,6 +8,11 @@ const ROOT = path.resolve(__dirname, "..");
 const INPUT_JSON = path.join(ROOT, "deployments", "contract-registry-latest.json");
 const OUTPUT_JSON = path.join(ROOT, "deployments", "contract-registry-enriched-latest.json");
 const OUTPUT_CSV = path.join(ROOT, "deployments", "contract-registry-enriched-latest.csv");
+const BASE_SEPOLIA_SCAN_JSON = path.join(
+  ROOT,
+  "deployments",
+  "base-sepolia-blockscout-deployer-scan-0904-89.json"
+);
 
 const ETHERSCAN_API_BASE = "https://api.etherscan.io/v2/api";
 const ETHERSCAN_KEY = process.env.BASESCAN_API_KEY || process.env.ETHERSCAN_API_KEY || "";
@@ -110,10 +115,32 @@ async function hasCode(rpcUrl, address) {
   }
 }
 
+function loadBaseSepoliaFallbackCreationMap() {
+  if (!fs.existsSync(BASE_SEPOLIA_SCAN_JSON)) return new Map();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(BASE_SEPOLIA_SCAN_JSON, "utf8"));
+    const rows = Array.isArray(parsed.rows) ? parsed.rows : [];
+    const out = new Map();
+    for (const row of rows) {
+      const addr = String(row.contractAddressLower || row.contractAddress || "").toLowerCase();
+      if (!addr) continue;
+      if (out.has(addr)) continue;
+      out.set(addr, {
+        creator: row.creator || null,
+        creationTxHash: row.txHash || null
+      });
+    }
+    return out;
+  } catch {
+    return new Map();
+  }
+}
+
 async function main() {
   const raw = fs.readFileSync(INPUT_JSON, "utf8");
   const parsed = JSON.parse(raw);
   const contracts = Array.isArray(parsed.contracts) ? parsed.contracts : [];
+  const baseSepoliaFallbackCreationMap = loadBaseSepoliaFallbackCreationMap();
 
   const instances = [];
   for (const c of contracts) {
@@ -149,7 +176,10 @@ async function main() {
     const creationMap = await getCreationData(cfg.chainId, uniqueAddresses);
 
     for (const r of rows) {
-      const creation = creationMap.get(r.normalizedAddress);
+      let creation = creationMap.get(r.normalizedAddress);
+      if (!creation && network === "base-sepolia") {
+        creation = baseSepoliaFallbackCreationMap.get(r.normalizedAddress) || null;
+      }
       if (creation) {
         r.creator = creation.creator;
         r.creationTxHash = creation.creationTxHash;

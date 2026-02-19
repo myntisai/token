@@ -20,6 +20,7 @@
 - [ ] No real secrets included in code, scripts, or docs.
 - [ ] Deployment/migration script changes include usage notes.
 - [ ] Security-sensitive changes include reasoning in PR description.
+- [ ] Documentation changes follow `docs/README.md` structure.
 
 ## Contract Changes
 

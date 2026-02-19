@@ -1,0 +1,1198 @@
+{
+  "generatedAt": "2026-02-18T22:14:31.490Z",
+  "network": "base-sepolia",
+  "rpcUsed": "https://base-sepolia-rpc.publicnode.com",
+  "creators": [
+    "0x0904192498efff59e0502ae1700ecaa9b1708543",
+    "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627"
+  ],
+  "totals": {
+    "contractsMatched": 48,
+    "byCreator": {
+      "0x0904192498efff59e0502ae1700ecaa9b1708543": {
+        "total": 23,
+        "deployment": 8,
+        "ozOnly": 15,
+        "both": 0
+      },
+      "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627": {
+        "total": 25,
+        "deployment": 13,
+        "ozOnly": 10,
+        "both": 2
+      }
+    }
+  },
+  "migrationSnapshot37378124": {
+    "recipients": 92,
+    "total": "21760243.737607178686863132",
+    "average": "236524.388452251942248512",
+    "median": "52975.567728180226364199",
+    "min": "42511.120608909011494252",
+    "max": "5375846.873994709709430588",
+    "recipientsIn40kTo50kBand": 40
+  },
+  "rows": [
+    {
+      "network": "base-sepolia",
+      "address": "0x234072cCE1289674d6eD21260A8522C427651ce1",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x8b2984e55e206df0cb76e2eaddb7fee2c2ae9c96d61f735f4dc6f005fbf0a47f",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x234072cCE1289674d6eD21260A8522C427651ce1",
+      "status": 1,
+      "blockNumber": 32468283,
+      "txIndex": 8,
+      "blockTimestamp": "2025-10-17T12:40:54.000Z",
+      "gasUsed": "1751472",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.ed4cc587896eae51da69331dad4f961baf5e3cee95bd8a027f2bda419976e7d6.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x72846079AcBf42ae7E7c3E51EdDF87AA0D11BAAF",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x588d2800a43b8f9f53609367335648a2c71dbb25ed60f7f75746658014ad0396",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x72846079AcBf42ae7E7c3E51EdDF87AA0D11BAAF",
+      "status": 1,
+      "blockNumber": 32468287,
+      "txIndex": 40,
+      "blockTimestamp": "2025-10-17T12:41:02.000Z",
+      "gasUsed": "392202",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.0.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x56Ad5c5285d036833828886108b733873345E86b",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0xaee730b192ad6c41a146fd4a0fdf81924673370a6da73f333a6bb4622729832c",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x56Ad5c5285d036833828886108b733873345E86b",
+      "status": 1,
+      "blockNumber": 32471103,
+      "txIndex": 55,
+      "blockTimestamp": "2025-10-17T14:14:54.000Z",
+      "gasUsed": "318834",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.2.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x22cD2e45f3462d44bAb4ab2427A491c5FE70f7d4",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x510f93dee34d032e778baeec2c6288b3f921fb712985e5074bb55339431da4ed",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x22cD2e45f3462d44bAb4ab2427A491c5FE70f7d4",
+      "status": 1,
+      "blockNumber": 32598787,
+      "txIndex": 24,
+      "blockTimestamp": "2025-10-20T13:11:02.000Z",
+      "gasUsed": "808288",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.3.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x7DD7C14927008274000de1813c017c3219A06aD6",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0xd1c5c0714302b702c76b2acde848c4a898af4dab93148f7a2693291a6ae96716",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x7DD7C14927008274000de1813c017c3219A06aD6",
+      "status": 1,
+      "blockNumber": 32598790,
+      "txIndex": 6,
+      "blockTimestamp": "2025-10-20T13:11:08.000Z",
+      "gasUsed": "318834",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.4.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x598F58bA70627AcC75FA19651AA5039E96cF993e",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0xbc11da48b7fb36bb7604abc3e4da3773ecdd4f771ad089d723b0fe69454c11cb",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x598F58bA70627AcC75FA19651AA5039E96cF993e",
+      "status": 1,
+      "blockNumber": 32600891,
+      "txIndex": 19,
+      "blockTimestamp": "2025-10-20T14:21:10.000Z",
+      "gasUsed": "2022502",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.56091f0397cf9309eb549c09254582efc1a20ffb6badd66e2b06c22eede46e4f.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xa42DC4305Bb08540109F85621C29d71689eA35F9",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0xec9baf7cf148b4f8a6d9aa4ac728a385d55e5198e6b186d6190296652cb45cb5",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xa42DC4305Bb08540109F85621C29d71689eA35F9",
+      "status": 1,
+      "blockNumber": 32600988,
+      "txIndex": 21,
+      "blockTimestamp": "2025-10-20T14:24:24.000Z",
+      "gasUsed": "298694",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.6.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xF9C08054D00b726E6B9C78559483bbBcA5D310b5",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x9b4f58816c72a52747562df1c47c8142fb3bda24c0a9bee92f6b7516242d8214",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xF9C08054D00b726E6B9C78559483bbBcA5D310b5",
+      "status": 1,
+      "blockNumber": 32601020,
+      "txIndex": 26,
+      "blockTimestamp": "2025-10-20T14:25:28.000Z",
+      "gasUsed": "298694",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.7.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xFf2B6022a2a012D470d23136913ADf06b467E591",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x362c8f4de4d5fcb27a12f512f057de3dfa8cc8438e8366a392c412403c3c765c",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xFf2B6022a2a012D470d23136913ADf06b467E591",
+      "status": 1,
+      "blockNumber": 32601038,
+      "txIndex": 12,
+      "blockTimestamp": "2025-10-20T14:26:04.000Z",
+      "gasUsed": "298694",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.8.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xFa1410229bdFc031137113438Af74A858aAf6964",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x02022f358aa8c46142b4792a2f012c6923a5814175480890b88e54d4bb6fbdb2",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xFa1410229bdFc031137113438Af74A858aAf6964",
+      "status": 1,
+      "blockNumber": 32901643,
+      "txIndex": 18,
+      "blockTimestamp": "2025-10-27T13:26:14.000Z",
+      "gasUsed": "1773473",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.a16b8a5fbcf5321ab9a1c3ebed87fd98f984b0b8f9a8db85a396412e050c6e28.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x789301aCF660D75c369333F5F6f574eac16A413c",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0xa8b1cc938a4bb69865637f4252c9565743f2c703b204729b6c9d4b1f4492d429",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x789301aCF660D75c369333F5F6f574eac16A413c",
+      "status": 1,
+      "blockNumber": 32901645,
+      "txIndex": 9,
+      "blockTimestamp": "2025-10-27T13:26:18.000Z",
+      "gasUsed": "372170",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.9.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xcBeC89921DDb9Ec10aF7737e7AA10249660d37D8",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0xcd75a7cb004f80a32a702c80b0ace8385cc80ced822e1f5e34c8a774027156fa",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xcBeC89921DDb9Ec10aF7737e7AA10249660d37D8",
+      "status": 1,
+      "blockNumber": 32901699,
+      "txIndex": 27,
+      "blockTimestamp": "2025-10-27T13:28:06.000Z",
+      "gasUsed": "372170",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.10.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xD8a07d14b541d8FdeBFcE76F69445f2aa9b29AfD",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x2e000a22c94e9b7aee025b446b2fcdd4192e991f679fc3fa08304c5b4181c161",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xD8a07d14b541d8FdeBFcE76F69445f2aa9b29AfD",
+      "status": 1,
+      "blockNumber": 32902263,
+      "txIndex": 3,
+      "blockTimestamp": "2025-10-27T13:46:54.000Z",
+      "gasUsed": "1396692",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.6acdc94212e700451aa1e8a886697ac3b1dd4c56bc67163c71698c45d8637bbf.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xcCd520507Ff96b88487A85ab8662DFf2D4368186",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0xe56147891b540356bddb352d12e2f97afab900df6fb8ecc10cf6e9bf284a982a",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xcCd520507Ff96b88487A85ab8662DFf2D4368186",
+      "status": 1,
+      "blockNumber": 32903527,
+      "txIndex": 1,
+      "blockTimestamp": "2025-10-27T14:29:02.000Z",
+      "gasUsed": "830682",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.11.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xE6d841B5ADb874CB13e257DA672cf3a9B7525fe0",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x5b1d27775ed84004fd99a03725de38bc6bced8033c03eae5775cfcd3af1b4997",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xE6d841B5ADb874CB13e257DA672cf3a9B7525fe0",
+      "status": 1,
+      "blockNumber": 32903565,
+      "txIndex": 3,
+      "blockTimestamp": "2025-10-27T14:30:18.000Z",
+      "gasUsed": "830682",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.12.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x8BEceC0fFbc93bBd94DEcaa9Bbf7b2CfDd286d55",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x039e7aaab54437771e465fa1288c90fadd66308bc931663035286cbb7c2873fd",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x8BEceC0fFbc93bBd94DEcaa9Bbf7b2CfDd286d55",
+      "status": 1,
+      "blockNumber": 34494930,
+      "txIndex": 16,
+      "blockTimestamp": "2025-12-03T10:35:48.000Z",
+      "gasUsed": "4334996",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/ethereum-sepolia-spoke-1764759110560.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.myntis",
+        "hub",
+        "myntis",
+        "results.11.actual",
+        "results.11.expected",
+        "results.13.actual",
+        "results.13.expected",
+        "results.6.actual",
+        "results.6.expected",
+        "results.8.actual",
+        "results.8.expected"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xC24e30632a02950d476d27D2De6Ceb7F2C5E9978",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x2acf38a5096c1ced1d0436919d2b916c3ebc85a0ad27451dde4e41d2e4951448",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xC24e30632a02950d476d27D2De6Ceb7F2C5E9978",
+      "status": 1,
+      "blockNumber": 34494934,
+      "txIndex": 2,
+      "blockTimestamp": "2025-12-03T10:35:56.000Z",
+      "gasUsed": "761543",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.rewardClaimVerifier",
+        "results.14.actual",
+        "results.14.expected",
+        "rewardClaimVerifier"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x39a211De877c74a9e181e2253EDe847bB4eC70cf",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x0f5a2fe29855768d5a7cba12f7d1fde73184acacae7c31946b791bf5166ed657",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x39a211De877c74a9e181e2253EDe847bB4eC70cf",
+      "status": 1,
+      "blockNumber": 34494935,
+      "txIndex": 4,
+      "blockTimestamp": "2025-12-03T10:35:58.000Z",
+      "gasUsed": "1675112",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.emissionsContract",
+        "emissionsContract",
+        "results.9.actual",
+        "results.9.expected"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x425DA859900706E8E40eB09276BBDeB2eea4be21",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x72a721da3645ccd84018f429bb1eab69b784a3282b1fc10bd61dfa5ba021243d",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x425DA859900706E8E40eB09276BBDeB2eea4be21",
+      "status": 1,
+      "blockNumber": 34495043,
+      "txIndex": 26,
+      "blockTimestamp": "2025-12-03T10:39:34.000Z",
+      "gasUsed": "2836739",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.dualPoolStakingImpl",
+        "dualPoolStakingImpl"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x1a48bf090b02da27c0e60cb6659d4450904A846F",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x251b59d2840833c97d8703899a42f716452d31e28067a26dcee11dc8569f0ac1",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x1a48bf090b02da27c0e60cb6659d4450904A846F",
+      "status": 1,
+      "blockNumber": 34495243,
+      "txIndex": 9,
+      "blockTimestamp": "2025-12-03T10:46:14.000Z",
+      "gasUsed": "410225",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.dualPoolStaking",
+        "dualPoolStaking",
+        "results.12.actual",
+        "results.12.expected",
+        "results.7.actual",
+        "results.7.expected"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x01AD9e797234026c61E523BC9BaB2293Ac140F6a",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x0756ee54f995f9ac38dc86c2dab00b19900ffa84e6c42d4be8456793dc6e0e0b",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x01AD9e797234026c61E523BC9BaB2293Ac140F6a",
+      "status": 1,
+      "blockNumber": 34495245,
+      "txIndex": 14,
+      "blockTimestamp": "2025-12-03T10:46:18.000Z",
+      "gasUsed": "2385025",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.zkMerkleDistributor",
+        "zkMerkleDistributor"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xB7976Bc67327cCD41435c5a555ADbf8B987F8E1E",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0xe9d9648dfa16f9bb6b0444421104c629059f67f50a23745e10626ad80a330532",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0xB7976Bc67327cCD41435c5a555ADbf8B987F8E1E",
+      "status": 1,
+      "blockNumber": 34495246,
+      "txIndex": 17,
+      "blockTimestamp": "2025-12-03T10:46:20.000Z",
+      "gasUsed": "1899705",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.liquidStakingVault",
+        "liquidStakingVault",
+        "results.10.actual",
+        "results.10.expected"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x74880966F4e89b86B3Cda7B8eB34eb7E5413cc66",
+      "creator": "0x0904192498efff59e0502ae1700ecaa9b1708543",
+      "creationTxHash": "0x660a9dcd6cdbe393189569cca080e27a2c080bbcb4436a33461202007cbe6ad1",
+      "creationFrom": "0x0904192498effF59e0502aE1700ecAa9B1708543",
+      "creationTo": null,
+      "receiptContractAddress": "0x74880966F4e89b86B3Cda7B8eB34eb7E5413cc66",
+      "status": 1,
+      "blockNumber": 34495247,
+      "txIndex": 6,
+      "blockTimestamp": "2025-12-03T10:46:22.000Z",
+      "gasUsed": "1407113",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/base-sepolia-migration-latest.json",
+        "deployments/verification-1764758815943.json"
+      ],
+      "keys": [
+        "deployment.globalSupplyRegistry",
+        "globalSupplyRegistry",
+        "results.15.actual",
+        "results.15.expected"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xe66e51C61a0D89831e9B41f8dE28fbFf18C5E1f8",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x3b0bebcdc29fe6e5040ca0df69f797fd576f5dc931ac3601b7addc5e39147bb7",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xe66e51C61a0D89831e9B41f8dE28fbFf18C5E1f8",
+      "status": 1,
+      "blockNumber": 35549755,
+      "txIndex": 7,
+      "blockTimestamp": "2025-12-27T20:36:38.000Z",
+      "gasUsed": "409898",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.13.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xBe3E429Ff9Fe8Eaa39655C96a787c43b4C607056",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x95db44d060554210e74d59a71a331832ea89c4a311e79e6bf0a20252da257fee",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xBe3E429Ff9Fe8Eaa39655C96a787c43b4C607056",
+      "status": 1,
+      "blockNumber": 36522799,
+      "txIndex": 8,
+      "blockTimestamp": "2026-01-19T09:11:26.000Z",
+      "gasUsed": "2942347",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.bcf43765f1c4a639140df057fb3248a73d707d380933dfcf806078d756a2bb62.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xE715AFf135Ee9A6161F8365Eda8e48EFa0435537",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x2aed42bf8044bff4df08eb3744096476fc4ce55212377bcafcc1c957bb85405d",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xE715AFf135Ee9A6161F8365Eda8e48EFa0435537",
+      "status": 1,
+      "blockNumber": 37188994,
+      "txIndex": 6,
+      "blockTimestamp": "2026-02-03T19:17:56.000Z",
+      "gasUsed": "3746505",
+      "kind": "deployment+openzeppelin",
+      "trackedStatus": "both",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json",
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "dualPoolStakingImplementation",
+        "impls.42d37ca770607abab1c0f7c0601e0c22ba0ad0403a3a1e6eee4d4a162cacb092.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x07D1599fc4D1693165Ff16052AA21A9D3E564772",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0xc19131189da3c9e8b35ffd69ef111c8ec9e8430f2c698d8600fba372d1e50af8",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x07D1599fc4D1693165Ff16052AA21A9D3E564772",
+      "status": 1,
+      "blockNumber": 37188995,
+      "txIndex": 14,
+      "blockTimestamp": "2026-02-03T19:17:58.000Z",
+      "gasUsed": "415329",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.14.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xca7295efd7794E86BC165ea4fF005582EC71209D",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x117b4f02247fdc0cddda11050b0b28e31602fd7846016be701462e0504ac3668",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xca7295efd7794E86BC165ea4fF005582EC71209D",
+      "status": 1,
+      "blockNumber": 37189044,
+      "txIndex": 14,
+      "blockTimestamp": "2026-02-03T19:19:36.000Z",
+      "gasUsed": "415317",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.16.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xC86C0Ce8Fcf3887C9F189FCE7f0853126bF0F8Ab",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0xa6b16c21be3354e4ea0c001693ea60da039f427b21071603086feb5f86dad4e4",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xC86C0Ce8Fcf3887C9F189FCE7f0853126bF0F8Ab",
+      "status": 1,
+      "blockNumber": 37189077,
+      "txIndex": 2,
+      "blockTimestamp": "2026-02-03T19:20:42.000Z",
+      "gasUsed": "415329",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.17.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xE638a450FCaeD7A53C6170D37da7B282c2FD8704",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x8432435d6ac0cf7320fe27aa73744d705827688267373741857de1bf90dd9744",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xE638a450FCaeD7A53C6170D37da7B282c2FD8704",
+      "status": 1,
+      "blockNumber": 37189198,
+      "txIndex": 16,
+      "blockTimestamp": "2026-02-03T19:24:44.000Z",
+      "gasUsed": "415329",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.19.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x599016bF00eE23d531223c6285C92aa0cAC278EF",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x153c3a236f6cde8e626216b063e503aba29ff9444a73b743a51482529de2b8fa",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x599016bF00eE23d531223c6285C92aa0cAC278EF",
+      "status": 1,
+      "blockNumber": 37189217,
+      "txIndex": 16,
+      "blockTimestamp": "2026-02-03T19:25:22.000Z",
+      "gasUsed": "4428991",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json",
+        "deployments/ethereum-sepolia-spoke-1770381410089.json",
+        "deployments/ethereum-sepolia-spoke-latest.json"
+      ],
+      "keys": [
+        "hub",
+        "myntis",
+        "myntisImplementation"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xc5996A1ca8C4B558feEFFf2b403C09C9e1aE27Cf",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0xb024f6afe1dc8d279b1fb66292e340a36f1603836d6ee3d7dd9da4ff4dd67d48",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xc5996A1ca8C4B558feEFFf2b403C09C9e1aE27Cf",
+      "status": 1,
+      "blockNumber": 37189220,
+      "txIndex": 1,
+      "blockTimestamp": "2026-02-03T19:25:28.000Z",
+      "gasUsed": "1760643",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "emissionsContract"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x43495fBcd33235D9FcD4c2c7f8cB2444E463C9b3",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0xc567fbee9897c2256eeb7ec8e6973ffbe2f5b7659c2bef4523f4aad5e4e8a797",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x43495fBcd33235D9FcD4c2c7f8cB2444E463C9b3",
+      "status": 1,
+      "blockNumber": 37189222,
+      "txIndex": 9,
+      "blockTimestamp": "2026-02-03T19:25:32.000Z",
+      "gasUsed": "415317",
+      "kind": "deployment+openzeppelin",
+      "trackedStatus": "both",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json",
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "dualPoolStaking",
+        "proxies.20.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x00f87F9eb968dF179038Fc0BFE6fE13C11fe3d53",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x6095fbe3b1f941e2d9f49f72273adf36599b313d93d8321dd8373179b764c29b",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x00f87F9eb968dF179038Fc0BFE6fE13C11fe3d53",
+      "status": 1,
+      "blockNumber": 37189223,
+      "txIndex": 10,
+      "blockTimestamp": "2026-02-03T19:25:34.000Z",
+      "gasUsed": "390273",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "groth16Verifier"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x2B5A6b209EE8B0b118dD76092420C9b45f4E99cb",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x437f86f9113913a6ec8d82b9d7e015bf9ad08ed2991090876c70aab79ded35ba",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x2B5A6b209EE8B0b118dD76092420C9b45f4E99cb",
+      "status": 1,
+      "blockNumber": 37189226,
+      "txIndex": 10,
+      "blockTimestamp": "2026-02-03T19:25:40.000Z",
+      "gasUsed": "1933246",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-03T19-30-41-174Z.json"
+      ],
+      "keys": [
+        "liquidStakingVault",
+        "liquidStakingVaultImplementation"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x59F3d313638042327B6AF8019F93FD0F8e3F1490",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x3e73e03f10aa77bb2c438c7e2c93d5b2cb9aa20a0b8bf9a566ad0e43cdc8874a",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x59F3d313638042327B6AF8019F93FD0F8e3F1490",
+      "status": 1,
+      "blockNumber": 37354249,
+      "txIndex": 4,
+      "blockTimestamp": "2026-02-07T15:06:26.000Z",
+      "gasUsed": "3788362",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.cb447f3b44802d1260319adf20ebfc88e3832183736843c61dd75e26fbe0f831.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x2e10e419c550A9f4Cf350Cc0557Ae14d5fF097C1",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x0d1b4ace56d2a058f85bb16025c6b7b52fbfb8eda4c85b07a715a36b34f95ef7",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x2e10e419c550A9f4Cf350Cc0557Ae14d5fF097C1",
+      "status": 1,
+      "blockNumber": 37354280,
+      "txIndex": 8,
+      "blockTimestamp": "2026-02-07T15:07:28.000Z",
+      "gasUsed": "415329",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.22.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xF357a42D706DA367f641Caf4de5B90b9d9a2e084",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x914682154a86f94276f9a9658305503f5d0eee9ce23056f85e4f1b51c1f9704d",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xF357a42D706DA367f641Caf4de5B90b9d9a2e084",
+      "status": 1,
+      "blockNumber": 37363588,
+      "txIndex": 3,
+      "blockTimestamp": "2026-02-07T20:17:44.000Z",
+      "gasUsed": "3385591",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "impls.603b2cb3e336fe9dd4c9b227259df4cbcf6e0e77b45a26e1c8a6d277b6761e81.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x79cd6467a7CF732248B0A8E790acdB7170F08021",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x4a784f99f8cbe86911dc408e690a32d71eb503115d751e0ec79c731eec53010e",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x79cd6467a7CF732248B0A8E790acdB7170F08021",
+      "status": 1,
+      "blockNumber": 37363592,
+      "txIndex": 7,
+      "blockTimestamp": "2026-02-07T20:17:52.000Z",
+      "gasUsed": "415339",
+      "kind": "openzeppelin-only",
+      "trackedStatus": "openzeppelin_only",
+      "hasCode": true,
+      "files": [
+        ".openzeppelin/base-sepolia.json"
+      ],
+      "keys": [
+        "proxies.23.address"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xC5aA7e0992EEDf67f5096Cb629152267cEDf2875",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x65676a8dc2c2357c9d95a2c3f83d0c92eca605f98a940cb0976e21ebee21afd0",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xC5aA7e0992EEDf67f5096Cb629152267cEDf2875",
+      "status": 1,
+      "blockNumber": 37363780,
+      "txIndex": 5,
+      "blockTimestamp": "2026-02-07T20:24:08.000Z",
+      "gasUsed": "4468669",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "myntis",
+        "myntisImplementation"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x07D28cA0ccAE70e992A1a1Dd310443bb96C81979",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0xedcf62d43b9bcdff0f00e79380af4ea74e09bd1886c2411ac038718162c948a5",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x07D28cA0ccAE70e992A1a1Dd310443bb96C81979",
+      "status": 1,
+      "blockNumber": 37363782,
+      "txIndex": 11,
+      "blockTimestamp": "2026-02-07T20:24:12.000Z",
+      "gasUsed": "1873829",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "emissionsContract"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xf80D159e64400E9aCAAb625e285F556d79E9Ac70",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x3b405e7b57a2577d342494a05bed335bf08b435d7c0a6230c3668eb63b012d70",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xf80D159e64400E9aCAAb625e285F556d79E9Ac70",
+      "status": 1,
+      "blockNumber": 37363783,
+      "txIndex": 14,
+      "blockTimestamp": "2026-02-07T20:24:14.000Z",
+      "gasUsed": "3385591",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "dualPoolStakingImplementation"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xc8B635C09161CA61005143630B3002B4FA335770",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x614d85353538c2eb7471a39782644d11fb752b011bcb4bda444e85e437a6c477",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xc8B635C09161CA61005143630B3002B4FA335770",
+      "status": 1,
+      "blockNumber": 37363784,
+      "txIndex": 8,
+      "blockTimestamp": "2026-02-07T20:24:16.000Z",
+      "gasUsed": "415224",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "dualPoolStaking"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x50F0B152DD8A9115B37A12F48524148f39E12C89",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x8a5fa974ade3ca1527a735c872f6466648066030825d95086421ecbb7540e452",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x50F0B152DD8A9115B37A12F48524148f39E12C89",
+      "status": 1,
+      "blockNumber": 37363785,
+      "txIndex": 10,
+      "blockTimestamp": "2026-02-07T20:24:18.000Z",
+      "gasUsed": "390273",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "groth16Verifier"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x198Bf984C5757947A0a88C901f12371A5ad3e000",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x73716d76ca30d20e68d4ce42da8f5a235258f46e975a19a11cab4c437640c77c",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x198Bf984C5757947A0a88C901f12371A5ad3e000",
+      "status": 1,
+      "blockNumber": 37363786,
+      "txIndex": 6,
+      "blockTimestamp": "2026-02-07T20:24:20.000Z",
+      "gasUsed": "2339638",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "zkMerkleDistributor",
+        "zkMerkleDistributorImplementation"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x723754749830B533381775a22407FCeC3597B052",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x837354d735b88869887d2eb4c85a7350dae1da18f525b08eb434ff98759ecd86",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x723754749830B533381775a22407FCeC3597B052",
+      "status": 1,
+      "blockNumber": 37363787,
+      "txIndex": 9,
+      "blockTimestamp": "2026-02-07T20:24:22.000Z",
+      "gasUsed": "2573041",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json"
+      ],
+      "keys": [
+        "globalSupplyRegistry"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0x99466736A2285Ca2BE0279C1f2c7757533ebc0cd",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0xe1b6681f61b0887b70c3dcd1c227ae6940596c1353183fb0075bb1d5f2421824",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0x99466736A2285Ca2BE0279C1f2c7757533ebc0cd",
+      "status": 1,
+      "blockNumber": 37363788,
+      "txIndex": 3,
+      "blockTimestamp": "2026-02-07T20:24:24.000Z",
+      "gasUsed": "1959291",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-2026-02-07T20-30-22-290Z.json",
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "liquidStakingVault",
+        "liquidStakingVaultImplementation"
+      ]
+    },
+    {
+      "network": "base-sepolia",
+      "address": "0xAea0e9d9c7a38860361d836C3ba3f70f66d4D1A1",
+      "creator": "0x89c6c4e7f952c1c07467e32ea2ff0660f6d4c627",
+      "creationTxHash": "0x0cdbda52029b56f947c8aed192f5494db6835f5aba31d1407199178bc5a71702",
+      "creationFrom": "0x89C6C4e7F952C1c07467E32Ea2fF0660f6d4C627",
+      "creationTo": null,
+      "receiptContractAddress": "0xAea0e9d9c7a38860361d836C3ba3f70f66d4D1A1",
+      "status": 1,
+      "blockNumber": 37374220,
+      "txIndex": 2,
+      "blockTimestamp": "2026-02-08T02:12:08.000Z",
+      "gasUsed": "2874663",
+      "kind": "deployment",
+      "trackedStatus": "deployments_only",
+      "hasCode": true,
+      "files": [
+        "deployments/deployment-base-sepolia-latest.json"
+      ],
+      "keys": [
+        "globalSupplyRegistry"
+      ]
+    }
+  ]
+}

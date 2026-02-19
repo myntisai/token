@@ -291,7 +291,7 @@ After successful deployment:
 ## Security Notes
 
 ⚠️ **Important:**
-- All deployed contracts include security fixes from `SECURITY_AUDIT_REPORT_V6.md`
+- All deployed contracts include security fixes from `docs/security/audits/SECURITY_AUDIT_REPORT_V6.md`
 - Deployer address receives all admin roles initially
 - Consider transferring admin roles to multisig for mainnet
 - Private keys should NEVER be committed to git
@@ -307,7 +307,7 @@ After successful deployment:
 ## Support
 
 For issues or questions:
-1. Check `SECURITY_AUDIT_REPORT_V6.md` for known issues
+1. Check `docs/security/audits/SECURITY_AUDIT_REPORT_V6.md` for known issues
 2. Review `CONTRACTS_CLEANUP_SUMMARY.md` for architecture changes
 3. Check `REWARD_DISTRIBUTION_FLOW.md` for flow documentation
 4. Refer to `MAINNET_READINESS_CHECKLIST.md` for deployment requirements
